@@ -11,7 +11,7 @@ from flask.cli import with_appcontext
 # Config
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'tyjjkjkjdxszsvcnjmalkuyevmesc'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:stenaman@localhost:5432/auth_db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:stenaman@localhost:5432/stokvel_db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
@@ -20,9 +20,12 @@ CORS(app, supports_credentials=True)
 # Models
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    full_name = db.Column(db.String(150), nullable=False)
+    phone = db.Column(db.String(20), unique=True, nullable=False)
     email = db.Column(db.String(150), unique=True, nullable=False)
     password = db.Column(db.String(200), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+
 
 # JWT token decorator
 def token_required(f):
@@ -54,17 +57,35 @@ def token_required(f):
 @app.route('/api/auth/register', methods=['POST'])
 def register():
     data = request.get_json()
+    full_name = data.get('full_name')
+    phone = data.get('phone')
     email = data.get('email')
     password = data.get('password')
+    confirm_password = data.get('confirm_password')
+
+    # Validation
+    if not all([full_name, phone, email, password, confirm_password]):
+        return jsonify({'error': 'All fields are required'}), 400
+
+    if password != confirm_password:
+        return jsonify({'error': 'Passwords do not match'}), 400
+
+    if len(password) < 6:
+        return jsonify({'error': 'Password must be at least 6 characters long'}), 400
 
     if User.query.filter_by(email=email).first():
         return jsonify({'error': 'Email already exists'}), 400
 
+    if User.query.filter_by(phone=phone).first():
+        return jsonify({'error': 'Phone number already exists'}), 400
+
     hashed_pw = generate_password_hash(password)
-    user = User(email=email, password=hashed_pw)
+    user = User(full_name=full_name, phone=phone, email=email, password=hashed_pw)
     db.session.add(user)
     db.session.commit()
+
     return jsonify({'message': 'User registered successfully'}), 201
+
 
 @app.route('/api/auth/login', methods=['POST'])
 def login():
