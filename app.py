@@ -35,9 +35,23 @@ class User(db.Model):
     phone_verified = db.Column(db.Boolean, default=False)
 
 # -------------------- Auth Routes --------------------
+@app.route("/")
+def home():
+    return jsonify({
+        "message": "Stokvel API",
+        "endpoints": {
+            "register": "/api/auth/register",
+            "login": "/api/auth/login",
+            "send_otp": "/api/auth/send-otp",
+            "verify_otp": "/api/auth/verify-otp"
+        }
+    })
+
 @app.route("/api/auth/register", methods=["POST"])
 def register():
     data = request.json
+    if data.get("phone") and User.query.filter_by(phone=data["phone"]).first():
+        return jsonify({"message": "Phone number already exists"}), 400
     if User.query.filter_by(email=data["email"]).first():
         return jsonify({"message": "Email already exists"}), 400
     hashed_pw = generate_password_hash(data["password"])
@@ -55,7 +69,7 @@ def login():
             "user_id": user.id,
             "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=24)
         }, app.config["JWT_SECRET"], algorithm="HS256")
-        return jsonify({"token": token})
+        return jsonify({"token": token.decode('utf-8')})
     return jsonify({"message": "Invalid credentials"}), 401
 
 @app.route("/api/auth/me", methods=["GET"])
@@ -67,6 +81,8 @@ def me():
     try:
         data = jwt.decode(token, app.config["JWT_SECRET"], algorithms=["HS256"])
         user = User.query.get(data["user_id"])
+        if not user:
+            return jsonify({"message": "User not found"}), 404
         return jsonify({"id": user.id, "email": user.email, "name": user.name})
     except jwt.ExpiredSignatureError:
         return jsonify({"message": "Token expired"}), 401
@@ -116,9 +132,10 @@ def verify_otp():
 
     # Mark user phone as verified
     user = User.query.filter_by(phone=phone).first()
-    if user:
-        user.phone_verified = True
-        db.session.commit()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    user.phone_verified = True
+    db.session.commit()
 
     del otp_store[phone]  # Clean up
 
