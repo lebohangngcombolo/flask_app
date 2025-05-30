@@ -16,6 +16,9 @@ const Signup: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [showTransition, setShowTransition] = useState(false);
+  const [showOtpVerification, setShowOtpVerification] = useState(false);
+  const [otp, setOtp] = useState(['', '', '', '', '', '']);
+  const [otpError, setOtpError] = useState('');
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -58,6 +61,27 @@ const Signup: React.FC = () => {
     return Object.keys(newErrors).length === 0;
   };
 
+  const handleOtpChange = (index: number, value: string) => {
+    if (value.length > 1) return; // Prevent multiple characters
+    
+    const newOtp = [...otp];
+    newOtp[index] = value;
+    setOtp(newOtp);
+
+    // Auto-focus next input
+    if (value && index < 5) {
+      const nextInput = document.querySelector(`input[name=otp-${index + 1}]`) as HTMLInputElement;
+      if (nextInput) nextInput.focus();
+    }
+  };
+
+  const handleOtpKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Backspace' && !otp[index] && index > 0) {
+      const prevInput = document.querySelector(`input[name=otp-${index - 1}]`) as HTMLInputElement;
+      if (prevInput) prevInput.focus();
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -72,10 +96,7 @@ const Signup: React.FC = () => {
         });
 
         if (result.success) {
-          setSuccessMessage(result.message);
-          setTimeout(() => {
-            navigate('/login');
-          }, 3000);
+          setShowOtpVerification(true);
         } else {
           setErrors({ submit: result.message });
         }
@@ -89,6 +110,32 @@ const Signup: React.FC = () => {
     }
   };
 
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const otpValue = otp.join('');
+    
+    if (otpValue.length !== 6) {
+      setOtpError('Please enter the complete OTP');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      // Here you would call your API to verify the OTP
+      // const result = await verifyOtp(otpValue);
+      
+      // For now, we'll simulate a successful verification
+      setSuccessMessage('Account verified successfully!');
+      setTimeout(() => {
+        navigate('/login');
+      }, 3000);
+    } catch (error: any) {
+      setOtpError('Invalid OTP. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleBackToHome = () => {
     setShowTransition(true);
     setTimeout(() => {
@@ -97,7 +144,7 @@ const Signup: React.FC = () => {
   };
 
   return (
-    <div className="h-screen bg-gradient-to-br from-emerald-50 via-white to-emerald-50 relative overflow-hidden">
+    <div className="h-screen bg-gradient-to-br from-blue-50 via-white to-blue-50 relative overflow-hidden">
       <PageTransition show={showTransition} />
 
       {/* Animated Coins Background */}
@@ -113,7 +160,7 @@ const Signup: React.FC = () => {
               animationDuration: `${5 + Math.random() * 5}s`,
             }}
           >
-            <div className="w-8 h-8 bg-emerald-500 rounded-full opacity-20 transform rotate-45" />
+            <div className="w-8 h-8 bg-blue-500 rounded-full opacity-20 transform rotate-45" />
           </div>
         ))}
       </div>
@@ -121,10 +168,10 @@ const Signup: React.FC = () => {
       {/* Animated Savings Jar */}
       <div className="absolute top-10 right-10 w-32 h-40 animate-bounce-slow">
         <div className="relative w-full h-full">
-          <div className="absolute bottom-0 w-full h-3/4 bg-emerald-100 rounded-b-3xl border-2 border-emerald-300">
-            <div className="absolute inset-0 bg-emerald-200 opacity-50 rounded-b-3xl animate-fill" />
+          <div className="absolute bottom-0 w-full h-3/4 bg-blue-100 rounded-b-3xl border-2 border-blue-300">
+            <div className="absolute inset-0 bg-blue-200 opacity-50 rounded-b-3xl animate-fill" />
           </div>
-          <div className="absolute top-0 w-full h-1/4 bg-emerald-200 rounded-t-3xl border-2 border-emerald-300" />
+          <div className="absolute top-0 w-full h-1/4 bg-blue-200 rounded-t-3xl border-2 border-blue-300" />
         </div>
       </div>
 
@@ -133,17 +180,19 @@ const Signup: React.FC = () => {
           <div className="mb-4 text-center">
             <button
               onClick={handleBackToHome}
-              className="absolute top-4 left-4 text-gray-600 hover:text-emerald-600 transition-colors duration-200"
+              className="absolute top-4 left-4 text-gray-600 hover:text-blue-600 transition-colors duration-200"
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
               </svg>
             </button>
             <h2 className="text-2xl font-bold text-gray-900 mb-1">
-              Create Your Account
+              {showOtpVerification ? 'Verify Your Account' : 'Create Your Account'}
             </h2>
             <p className="text-sm text-gray-600">
-              Join i-STOKVEL and start your savings journey
+              {showOtpVerification 
+                ? 'Enter the 6-digit code sent to your phone'
+                : 'Join i-STOKVEL and start your savings journey'}
             </p>
           </div>
 
@@ -159,6 +208,47 @@ const Signup: React.FC = () => {
             </div>
           )}
 
+          {showOtpVerification ? (
+            <form onSubmit={handleVerifyOtp} className="space-y-4">
+              <div className="flex justify-center space-x-2">
+                {otp.map((digit, index) => (
+                  <input
+                    key={index}
+                    type="text"
+                    name={`otp-${index}`}
+                    maxLength={1}
+                    value={digit}
+                    onChange={(e) => handleOtpChange(index, e.target.value)}
+                    onKeyDown={(e) => handleOtpKeyDown(index, e)}
+                    className="w-12 h-12 text-center text-xl font-semibold border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                ))}
+              </div>
+              
+              {otpError && (
+                <p className="text-sm text-red-600 text-center">{otpError}</p>
+              )}
+
+              <div className="text-center text-sm text-gray-600">
+                Didn't receive the code?{' '}
+                <button
+                  type="button"
+                  className="text-blue-600 hover:text-blue-700 font-medium"
+                  onClick={() => {/* Implement resend OTP logic */}}
+                >
+                  Resend
+                </button>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+              >
+                {isLoading ? 'Verifying...' : 'Verify Account'}
+              </button>
+            </form>
+          ) : (
           <form className="space-y-3" onSubmit={handleSubmit}>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -174,7 +264,7 @@ const Signup: React.FC = () => {
                   onChange={handleChange}
                   className={`w-full px-3 py-1.5 text-sm border ${
                     errors.fullName ? 'border-red-300' : 'border-gray-300'
-                  } rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent`}
+                    } rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
                   placeholder="Enter your full name"
                 />
                 {errors.fullName && (
@@ -196,7 +286,7 @@ const Signup: React.FC = () => {
                   onChange={handleChange}
                   className={`w-full px-3 py-1.5 text-sm border ${
                     errors.email ? 'border-red-300' : 'border-gray-300'
-                  } rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent`}
+                    } rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
                   placeholder="Enter your email"
                 />
                 {errors.email && (
@@ -218,7 +308,7 @@ const Signup: React.FC = () => {
                 onChange={handleChange}
                 className={`w-full px-3 py-1.5 text-sm border ${
                     errors.phoneNumber ? 'border-red-300' : 'border-gray-300'
-                  } rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent`}
+                    } rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
                 placeholder="+27 71 234 5678"
               />
               {errors.phoneNumber && (
@@ -240,7 +330,7 @@ const Signup: React.FC = () => {
                   onChange={handleChange}
                   className={`w-full px-3 py-1.5 text-sm border ${
                     errors.password ? 'border-red-300' : 'border-gray-300'
-                  } rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent`}
+                    } rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
                   placeholder="Create a password"
                 />
                 {errors.password && (
@@ -261,7 +351,7 @@ const Signup: React.FC = () => {
                   onChange={handleChange}
                   className={`w-full px-3 py-1.5 text-sm border ${
                     errors.confirmPassword ? 'border-red-300' : 'border-gray-300'
-                  } rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent`}
+                    } rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
                   placeholder="Confirm your password"
                 />
                 {errors.confirmPassword && (
@@ -274,7 +364,7 @@ const Signup: React.FC = () => {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full bg-emerald-600 text-white py-2 px-4 rounded-lg hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                  className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
               >
                 {isLoading ? 'Creating Account...' : 'Create Account'}
               </button>
@@ -282,7 +372,7 @@ const Signup: React.FC = () => {
 
             <div className="text-center text-sm text-gray-600">
               Already have an account?{' '}
-              <Link to="/login" className="text-emerald-600 hover:text-emerald-700 font-medium">
+                <Link to="/login" className="text-blue-600 hover:text-blue-700 font-medium">
                 Sign in
               </Link>
             </div>
@@ -321,6 +411,7 @@ const Signup: React.FC = () => {
               </button>
             </div>
           </form>
+          )}
         </div>
       </div>
     </div>

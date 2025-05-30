@@ -36,7 +36,7 @@ const ChatBot: React.FC = () => {
       {/* Chat Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="bg-emerald-600 text-white rounded-full p-3 shadow-lg hover:bg-emerald-700 transition-colors duration-200 flex items-center justify-center"
+        className="bg-blue-600 text-white rounded-full p-3 shadow-lg hover:bg-blue-700 transition-colors duration-200 flex items-center justify-center"
         style={{ width: 56, height: 56 }}
       >
         {isOpen ? (
@@ -56,11 +56,11 @@ const ChatBot: React.FC = () => {
       {isOpen && (
         <div className="absolute bottom-16 right-0 w-80 sm:w-96 bg-white rounded-lg shadow-xl">
           {/* Chat Header */}
-          <div className="bg-emerald-600 text-white p-4 rounded-t-lg flex items-center gap-3">
+          <div className="bg-blue-600 text-white p-4 rounded-t-lg flex items-center gap-3">
             <img src={BOT_ICON_URL} alt="Chatbot" className="w-8 h-8 rounded-full bg-white p-1" />
             <div>
               <h3 className="font-semibold">i-STOKVEL Assistant</h3>
-              <p className="text-sm text-emerald-100">We're here to help!</p>
+              <p className="text-sm text-blue-100">We're here to help!</p>
             </div>
           </div>
 
@@ -81,7 +81,7 @@ const ChatBot: React.FC = () => {
                 <div
                   className={`max-w-[80%] rounded-lg p-3 ${
                     message.isUser
-                      ? 'bg-emerald-600 text-white'
+                      ? 'bg-blue-600 text-white'
                       : 'bg-gray-100 text-gray-800'
                   }`}
                 >
@@ -101,11 +101,11 @@ const ChatBot: React.FC = () => {
                 onChange={(e) => setInputMessage(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
                 placeholder="Type your message..."
-                className="flex-1 border rounded-lg px-4 py-2 focus:outline-none focus:border-emerald-500"
+                className="flex-1 border rounded-lg px-4 py-2 focus:outline-none focus:border-blue-500"
               />
               <button
                 onClick={handleSendMessage}
-                className="bg-emerald-600 text-white rounded-lg px-4 py-2 hover:bg-emerald-700 transition-colors duration-200"
+                className="bg-blue-600 text-white rounded-lg px-4 py-2 hover:bg-blue-700 transition-colors duration-200"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />

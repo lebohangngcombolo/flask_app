@@ -6,6 +6,7 @@ interface User {
   password: string;
   phoneNumber?: string;
   idNumber?: string;
+  role?: string;
 }
 
 interface AuthResponse {
@@ -21,6 +22,8 @@ export const signup = async (userData: {
   phoneNumber: string;
 }) => {
   try {
+    console.log('Sending registration data:', userData);
+    
     const response = await authAPI.register({
       full_name: userData.fullName,
       email: userData.email,
@@ -28,33 +31,75 @@ export const signup = async (userData: {
       phone: userData.phoneNumber,
       confirm_password: userData.password
     });
-    return { success: true, message: 'Account created successfully' };
-  } catch (error: any) {
+    
+    console.log('Registration response:', response.data);
+    
+    if (response.data && response.data.message === 'User registered successfully') {
+      return { 
+        success: true, 
+        message: 'Account created successfully',
+        user: response.data.user
+      };
+    }
+    
     return {
       success: false,
-      message: error.response?.data?.message || 'Signup failed',
+      message: response.data?.error || 'Signup failed'
+    };
+  } catch (error: any) {
+    console.error('Signup error details:', error.response?.data);
+    return {
+      success: false,
+      message: error.response?.data?.error || 'Signup failed. Please try again.'
     };
   }
 };
 
 export const login = async (email: string, password: string) => {
   try {
+    console.log('Login attempt started:', { email });
+    
     const response = await authAPI.login(email, password);
-    const { token } = response.data;
+    console.log('Login response:', response.data);
     
-    // Store token
-    localStorage.setItem('token', token);
+    if (response.data.token && response.data.user) {
+      const userData = {
+        ...response.data.user,
+        role: response.data.user.role || 'member'
+      };
+      
+      // Store auth data
+      localStorage.setItem('user', JSON.stringify(userData));
+      localStorage.setItem('token', response.data.token);
+      
+      // Use setTimeout to ensure state is updated before navigation
+      setTimeout(() => {
+        window.location.href = userData.role === 'admin' ? '/admin/dashboard' : '/dashboard';
+      }, 100);
+      
+      return { 
+        success: true, 
+        user: userData
+      };
+    }
     
-    // Get user data
-    const userResponse = await authAPI.getCurrentUser();
-    const user = userResponse.data;
-    localStorage.setItem('user', JSON.stringify(user));
-    
-    return { success: true, user };
-  } catch (error: any) {
     return {
       success: false,
-      message: error.response?.data?.message || 'Login failed',
+      message: 'Invalid response from server'
+    };
+  } catch (error: any) {
+    console.error('Login error:', error);
+    
+    if (error.response?.status === 401) {
+      return {
+        success: false,
+        message: 'Invalid email or password'
+      };
+    }
+    
+    return {
+      success: false,
+      message: error.response?.data?.error || 'Login failed. Please try again.'
     };
   }
 };
@@ -71,5 +116,12 @@ export const getCurrentUser = () => {
 };
 
 export const isAuthenticated = () => {
-  return !!localStorage.getItem('token');
+  const token = localStorage.getItem('token');
+  const user = getCurrentUser();
+  return !!token && !!user;
+};
+
+export const getUserRole = () => {
+  const user = getCurrentUser();
+  return user?.role || 'member';
 };

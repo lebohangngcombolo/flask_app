@@ -10,48 +10,38 @@ const LandingPage: React.FC = () => {
   return (
     <Layout>
       {/* Hero Section with Image */}
-      <div className="relative bg-gradient-to-br from-emerald-50 to-teal-50 pt-12 md:pt-20 pb-20 md:pb-32 overflow-hidden">
+      <div className="relative bg-gradient-to-br from-blue-50 to-blue-50 pt-12 md:pt-20 pb-20 md:pb-32 overflow-hidden">
         <div className="container mx-auto px-4 relative z-10">
           <div className="grid md:grid-cols-2 gap-8 md:gap-12 items-center">
             <div className="space-y-6 md:space-y-8 text-center md:text-left">
               <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 leading-tight">
-                Together We Save,<br />
-                <span className="text-emerald-600">Together We Grow</span>
+                We make stokvels smarter,<br />
+                <span className="text-blue-600">secure and more rewarding for free</span>
               </h1>
-              <p className="text-lg md:text-xl text-gray-600 leading-relaxed">
-                Join i-STOKVEL and take control of your financial future. We empower communities through collective savings and mutual support.
-              </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center md:justify-start">
                 <Button 
                   onClick={() => navigate('/signup')} 
-                  className="bg-emerald-600 text-white hover:bg-emerald-700 px-6 md:px-8 py-3 text-base md:text-lg w-full sm:w-auto"
+                  className="bg-blue-600 text-white hover:bg-blue-700 px-6 md:px-8 py-3 text-base md:text-lg w-full sm:w-auto"
                 >
                   Get Started
                 </Button>
                 <Button 
                   variant="secondary" 
                   onClick={() => navigate('/about')}
-                  className="bg-white text-emerald-600 border-2 border-emerald-600 hover:bg-emerald-50 px-6 md:px-8 py-3 text-base md:text-lg w-full sm:w-auto"
+                  className="bg-white text-blue-600 border-2 border-blue-600 hover:bg-blue-50 px-6 md:px-8 py-3 text-base md:text-lg w-full sm:w-auto"
                 >
                   Learn More
                 </Button>
               </div>
             </div>
-            <div className="relative">
-              <div className="bg-white rounded-2xl shadow-xl p-4 transform rotate-3">
+            
+            {/* Updated Image Visual */}
+            <div className="relative flex items-center justify-center">
                 <img 
-                  src="https://images.unsplash.com/photo-1579621970563-ebec7560ff3e?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2071&q=80" 
-                  alt="Community savings meeting" 
-                  className="w-full h-auto rounded-lg object-cover aspect-[4/3]"
+                src="https://www.smefinanceforum.org/sites/default/files/Shutterstock_1715290246r.png"
+                alt="Community working together towards a common financial goal"
+                className="rounded-2xl shadow-xl object-cover w-full max-w-md h-72"
                 />
-              </div>
-              <div className="absolute -bottom-6 -left-6 bg-white rounded-2xl shadow-xl p-4 transform -rotate-3">
-                <img 
-                  src="https://images.unsplash.com/photo-1554224155-6726b3ff858f?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2011&q=80" 
-                  alt="Financial growth" 
-                  className="w-full h-auto rounded-lg object-cover aspect-[4/3]"
-                />
-              </div>
             </div>
           </div>
         </div>
@@ -61,7 +51,7 @@ const LandingPage: React.FC = () => {
       <section className="py-16 bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">Why Choose i-STOKVEL?</h2>
+            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">Why Choose <span className="text-blue-600">i-STOKVEL</span>?</h2>
             <p className="text-lg text-gray-600 max-w-3xl mx-auto">
               Experience the future of stokvel management with our innovative platform
             </p>
@@ -227,23 +217,23 @@ const LandingPage: React.FC = () => {
       </section>
 
       {/* Stats Section with Modern Design */}
-      <div className="py-16 md:py-20 bg-gradient-to-br from-emerald-50 to-teal-50">
+      <div className="py-16 md:py-20 bg-gradient-to-br from-blue-50 to-blue-50">
         <div className="container mx-auto px-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8">
             <div className="text-center">
-              <div className="text-3xl md:text-4xl font-bold text-emerald-600 mb-2">10K+</div>
+              <div className="text-3xl md:text-4xl font-bold text-blue-600 mb-2">10K+</div>
               <p className="text-gray-600 text-sm md:text-base">Active Members</p>
             </div>
             <div className="text-center">
-              <div className="text-3xl md:text-4xl font-bold text-emerald-600 mb-2">R5M+</div>
+              <div className="text-3xl md:text-4xl font-bold text-blue-600 mb-2">R5M+</div>
               <p className="text-gray-600 text-sm md:text-base">Total Savings</p>
             </div>
             <div className="text-center">
-              <div className="text-3xl md:text-4xl font-bold text-emerald-600 mb-2">500+</div>
+              <div className="text-3xl md:text-4xl font-bold text-blue-600 mb-2">500+</div>
               <p className="text-gray-600 text-sm md:text-base">Savings Groups</p>
             </div>
             <div className="text-center">
-              <div className="text-3xl md:text-4xl font-bold text-emerald-600 mb-2">98%</div>
+              <div className="text-3xl md:text-4xl font-bold text-blue-600 mb-2">98%</div>
               <p className="text-gray-600 text-sm md:text-base">Member Satisfaction</p>
             </div>
           </div>
@@ -256,7 +246,7 @@ const LandingPage: React.FC = () => {
           <div className="max-w-4xl mx-auto text-center">
             <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4 md:mb-6">Ready to Start Your Savings Journey?</h2>
             <p className="text-lg md:text-xl text-gray-600 mb-6 md:mb-8">
-              Join thousands of members who are already growing their wealth with i-STOKVEL
+              Join thousands of members who are already growing their wealth with <span className="text-blue-600">i-STOKVEL</span>
             </p>
             <Button 
               onClick={() => navigate('/signup')} 
