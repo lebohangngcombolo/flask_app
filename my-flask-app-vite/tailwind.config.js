@@ -1,8 +1,7 @@
 /** @type {import('tailwindcss').Config} */
-export default {
+module.exports = {
   content: [
-    "./index.html",
-    "./src/**/*.{js,ts,jsx,tsx}",
+    "./src/**/*.{js,jsx,ts,tsx}",
   ],
   theme: {
     extend: {
@@ -18,11 +17,12 @@ export default {
         'float': 'float 10s ease-in-out infinite',
         'bounce-slow': 'bounce 3s ease-in-out infinite',
         'fill': 'fill 2s ease-in-out infinite',
-        'fade-in': 'fadeIn 0.5s ease-out',
+        'fade-in': 'fadeIn 0.5s ease-in',
         'fade-in-delay': 'fadeIn 0.5s ease-out 0.2s',
         'slide-in': 'slideIn 0.5s ease-out',
         'shake': 'shake 0.5s ease-in-out',
         'slide-out': 'slideOut 0.5s ease-in',
+        'slide-up': 'slideUp 0.5s ease-out',
       },
       keyframes: {
         growTrunk: {
@@ -79,11 +79,27 @@ export default {
           '0%': { transform: 'translateX(0)', opacity: '1' },
           '100%': { transform: 'translateX(-100%)', opacity: '0' },
         },
+        slideUp: {
+          '0%': { transform: 'translateY(20px)', opacity: '0' },
+          '100%': { transform: 'translateY(0)', opacity: '1' },
+        },
       },
       colors: {
         'google-red': '#DB4437',
         'microsoft-blue': '#00A4EF',
         'apple-black': '#000000',
+        blue: {
+          50: '#eff6ff',
+          100: '#dbeafe',
+          200: '#bfdbfe',
+          300: '#93c5fd',
+          400: '#60a5fa',
+          500: '#3b82f6',
+          600: '#2563eb',
+          700: '#1d4ed8',
+          800: '#1e40af',
+          900: '#1e3a8a',
+        },
       },
     },
   },
