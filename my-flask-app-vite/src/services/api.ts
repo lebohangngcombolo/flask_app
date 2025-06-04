@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // Create an axios instance with default config
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000',
+  baseURL: 'http://localhost:5001/api',
   headers: {
     'Content-Type': 'application/json',
   },
@@ -17,14 +17,14 @@ api.interceptors.request.use((config) => {
     data: config.data
   });
   
-  const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
 });
 
-// Add response interceptor
+// Add response interceptor for better error handling
 api.interceptors.response.use(
   (response) => {
     console.log('API response received:', {
@@ -40,108 +40,104 @@ api.interceptors.response.use(
       status: error.response?.status,
       data: error.response?.data
     });
-    
     if (error.response?.status === 401) {
+      // Handle unauthorized access
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.location.href = '/login';
+    } else if (error.response?.status === 403) {
+      // Insufficient permissions
+      console.error('Access denied:', error.response.data.error);
+      // You might want to show a notification or redirect to a "not authorized" page
     }
-    
-    // Add this to handle network errors
-    if (!error.response) {
-      console.error('Network error:', error);
-      return Promise.reject({
-        response: {
-          data: { error: 'Network error. Please check your connection.' }
-        }
-      });
-    }
-    
     return Promise.reject(error);
   }
 );
 
 // Auth API calls matching your Flask endpoints
 export const authAPI = {
-  register: (userData: {
-    full_name: string;
-    email: string;
-    password: string;
-    phone: string;
-    confirm_password: string;
-  }) => {
+  register: (userData: any) => {
     console.log('API register request:', userData); // Debug log
-    return api.post('/api/auth/register', userData);
+    return api.post('/auth/register', userData);
   },
   
   login: (email: string, password: string) => {
-    return api.post('/api/auth/login', { 
+    return api.post('/auth/login', { 
       email: email.trim(),
       password: password 
     });
   },
   
-  getCurrentUser: () => api.get('/api/auth/me'),
+  getCurrentUser: () => api.get('/auth/me'),
+  
+  verifyEmail: (email: string, verificationCode: string) =>
+    api.post('/api/verify-email', {
+      email: email,
+      verification_code: verificationCode
+    }),
+  
+  resendVerificationCode: (email: string) =>
+    api.post('/api/resend-verification', { email: email }),
 };
 
 // User API calls
 export const userAPI = {
-  getProfile: () => api.get('/api/auth/me'),
-  updateProfile: (data: any) => api.put('/api/auth/me', data),
+  getProfile: () => api.get('/auth/me'),
+  updateProfile: (data: any) => api.put('/auth/me', data),
 };
 
 // Stokvel API calls
 export const stokvelAPI = {
-  getStokvels: () => api.get('/api/groups'),
-  createStokvel: (data: any) => api.post('/api/groups', data),
-  getStokvelDetails: (id: string) => api.get(`/api/groups/${id}`),
-  joinStokvel: (id: string) => api.post(`/api/groups/${id}/join`),
+  getStokvels: () => api.get('/groups'),
+  createStokvel: (data: any) => api.post('/groups', data),
+  getStokvelDetails: (id: string) => api.get(`/groups/${id}`),
+  joinStokvel: (id: string) => api.post(`/groups/${id}/join`),
 };
 
 // Admin API calls
 export const adminAPI = {
-  getStats: () => api.get('/api/admin/stats'),
-  getGroups: () => api.get('/api/admin/groups'),
-  createGroup: (data: any) => api.post('/api/admin/groups', data),
+  getStats: () => api.get('/admin/stats'),
+  getGroups: () => api.get('/admin/groups'),
+  createGroup: (data: any) => api.post('/admin/groups', data),
 };
 
 const getPolls = async () => {
-  const response = await api.get('/api/polls');
+  const response = await api.get('/polls');
   return response.data;
 };
 
 const createPoll = async (pollData: any) => {
-  const response = await api.post('/api/polls', pollData);
+  const response = await api.post('/polls', pollData);
   return response.data;
 };
 
 const getMeetings = async () => {
-  const response = await api.get('/api/meetings');
+  const response = await api.get('/meetings');
   return response.data;
 };
 
 const createMeeting = async (meetingData: any) => {
-  const response = await api.post('/api/meetings', meetingData);
+  const response = await api.post('/meetings', meetingData);
   return response.data;
 };
 
 const getWithdrawals = async () => {
-  const response = await api.get('/api/withdrawals');
+  const response = await api.get('/withdrawals');
   return response.data;
 };
 
 const createWithdrawal = async (withdrawalData: any) => {
-  const response = await api.post('/api/withdrawals', withdrawalData);
+  const response = await api.post('/withdrawals', withdrawalData);
   return response.data;
 };
 
 const approveWithdrawal = async (withdrawalId: number) => {
-  const response = await api.post(`/api/withdrawals/${withdrawalId}/approve`);
+  const response = await api.post(`/withdrawals/${withdrawalId}/approve`);
   return response.data;
 };
 
 const rejectWithdrawal = async (withdrawalId: number) => {
-  const response = await api.post(`/api/withdrawals/${withdrawalId}/reject`);
+  const response = await api.post(`/withdrawals/${withdrawalId}/reject`);
   return response.data;
 };
 
@@ -157,8 +153,17 @@ export {
 };
 
 export const dashboardAPI = {
-  getStats: () => api.get('/api/dashboard/stats'),
-  getAvailableGroups: () => api.get('/api/groups/available'),
+  // Admin endpoints
+  getUsers: () => api.get('/dashboard/users'),
+  manageGroups: () => api.get('/dashboard/groups'),
+  
+  // Common endpoints (accessible by both roles)
+  getProfile: () => api.get('/dashboard/profile'),
+  updateProfile: (data: any) => api.put('/dashboard/profile', data),
+  
+  // Member endpoints
+  getMyGroups: () => api.get('/dashboard/my-groups'),
+  getContributions: () => api.get('/dashboard/contributions'),
 };
 
 export default api; 

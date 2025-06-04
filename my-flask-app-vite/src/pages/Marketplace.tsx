@@ -29,6 +29,7 @@ import {
   UserPlus,
   ArrowLeft // Import the ArrowLeft icon
 } from 'lucide-react'; // Import necessary icons
+import { toast } from 'react-hot-toast';
 
 
 // --- Mock Data for Offers ---
@@ -88,7 +89,12 @@ const mockOffers: Offer[] = [
 
 
 // --- Offer Card Component ---
-const OfferCard: React.FC<{ offer: Offer; navigate: ReturnType<typeof useNavigate> }> = ({ offer, navigate }) => {
+interface OfferCardProps {
+  offer: Offer;
+  navigate: ReturnType<typeof useNavigate>;
+}
+
+const OfferCard: React.FC<OfferCardProps> = ({ offer, navigate }) => {
   return (
     <div className="bg-white p-4 rounded-lg shadow-md border border-gray-200 flex flex-col justify-between">
       <div>
@@ -114,7 +120,14 @@ const OfferCard: React.FC<{ offer: Offer; navigate: ReturnType<typeof useNavigat
         )}
         {offer.buttonText && offer.buttonLink && (
            <button
-             onClick={() => navigate(offer.buttonLink)}
+             onClick={() => {
+               try {
+                 navigate(offer.buttonLink);
+               } catch (error) {
+                 console.error('Navigation error:', error);
+                 toast.error('Failed to navigate to offer details');
+               }
+             }}
              className="w-full px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors duration-200"
            >
              {offer.buttonText}
@@ -152,15 +165,21 @@ const adminNavItems = [
   { id: 'settings', label: 'Settings', icon: Shield, path: '/admin/settings' },
 ];
 
+interface MockUser {
+  name: string;
+  role: 'admin' | 'member';
+  email: string;
+}
+
+const mockUser: MockUser = { name: 'User', role: 'member', email: 'user@example.com' };
 
 const Marketplace: React.FC = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('marketplace'); // State to manage active tab
    // You would likely fetch the real user object here or get it from context/state
-  const mockUser = { name: 'User', role: 'member', email: 'user@example.com' }; // Mock user for DashboardLayout
 
   // In a real app, you might fetch offers based on the active tab
-  const [offers, setOffers] = useState<Offer[]>(mockOffers); // Using mock data for demo
+  const offers = mockOffers; // If not planning to update offers
 
   // You might fetch data here based on activeTab
   // useEffect(() => {
@@ -204,6 +223,9 @@ const Marketplace: React.FC = () => {
           <nav className="-mb-px flex space-x-8" aria-label="Tabs">
             <button
               onClick={() => setActiveTab('marketplace')}
+              aria-label="Switch to marketplace tab"
+              role="tab"
+              aria-selected={activeTab === 'marketplace'}
               className={`whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm ${
                 activeTab === 'marketplace'
                   ? 'border-blue-600 text-blue-600'
@@ -215,6 +237,9 @@ const Marketplace: React.FC = () => {
             </button>
             <button
               onClick={() => setActiveTab('my-offers')}
+              aria-label="Switch to my offers tab"
+              role="tab"
+              aria-selected={activeTab === 'my-offers'}
               className={`whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm ${
                 activeTab === 'my-offers'
                   ? 'border-blue-600 text-blue-600'
