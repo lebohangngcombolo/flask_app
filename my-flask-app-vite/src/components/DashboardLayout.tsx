@@ -33,7 +33,6 @@ interface DashboardLayoutProps {
 
 const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, user, navItems }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isProfileOpen, setIsProfileOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -43,163 +42,115 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, user, navIt
     navigate('/login');
   };
 
-  const sidebarWidth = isSidebarOpen ? '280px' : '0';
-
   return (
     <div className="min-h-screen bg-gray-100 flex">
       {/* Sidebar */}
-      <motion.aside
-        animate={{ x: isSidebarOpen ? 0 : -280 }}
-        transition={{ type: "spring", stiffness: 300, damping: 30 }}
-        style={{ width: '280px' }}
-        className="fixed top-0 left-0 z-40 h-screen bg-white border-r border-gray-200 overflow-hidden flex flex-col"
+      <aside 
+        className={`fixed md:static top-0 left-0 z-40 h-screen bg-white border-r border-gray-200 transition-all duration-300 ease-in-out ${
+          isSidebarOpen ? 'w-64' : 'w-16'
+        }`}
       >
-        <div className="flex items-center justify-center h-16 border-b border-gray-200 flex-shrink-0">
-          <span className="text-2xl font-bold text-blue-600">i-STOKVEL</span>
+        <div className="flex items-center justify-center h-16 border-b border-gray-200">
+          <button 
+            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            className="p-2 rounded-lg hover:bg-gray-100"
+          >
+            <Menu className="w-6 h-6" />
+          </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4">
-          <nav className="space-y-2">
-            {navItems.map((item) => {
-              const isActive = location.pathname === item.path;
-              return (
-                <motion.li
-                  key={item.id}
-                  whileHover={{ x: 5 }}
-                  transition={{ type: "spring", stiffness: 400, damping: 20 }}
-                  className="list-none"
-                >
-                  <button
-                    onClick={() => {
-                      navigate(item.path);
-                      if (window.innerWidth < 768) {
-                        setIsSidebarOpen(false);
-                      }
-                    }}
-                    className={`flex items-center w-full p-3 rounded-lg transition-colors duration-200 ${
-                      isActive
-                        ? 'bg-blue-100 text-blue-700 font-semibold'
-                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                    }`}
-                  >
-                    <item.icon className={`w-5 h-5 mr-3 ${isActive ? 'text-blue-600' : 'text-gray-500'}`} />
-                    <span>{item.label}</span>
-                  </button>
-                </motion.li>
-              );
-            })}
-          </nav>
-        </div>
+        {/* Navigation Items */}
+        <nav className="p-4 space-y-2">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = location.pathname === item.path;
+            
+            return (
+              <button
+                key={item.id}
+                onClick={() => navigate(item.path)}
+                className={`w-full flex items-center ${isSidebarOpen ? 'space-x-3' : 'justify-center'} px-4 py-2 rounded-lg transition-colors ${
+                  isActive 
+                    ? 'bg-blue-50 text-blue-600' 
+                    : 'text-gray-700 hover:bg-gray-50'
+                }`}
+                title={!isSidebarOpen ? item.label : undefined}
+              >
+                <Icon className="w-5 h-5" />
+                {isSidebarOpen && <span>{item.label}</span>}
+              </button>
+            );
+          })}
+        </nav>
 
+        {/* User Profile Section */}
         {user && (
-          <div className="p-4 border-t border-gray-200 flex items-center space-x-3 flex-shrink-0">
-            <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
-              {user?.profilePicture ? (
-                <img
-                  src={user.profilePicture}
-                  alt={user.name}
-                  className="w-8 h-8 rounded-full object-cover"
-                />
-              ) : (
-                <User className="w-5 h-5 text-blue-600" />
+          <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200">
+            <div className={`flex items-center ${isSidebarOpen ? 'space-x-3' : 'justify-center'}`}>
+              <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+                {user.profilePicture ? (
+                  <img
+                    src={user.profilePicture}
+                    alt={user.name}
+                    className="w-10 h-10 rounded-full object-cover"
+                  />
+                ) : (
+                  <User className="w-6 h-6 text-blue-600" />
+                )}
+              </div>
+              {isSidebarOpen && (
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 truncate">
+                    {user.name}
+                  </p>
+                  <p className="text-xs text-gray-500 truncate">
+                    {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
+                  </p>
+                </div>
               )}
             </div>
-            <div className="flex-1">
-              <p className="text-sm font-medium text-gray-900">{user.name}</p>
-              <p className="text-xs text-gray-500">{user.role.charAt(0).toUpperCase() + user.role.slice(1)}</p>
-            </div>
-            <button
-              onClick={handleLogout}
-              className="p-2 text-gray-500 rounded-lg hover:bg-gray-100 hover:text-gray-700 transition-colors duration-200"
-              title="Logout"
-            >
-              <LogOut className="w-5 h-5" />
-            </button>
           </div>
         )}
-      </motion.aside>
+      </aside>
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col transition-all duration-300" style={{ marginLeft: sidebarWidth }}>
-        <nav className="flex-shrink-0 w-full bg-white border-b border-gray-200">
-          <div className="px-4 py-3 lg:px-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <>
-                  <button
-                    onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                    className="p-2 mr-2 text-gray-500 rounded-lg hover:bg-gray-100"
-                  >
-                    {isSidebarOpen ? <ChevronLeft className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-                  </button>
-                  {!isSidebarOpen && (
-                    <span className="ml-2 text-xl font-semibold text-blue-600">i-STOKVEL</span>
-                  )}
-                </>
+      {/* Main Content - moves with sidebar */}
+      <div className={`flex-1 transition-all duration-300 ease-in-out ${isSidebarOpen ? 'md:ml-64' : 'md:ml-16'}`}>
+        {/* Top Navigation Bar */}
+        <nav className="bg-white border-b border-gray-200 sticky top-0 z-30">
+          <div className="px-4 py-3 flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              {/* Search Bar */}
+              <div className="hidden md:flex relative">
+                <input
+                  type="text"
+                  placeholder="Search..."
+                  className="w-64 pl-10 pr-4 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <Search className="absolute left-3 top-2.5 w-5 h-5 text-gray-400" />
               </div>
+            </div>
 
-              <div className="flex items-center space-x-4">
-                <div className="hidden md:flex relative">
-                  <input
-                    type="text"
-                    placeholder="Search..."
-                    className="w-64 pl-10 pr-4 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  <Search className="absolute left-3 top-2.5 w-5 h-5 text-gray-400" />
-                </div>
+            <div className="flex items-center space-x-4">
+              {/* Notifications */}
+              <button className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg relative">
+                <Bell className="w-6 h-6" />
+                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+              </button>
 
-                <button className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg relative">
-                  <Bell className="w-6 h-6" />
-                  <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-                </button>
-
-                <div className="relative">
-                  <button
-                    onClick={() => setIsProfileOpen(!isProfileOpen)}
-                    className="flex items-center space-x-2 hover:bg-gray-100 p-1.5 rounded-lg transition-colors duration-200"
-                  >
-                    <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
-                      {user?.profilePicture ? (
-                        <img
-                          src={user.profilePicture}
-                          alt={user.name}
-                          className="w-8 h-8 rounded-full object-cover"
-                        />
-                      ) : (
-                        <User className="w-5 h-5 text-blue-600" />
-                      )}
-                    </div>
-                    <span className="text-sm font-medium text-gray-700 hidden md:block">
-                      {user?.name || 'Loading...'}
-                    </span>
-                    <ChevronDown className="w-4 h-4 text-gray-500 hidden md:block" />
-                  </button>
-
-                  <AnimatePresence>
-                    {isProfileOpen && (
-                      <motion.div
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: 10 }}
-                        className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg py-1 z-50 border border-gray-200"
-                      >
-                        <button
-                          onClick={handleLogout}
-                          className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
-                        >
-                          <LogOut className="w-4 h-4 mr-2" />
-                          Logout
-                        </button>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
-              </div>
+              {/* Logout Button */}
+              <button
+                onClick={handleLogout}
+                className="flex items-center space-x-2 px-4 py-2 text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <LogOut className="w-5 h-5" />
+                <span>Logout</span>
+              </button>
             </div>
           </div>
         </nav>
 
-        <main className="flex-1 overflow-y-auto p-4">
+        {/* Page Content */}
+        <main className="p-4 md:p-8">
           {children}
         </main>
       </div>
