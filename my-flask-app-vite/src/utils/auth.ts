@@ -34,10 +34,12 @@ export const signup = async (userData: {
     
     console.log('Registration response:', response.data);
     
-    if (response.data && response.data.message === 'User registered successfully') {
+    // Check for successful registration
+    if (response.data && (response.data.message?.includes('successfully') || response.data.user_id)) {
       return { 
         success: true, 
         message: 'Account created successfully',
+        user_id: response.data.user_id,
         user: response.data.user
       };
     }
@@ -62,24 +64,19 @@ export const login = async (email: string, password: string) => {
     const response = await authAPI.login(email, password);
     console.log('Login response:', response.data);
     
-    if (response.data.token && response.data.user) {
-      const userData = {
-        ...response.data.user,
-        role: response.data.user.role || 'member'
-      };
-      
-      // Store auth data
-      localStorage.setItem('user', JSON.stringify(userData));
+    if (response.data && response.data.token && response.data.user) {
+      // Store token and user data
       localStorage.setItem('token', response.data.token);
-      
+      localStorage.setItem('user', JSON.stringify(response.data.user));
+    
       // Use setTimeout to ensure state is updated before navigation
       setTimeout(() => {
-        window.location.href = userData.role === 'admin' ? '/admin/dashboard' : '/dashboard';
+        window.location.href = response.data.user.role === 'admin' ? '/admin/dashboard' : '/dashboard';
       }, 100);
       
       return { 
         success: true, 
-        user: userData
+        user: response.data.user
       };
     }
     
@@ -110,18 +107,64 @@ export const logout = () => {
   window.location.href = '/login';
 };
 
-export const getCurrentUser = () => {
-  const user = localStorage.getItem('user');
-  return user ? JSON.parse(user) : null;
+export const isAuthenticated = (): boolean => {
+  const token = localStorage.getItem('token');
+  return !!token;
 };
 
-export const isAuthenticated = () => {
-  const token = localStorage.getItem('token');
+export const getCurrentUser = () => {
+  const userStr = localStorage.getItem('user');
+  if (!userStr) return null;
+  try {
+    return JSON.parse(userStr);
+  } catch {
+    return null;
+  }
+};
+
+export const hasRole = (role: 'admin' | 'member'): boolean => {
   const user = getCurrentUser();
-  return !!token && !!user;
+  return user?.role === role;
+};
+
+export const requireRole = (role: 'admin' | 'member'): boolean => {
+  if (!isAuthenticated()) {
+    return false;
+  }
+  return hasRole(role);
 };
 
 export const getUserRole = () => {
   const user = getCurrentUser();
   return user?.role || 'member';
+};
+
+export const verifyEmailCode = async (email: string, verificationCode: string) => {
+  try {
+    const response = await authAPI.verifyEmail(email, verificationCode);
+    return {
+      success: true,
+      message: response.data.message || 'Account verified successfully'
+    };
+  } catch (error: any) {
+    return {
+      success: false,
+      message: error.response?.data?.error || 'Verification failed'
+    };
+  }
+};
+
+export const resendEmailVerificationCode = async (email: string) => {
+  try {
+    const response = await authAPI.resendVerificationCode(email);
+    return {
+      success: true,
+      message: response.data.message || 'New verification code sent'
+    };
+  } catch (error: any) {
+    return {
+      success: false,
+      message: error.response?.data?.error || 'Failed to resend code'
+    };
+  }
 };

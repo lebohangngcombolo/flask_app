@@ -5,46 +5,33 @@ import PageTransition from '../components/PageTransition';
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
-  const [formData, setFormData] = useState({
-    email: '',
-    password: '',
-  });
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [isLoading, setIsLoading] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const [showTransition, setShowTransition] = useState(false);
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-    if (errors[name]) {
-      setErrors(prev => ({ ...prev, [name]: '' }));
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
-    setErrors({});
+    setError('');
+    setLoading(true);
 
     try {
-      console.log('Form submission started:', { email: formData.email });
-      
-      const result = await login(formData.email, formData.password);
+      console.log('Attempting login...');
+      const result = await login(email, password);
       console.log('Login result:', result);
       
       if (result.success) {
-        console.log('Login successful, navigating to dashboard');
+        console.log('Login successful, redirecting...');
+        // The redirect is handled in the login function
       } else {
-        console.log('Login failed:', result.message);
-        setErrors({ submit: result.message });
+        setError(result.message);
       }
-    } catch (error: any) {
-      console.error('Login error in component:', error);
-      setErrors({ 
-        submit: error.message || 'An error occurred during login' 
-      });
+    } catch (err) {
+      console.error('Login error:', err);
+      setError('An error occurred during login');
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
@@ -106,9 +93,9 @@ const Login: React.FC = () => {
             </p>
           </div>
 
-          {errors.submit && (
+          {error && (
             <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-sm">
-              {errors.submit}
+              {error}
             </div>
           )}
 
@@ -123,8 +110,8 @@ const Login: React.FC = () => {
                 type="email"
                 autoComplete="email"
                 required
-                value={formData.email}
-                onChange={handleChange}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="Enter your email"
               />
@@ -140,8 +127,8 @@ const Login: React.FC = () => {
                 type="password"
                 autoComplete="current-password"
                 required
-                value={formData.password}
-                onChange={handleChange}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
                 className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="Enter your password"
               />
@@ -167,10 +154,10 @@ const Login: React.FC = () => {
             <div className="pt-2">
               <button
                 type="submit"
-                disabled={isLoading}
+                disabled={loading}
                 className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
               >
-                {isLoading ? 'Signing in...' : 'Sign in'}
+                {loading ? 'Signing in...' : 'Sign in'}
               </button>
             </div>
 

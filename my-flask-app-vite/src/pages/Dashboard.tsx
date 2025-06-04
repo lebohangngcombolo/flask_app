@@ -27,6 +27,8 @@ import {
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import moment from 'moment';
+import { toast } from 'react-toastify';
+import { GroupManagement } from '../components/groups/GroupManagement';
 
 interface UserData {
   id: number;
@@ -88,7 +90,13 @@ const adminNavItems = [
   { id: 'settings', label: 'Settings', icon: Shield, path: '/admin/settings' },
 ];
 
-const CategoryCard = ({ icon: Icon, title, onClick }) => {
+interface CategoryCardProps {
+  icon: React.ComponentType;
+  title: string;
+  onClick: () => void;
+}
+
+const CategoryCard: React.FC<CategoryCardProps> = ({ icon: Icon, title, onClick }) => {
   return (
     <div
       onClick={onClick}
@@ -153,146 +161,15 @@ const mockAvailableGroups: StokvelGroup[] = [
   },
 ];
 
-const Dashboard: React.FC = () => {
-  const navigate = useNavigate();
-  const [user, setUser] = useState<UserData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [isAdminView, setIsAdminView] = useState(false);
-  const [userStats, setUserStats] = useState<UserStats | null>(null);
-  const [availableGroups, setAvailableGroups] = useState<StokvelGroup[]>([]);
+interface DashboardContentProps {
+  user: UserData | null;
+  userStats: UserStats | null;
+  availableGroups: StokvelGroup[];
+  chartData: { month: string; Total: number }[];
+  navigate: (path: string) => void;
+}
 
-  useEffect(() => {
-    const fetchDashboardData = async () => {
-      try {
-        setLoading(true);
-
-        const token = localStorage.getItem('token');
-        if (!token) {
-          console.log('No token found, attempting to load with mock data.');
-          setUser(mockUser);
-          setUserStats(mockUserStats);
-          setAvailableGroups(mockAvailableGroups);
-          setError(null);
-          setLoading(false);
-          return;
-        }
-
-        try {
-          const userResponse = await api.get('/api/auth/me');
-          console.log('User data response:', userResponse.data);
-          setUser(userResponse.data);
-        } catch (userError: any) {
-          console.error('Error fetching user data:', userError);
-          if (userError.response?.status === 401) {
-            console.log('Token expired or invalid, redirecting to login');
-            localStorage.removeItem('token');
-            localStorage.removeItem('user');
-            navigate('/login');
-            return;
-          }
-          setUser(mockUser);
-        }
-
-        try {
-          const statsResponse = await api.get('/api/dashboard/stats');
-          console.log('Dashboard stats response:', statsResponse.data);
-          setUserStats(statsResponse.data);
-        } catch (statsError: any) {
-          console.error('Error fetching dashboard stats:', statsError);
-          setUserStats(mockUserStats);
-          setError(statsError.response?.data?.error || 'Failed to fetch dashboard stats. Displaying demo data.');
-        }
-
-        try {
-          const groupsResponse = await api.get('/api/groups/available');
-          console.log('Available groups response:', groupsResponse.data);
-          setAvailableGroups(groupsResponse.data.groups);
-        } catch (groupsError: any) {
-          console.error('Error fetching available groups:', groupsError);
-          setAvailableGroups(mockAvailableGroups);
-          setError(prevError => prevError + ' ' + (groupsError.response?.data?.error || 'Failed to fetch available groups. Displaying demo data.'));
-        }
-
-        if (!error) {
-          setError(null);
-        }
-      } catch (overallError: any) {
-        console.error('Overall error in fetchDashboardData:', overallError);
-        if (!userStats) setUserStats(mockUserStats);
-        if (availableGroups.length === 0) setAvailableGroups(mockAvailableGroups);
-
-        if (!error) {
-          if (overallError.response?.data?.error) {
-            setError(overallError.response.data.error);
-          } else {
-            setError('An unexpected error occurred. Displaying demo data.');
-          }
-        }
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    console.log('Fetching dashboard data...');
-    fetchDashboardData();
-  }, [navigate]);
-
-  const chartData = userStats?.monthlySummary?.map(item => ({
-    month: moment(item.month, 'YYYY-MM').format('MMM YY'),
-    Total: item.total
-  })) || [];
-
-  if (loading) {
-    const layoutUser = user || mockUser;
-    const layoutNavItems = layoutUser.role === 'admin' ? adminNavItems : userNavItems;
-    return (
-      <DashboardLayout user={layoutUser} navItems={layoutNavItems}>
-        <div className="flex justify-center items-center min-h-screen-minus-header">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-        </div>
-      </DashboardLayout>
-    );
-  }
-
-  if (error && !loading) {
-    const currentNavItems = user?.role === 'admin' ? adminNavItems : userNavItems;
-    return (
-      <DashboardLayout user={user} navItems={currentNavItems}>
-        <div className="max-w-4xl mx-auto p-4 mt-8">
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
-            <strong className="font-bold">Error: </strong>
-            <span className="block sm:inline">{error}</span>
-          </div>
-          {user && userStats && availableGroups && (
-            <DashboardContent
-              user={user}
-              userStats={userStats}
-              availableGroups={availableGroups}
-              chartData={chartData}
-              navigate={navigate}
-            />
-          )}
-        </div>
-      </DashboardLayout>
-    );
-  }
-
-  const currentNavItems = user?.role === 'admin' ? adminNavItems : userNavItems;
-  return (
-    <DashboardLayout user={user} navItems={currentNavItems}>
-      <DashboardContent
-        user={user}
-        userStats={userStats}
-        availableGroups={availableGroups}
-        chartData={chartData}
-        navigate={navigate}
-      />
-    </DashboardLayout>
-  );
-};
-
-const DashboardContent = ({ user, userStats, availableGroups, chartData, navigate }) => {
+const DashboardContent: React.FC<DashboardContentProps> = ({ user, userStats, availableGroups, chartData, navigate }) => {
   const usingMockData = user?.email === mockUser.email;
 
   return (
@@ -303,7 +180,7 @@ const DashboardContent = ({ user, userStats, availableGroups, chartData, navigat
           <span className="block sm:inline">Displaying sample data. Connect to a backend to see real data.</span>
         </div>
       )}
-      <div className="flex justify-between items-center mb-8">
+        <div className="flex justify-between items-center mb-8">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
             Welcome, {user?.name || 'User'}
@@ -437,4 +314,193 @@ const DashboardContent = ({ user, userStats, availableGroups, chartData, navigat
   );
 }
 
+const Dashboard: React.FC = () => {
+  const navigate = useNavigate();
+  const [user, setUser] = useState<UserData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [userStats, setUserStats] = useState<UserStats | null>(null);
+  const [availableGroups, setAvailableGroups] = useState<StokvelGroup[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        setLoading(true);
+
+        const token = localStorage.getItem('token');
+        if (!token) {
+          console.log('No token found, attempting to load with mock data.');
+          setUser(mockUser);
+          setUserStats(mockUserStats);
+          setAvailableGroups(mockAvailableGroups);
+          setError(null);
+          setLoading(false);
+          return;
+        }
+
+        try {
+          const userResponse = await api.get('/api/auth/me');
+          console.log('User data response:', userResponse.data);
+          setUser(userResponse.data);
+        } catch (userError: any) {
+          console.error('Error fetching user data:', userError);
+          if (userError.response?.status === 401) {
+            console.log('Token expired or invalid, redirecting to login');
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+          navigate('/login');
+            return;
+          }
+          setUser(mockUser);
+        }
+
+        try {
+          const statsResponse = await api.get('/api/dashboard/stats');
+          console.log('Dashboard stats response:', statsResponse.data);
+          setUserStats(statsResponse.data);
+        } catch (statsError: any) {
+          console.error('Error fetching dashboard stats:', statsError);
+          setUserStats(mockUserStats);
+          setError(statsError.response?.data?.error || 'Failed to fetch dashboard stats. Displaying demo data.');
+        }
+
+        try {
+          const groupsResponse = await api.get('/api/groups/available');
+          console.log('Available groups response:', groupsResponse.data);
+          setAvailableGroups(groupsResponse.data.groups);
+        } catch (groupsError: any) {
+          console.error('Error fetching available groups:', groupsError);
+          setAvailableGroups(mockAvailableGroups);
+          setError(prevError => prevError + ' ' + (groupsError.response?.data?.error || 'Failed to fetch available groups. Displaying demo data.'));
+        }
+
+        if (!error) {
+          setError(null);
+        }
+      } catch (overallError: any) {
+        console.error('Overall error in fetchDashboardData:', overallError);
+        if (!userStats) setUserStats(mockUserStats);
+        if (availableGroups.length === 0) setAvailableGroups(mockAvailableGroups);
+
+        if (!error) {
+          if (overallError.response?.data?.error) {
+            setError(overallError.response.data.error);
+          } else {
+            setError('An unexpected error occurred. Displaying demo data.');
+          }
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    console.log('Fetching dashboard data...');
+    fetchDashboardData();
+  }, [navigate]);
+
+  const chartData = userStats?.monthlySummary?.map(item => ({
+    month: moment(item.month, 'YYYY-MM').format('MMM YY'),
+    Total: item.total
+  })) || [];
+
+  if (loading) {
+    const layoutUser = user || mockUser;
+    const layoutNavItems = layoutUser.role === 'admin' ? adminNavItems : userNavItems;
+    return (
+      <DashboardLayout user={layoutUser} navItems={layoutNavItems}>
+        <div className="flex justify-center items-center min-h-screen-minus-header">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (error && !loading) {
+    const currentNavItems = (user?.role === 'admin' ? adminNavItems : userNavItems) || userNavItems;
+    return (
+      <DashboardLayout user={user} navItems={currentNavItems}>
+        <div className="max-w-4xl mx-auto p-4 mt-8">
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+            <strong className="font-bold">Error: </strong>
+            <span className="block sm:inline">{error}</span>
+          </div>
+          {user && userStats && availableGroups && (
+            <DashboardContent
+              user={user}
+              userStats={userStats}
+              availableGroups={availableGroups}
+              chartData={chartData}
+              navigate={navigate}
+            />
+          )}
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  const currentNavItems = (user?.role === 'admin' ? adminNavItems : userNavItems) || userNavItems;
+  return (
+    <DashboardLayout 
+      user={user} 
+      navItems={currentNavItems}
+    >
+      <div className="container mx-auto px-4 py-8">
+        <h1 className="text-3xl font-bold mb-8">Dashboard</h1>
+        
+        <DashboardContent
+          user={user}
+          userStats={userStats}
+          availableGroups={availableGroups}
+          chartData={chartData}
+          navigate={navigate}
+        />
+      </div>
+    </DashboardLayout>
+  );
+};
+
+// Add ErrorBoundary component
+class ErrorBoundary extends React.Component {
+  state = { hasError: false, error: null };
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('Error caught by boundary:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-4 bg-red-50 border border-red-200 rounded">
+          <h2 className="text-red-800">Something went wrong</h2>
+          <p className="text-red-600">Please try refreshing the page</p>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default Dashboard; 
+
+// Add form validation for partner portal
+const validateEmail = (email: string): boolean => {
+  const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return re.test(email);
+};
+
+const handlePartnerSubmit = (e: React.FormEvent) => {
+  e.preventDefault();
+  const email = (e.target as HTMLFormElement).elements.namedItem('partner-email') as HTMLInputElement;
+  
+  if (!validateEmail(email.value)) {
+    toast.error('Please enter a valid email address');
+    return;
+  }
+  // proceed with submission
+}; 

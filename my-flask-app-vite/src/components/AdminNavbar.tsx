@@ -77,12 +77,6 @@ const AdminNavbar: React.FC = () => {
               )}
             </div>
 
-            {/* Create Stokvel Button */}
-            <button className="bg-indigo-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-indigo-700">
-              <Plus className="h-5 w-5" />
-              <span>Create Stokvel</span>
-            </button>
-
             {/* Profile Dropdown */}
             <div className="relative">
               <button

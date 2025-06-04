@@ -13,33 +13,83 @@ from dotenv import load_dotenv
 import os
 from flask_jwt_extended import jwt_required
 from sqlalchemy.exc import SQLAlchemyError
+from flask_mail import Mail, Message
+import random
+import requests
+import logging
+import string
+from iStokvel.utils.email_utils import send_verification_email
+from flask_migrate import Migrate
 
-# Load environment variables
+# Load environment variables from .env file
 load_dotenv()
 
 # Config
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key')
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///istokvel.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['MAIL_SERVER'] = os.getenv('MAIL_SERVER')
+app.config['MAIL_PORT'] = int(os.getenv('MAIL_PORT')) if os.getenv('MAIL_PORT') else None
+app.config['MAIL_USE_TLS'] = os.getenv('MAIL_USE_TLS') == 'True'
+app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME')
+app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD')
+app.config['SENDGRID_API_KEY'] = os.getenv('SENDGRID_API_KEY')
+app.config['SENDGRID_FROM_EMAIL'] = os.getenv('SENDGRID_FROM_EMAIL')
 
+# Initialize extensions
 db = SQLAlchemy(app)
+mail = Mail(app)
 CORS(app, resources={r"/api/*": {"origins": "http://localhost:5173"}}, supports_credentials=True)
+migrate = Migrate(app, db)
+
+# Add this after creating the app
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+
+# Add these functions after the imports and before the models
+def generate_otp():
+    """Generate a 6-digit OTP"""
+    return ''.join([str(random.randint(0, 9)) for _ in range(6)])
+
+
+def send_verification_sms(phone_number, otp_code):
+    """Send verification SMS with OTP"""
+    # Implement SMS sending logic here
+    pass
 
 # Models
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    full_name = db.Column(db.String(150), nullable=False)
+    full_name = db.Column(db.String(100), nullable=False)
     phone = db.Column(db.String(20), unique=True, nullable=False)
-    email = db.Column(db.String(150), unique=True, nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False)
     password = db.Column(db.String(200), nullable=False)
+    role = db.Column(db.String(20), default='member')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    role = db.Column(db.String(50), nullable=False, default='member')
-    profile_picture = db.Column(db.String(255))
+    profile_picture = db.Column(db.String(200))
+    is_verified = db.Column(db.Boolean, default=False)
+    otps = db.relationship('OTP', backref='user', lazy=True)
+    verification_code = db.Column(db.String(6), nullable=True)
+    verification_code_expiry = db.Column(db.DateTime, nullable=True)
     __table_args__ = (
         db.Index('idx_user_email', 'email'),
         db.Index('idx_user_phone', 'phone'),
     )
+
+    def set_password(self, password):
+        self.password = generate_password_hash(password)
+
+    def check_password(self, password):
+        return check_password_hash(self.password, password)
+
+    def generate_verification(self):
+        """Generate and save new verification code"""
+        from iStokvel.utils.email_utils import generate_verification_code
+        self.verification_code = generate_verification_code()
+        self.verification_code_expiry = datetime.utcnow() + timedelta(minutes=10)
+        db.session.commit()
+        return self.verification_code
 
 class StokvelGroup(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -49,8 +99,23 @@ class StokvelGroup(db.Model):
     frequency = db.Column(db.String(50), nullable=False)  # weekly, monthly, etc.
     max_members = db.Column(db.Integer)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    group_code = db.Column(db.String(10), unique=True)  # Add this for group joining
+    admin_id = db.Column(db.Integer, db.ForeignKey('user.id'))  # Group admin
     members = db.relationship('StokvelMember', backref='group', lazy=True)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'description': self.description,
+            'contribution_amount': float(self.contribution_amount),
+            'frequency': self.frequency,
+            'max_members': self.max_members,
+            'member_count': len(self.members),
+            'group_code': self.group_code,
+            'admin_id': self.admin_id,
+            'created_at': self.created_at.isoformat()
+        }
 
 class StokvelMember(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -58,6 +123,7 @@ class StokvelMember(db.Model):
     group_id = db.Column(db.Integer, db.ForeignKey('stokvel_group.id'), nullable=False)
     joined_at = db.Column(db.DateTime, default=datetime.utcnow)
     status = db.Column(db.String(50), default='active')  # active, inactive, suspended
+    role = db.Column(db.String(20), default='member')  # member, admin
     user = db.relationship('User', backref='memberships')
 
 class Contribution(db.Model):
@@ -133,6 +199,17 @@ class UserPreferences(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     user = db.relationship('User', backref='preferences')
 
+class OTP(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    code = db.Column(db.String(6), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    expires_at = db.Column(db.DateTime)
+    is_used = db.Column(db.Boolean, default=False)
+
+    def is_valid(self):
+        return datetime.utcnow() < self.expires_at and not self.is_used
+
 # JWT token decorator
 def token_required(f):
     @wraps(f)
@@ -159,139 +236,195 @@ def token_required(f):
         return f(current_user, *args, **kwargs)
     return decorated
 
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        token = request.headers.get('Authorization')
+        if not token:
+            return jsonify({'error': 'No token provided'}), 401
+        
+        try:
+            token = token.split(' ')[1]  # Remove 'Bearer ' prefix
+            payload = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
+            user = User.query.get(payload['user_id'])
+            
+            if not user or user.role != 'admin':
+                return jsonify({'error': 'Admin access required'}), 403
+                
+            return f(*args, **kwargs)
+        except jwt.ExpiredSignatureError:
+            return jsonify({'error': 'Token has expired'}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({'error': 'Invalid token'}), 401
+            
+    return decorated_function
+
+def role_required(allowed_roles):
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            token = request.headers.get('Authorization')
+            if not token:
+                return jsonify({'error': 'No token provided'}), 401
+            
+            try:
+                token = token.split(' ')[1]  # Remove 'Bearer ' prefix
+                payload = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
+                user = User.query.get(payload['user_id'])
+                
+                if not user:
+                    return jsonify({'error': 'User not found'}), 401
+                
+                if user.role not in allowed_roles:
+                    return jsonify({'error': 'Insufficient permissions'}), 403
+                    
+                return f(*args, **kwargs)
+            except jwt.ExpiredSignatureError:
+                return jsonify({'error': 'Token has expired'}), 401
+            except jwt.InvalidTokenError:
+                return jsonify({'error': 'Invalid token'}), 401
+                
+        return decorated_function
+    return decorator
+
 # Routes
+
+@app.route('/api/test', methods=['GET'])
+def test():
+    logger.debug('Test route accessed')
+    return jsonify({"message": "Server is working!"}), 200
+
 @app.route('/api/auth/register', methods=['POST'])
 def register():
     try:
-    data = request.get_json()
-    full_name = data.get('full_name')
-    phone = data.get('phone')
-    email = data.get('email')
-    password = data.get('password')
-    confirm_password = data.get('confirm_password')
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
 
-    # Validation
-    if not all([full_name, phone, email, password, confirm_password]):
-        return jsonify({'error': 'All fields are required'}), 400
+        email = data.get('email')
+        password = data.get('password')
+        full_name = data.get('full_name')
+        phone = data.get('phone')
 
-    if password != confirm_password:
-        return jsonify({'error': 'Passwords do not match'}), 400
+        if not email or not password or not full_name or not phone:
+            return jsonify({'error': 'Missing required fields'}), 400
 
-    if len(password) < 6:
-        return jsonify({'error': 'Password must be at least 6 characters long'}), 400
-
-    if User.query.filter_by(email=email).first():
-        return jsonify({'error': 'Email already exists'}), 400
-
-    if User.query.filter_by(phone=phone).first():
-        return jsonify({'error': 'Phone number already exists'}), 400
+        # Check if user already exists
+        if User.query.filter_by(email=data['email']).first():
+            return jsonify({'error': 'Email already registered'}), 400
 
         # Create new user
-    hashed_pw = generate_password_hash(password)
-        new_user = User(
+        user = User(
+            email=email,
             full_name=full_name,
             phone=phone,
-            email=email,
-            password=hashed_pw,
-            role='member'
+            role='member' # Default role
         )
-        db.session.add(new_user)
-        db.session.commit()
+        user.set_password(password)
 
-        # Initialize user's default data
+        db.session.add(user)
+        # db.session.commit() # Commit needed to get user.id for verification, but we'll handle later
+
+        # --- TEMPORARY WORKAROUND: Auto-verify user for development ---
+        # In a real application, you would NOT do this. Verification should happen
+        # via email confirmation. This is solely to unblock your login issue.
+        user.is_verified = True
+        # --- END TEMPORARY WORKAROUND ---
+
+        # Generate and send verification code (this part might still fail, but won't block registration)
+        print(f"Attempting to send verification email to: {user.email}")
+        # We need to commit first to get the user.id for generating verification code if logic requires it
+        # For this workaround, we commit after setting is_verified
+        db.session.commit() # Commit the new user to the database
+
+        # The following email sending logic will still run, but the user is already marked as verified
+        # If email sending fails, the user can still log in.
         try:
-            # Create default wallet balance
-            wallet = Wallet(
-                user_id=new_user.id,
-                balance=0.00
-            )
-            db.session.add(wallet)
+            verification_code = user.generate_verification() # This will also commit
+            print(f"Generated verification code: {verification_code}")
+            success, message = send_verification_email(user.email, verification_code)
+            print(f"SendGrid send result: Success={success}, Message={message}")
 
-            # Create default notification settings
-            notification_settings = NotificationSettings(
-                user_id=new_user.id,
-                email_notifications=True,
-                sms_notifications=True
-            )
-            db.session.add(notification_settings)
+            if not success:
+                 # Log the email sending failure, but don't rollback registration
+                 print(f"Warning: Failed to send verification email: {message}")
+                 # return jsonify({'error': 'Failed to send verification email: ' + message}), 500 # Don't return error here
 
-            # Create default user preferences
-            user_preferences = UserPreferences(
-                user_id=new_user.id,
-                language='en',
-                currency='ZAR',
-                theme='light'
-            )
-            db.session.add(user_preferences)
+        except Exception as email_e:
+             print(f"Warning: Exception during verification email sending: {str(email_e)}")
+             import traceback
+             traceback.print_exc()
+             # Continue registration success even if email sending fails
 
-    db.session.commit()
-
-            return jsonify({
-                'message': 'User registered successfully',
-                'user': {
-                    'id': new_user.id,
-                    'email': new_user.email,
-                    'name': new_user.full_name,
-                    'role': new_user.role
-                }
-            }), 201
-
-        except Exception as e:
-            db.session.rollback()
-            return jsonify({'error': f'Error initializing user data: {str(e)}'}), 500
+        # If we reached here, user is added and auto-verified (temporarily)
+        return jsonify({
+            'message': 'Registration successful (auto-verified for development).',
+            'email': user.email,
+            'user': { # Optionally return user info
+                'id': user.id,
+                'full_name': user.full_name,
+                'email': user.email,
+                'role': user.role
+            }
+        }), 201
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        db.session.rollback()
+        print(f"Error during registration: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'An unexpected error occurred during registration'}), 500
 
 @app.route('/api/auth/login', methods=['POST'])
 def login():
     try:
-    data = request.get_json()
-    email = data.get('email')
-    password = data.get('password')
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+
+        email = data.get('email')
+        password = data.get('password')
 
         if not email or not password:
             return jsonify({'error': 'Email and password are required'}), 400
 
-    user = User.query.filter_by(email=email).first()
-        if not user:
-            return jsonify({'error': 'User not found'}), 401
+        user = User.query.filter_by(email=email).first()
+        if not user or not user.check_password(password):
+            return jsonify({'error': 'Invalid email or password'}), 401
 
-        if not check_password_hash(user.password, password):
-            return jsonify({'error': 'Invalid password'}), 401
-
-        # Generate token
-    token = jwt.encode({
-        'user_id': user.id,
-            'exp': datetime.utcnow() + timedelta(hours=24)
-    }, app.config['SECRET_KEY'], algorithm='HS256')
-
-        # Get user's data
-        user_data = {
-            'id': user.id,
-            'email': user.email,
-            'name': user.full_name,
-            'role': user.role,
-            'profilePicture': user.profile_picture,
-            'created_at': user.created_at.isoformat()
-        }
+        # Generate JWT token
+        token = jwt.encode(
+            {
+                'user_id': user.id,
+                'exp': datetime.utcnow() + timedelta(days=1)
+            },
+            app.config['SECRET_KEY'],
+            algorithm="HS256"
+        )
 
         return jsonify({
+            'message': 'Login successful',
             'token': token,
-            'user': user_data
+            'user': {
+                'id': user.id,
+                'full_name': user.full_name,
+                'email': user.email,
+                'role': user.role
+            }
         }), 200
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f"Login error: {str(e)}")
+        return jsonify({'error': 'An error occurred during login'}), 500
 
 @app.route('/api/auth/me', methods=['GET'])
 @token_required
 def get_current_user(current_user):
     try:
-    return jsonify({
-        'id': current_user.id,
+        return jsonify({
+            'id': current_user.id,
             'name': current_user.full_name,
-        'email': current_user.email,
+            'email': current_user.email,
             'role': current_user.role,
             'profilePicture': current_user.profile_picture
         })
@@ -332,7 +465,7 @@ def create_stokvel_group(current_user):
             contribution_amount=float(data['contribution_amount']),
             frequency=data['frequency'],
             max_members=int(data['max_members']),
-            created_by=current_user.id
+            admin_id=current_user.id
         )
         
         db.session.add(new_group)
@@ -370,9 +503,9 @@ def create_admin():
         full_name='Admin User',
         email='admin@example.com',
         phone='1234567890',
-        password=generate_password_hash('admin123'),
         role='admin'
     )
+    admin.set_password('admin123')
     db.session.add(admin)
     db.session.commit()
     click.echo('Created admin user.')
@@ -383,6 +516,21 @@ def reset_db():
     db.drop_all()
     db.create_all()
     click.echo('Database reset complete.')
+
+@app.cli.command('reset-users')
+@with_appcontext
+def reset_users():
+    """Delete all users and their OTPs from the database"""
+    try:
+        # Delete all OTPs first
+        OTP.query.delete()
+        # Then delete all users
+        User.query.delete()
+        db.session.commit()
+        print('All users and OTPs deleted successfully')
+    except Exception as e:
+        db.session.rollback()
+        print(f'Error: {str(e)}')
 
 @app.route('/api/polls', methods=['GET'])
 @token_required
@@ -510,19 +658,20 @@ def get_available_groups(current_user):
 @token_required
 def get_dashboard_stats(current_user):
     try:
-        # Get user's active groups count
-        active_groups_count = StokvelMember.query.filter_by(
-            user_id=current_user.id,
-            status='active'
-        ).count()
-
-        # Get total contributions by the user
+        # Get user's role in each group
+        memberships = StokvelMember.query.filter_by(user_id=current_user.id).all()
+        is_group_admin = any(m.role == 'admin' for m in memberships)
+        
+        # Get user's active groups
+        active_groups = [m.group for m in memberships if m.status == 'active']
+        
+        # Get total contributions
         total_contributions = db.session.query(func.sum(Contribution.amount)) \
             .join(StokvelMember) \
             .filter(StokvelMember.user_id == current_user.id) \
             .scalar() or 0.0
 
-        # Get recent contributions (transactions)
+        # Get recent transactions
         recent_transactions = Contribution.query \
             .join(StokvelMember) \
             .filter(StokvelMember.user_id == current_user.id) \
@@ -541,33 +690,160 @@ def get_dashboard_stats(current_user):
             .order_by('month') \
             .all()
 
-        # Format monthly contributions for frontend
-        monthly_summary = [{'month': row.month, 'total': float(row.total)} for row in monthly_contributions]
+        # Get wallet balance
+        wallet_balance = current_user.wallet[0].balance if current_user.wallet else 0.0
 
-        # Get wallet balance (with error handling)
-        try:
-            wallet_balance = current_user.wallet[0].balance if current_user.wallet else 0.0
-        except (AttributeError, IndexError):
-            wallet_balance = 0.0
-            print(f"Warning: User {current_user.id} has no wallet or wallet relationship is misconfigured.")
+        # Get group-specific stats if user is a group admin
+        group_stats = []
+        if is_group_admin:
+            for membership in memberships:
+                if membership.role == 'admin':
+                    group = membership.group
+                    group_contributions = db.session.query(func.sum(Contribution.amount)) \
+                        .join(StokvelMember) \
+                        .filter(StokvelMember.group_id == group.id) \
+                        .scalar() or 0.0
+                    
+                    group_stats.append({
+                        'group_id': group.id,
+                        'group_name': group.name,
+                        'total_contributions': float(group_contributions),
+                        'member_count': len(group.members),
+                        'active_members': len([m for m in group.members if m.status == 'active']),
+                        'group_code': group.group_code
+                    })
 
         return jsonify({
+            'user': {
+                'id': current_user.id,
+                'name': current_user.full_name,
+                'email': current_user.email,
+                'role': current_user.role,
+                'is_group_admin': is_group_admin
+            },
             'walletBalance': float(wallet_balance),
-            'activeGroupsCount': active_groups_count,
+            'activeGroupsCount': len(active_groups),
             'totalContributions': float(total_contributions),
             'recentTransactions': [{
                 'id': t.id,
                 'amount': float(t.amount),
                 'date': t.date.isoformat(),
                 'type': 'deposit',
-                'description': f'Contribution to {t.member.group.name}' if t.member and t.member.group else 'Contribution'
+                'description': f'Contribution to {t.member.group.name}'
             } for t in recent_transactions],
-            'monthlySummary': monthly_summary
+            'monthlySummary': [{'month': row.month, 'total': float(row.total)} for row in monthly_contributions],
+            'groupStats': group_stats if is_group_admin else [],
+            'activeGroups': [{
+                'id': g.id,
+                'name': g.name,
+                'role': next(m.role for m in memberships if m.group_id == g.id),
+                'contribution_amount': float(g.contribution_amount),
+                'frequency': g.frequency
+            } for g in active_groups]
         })
 
     except Exception as e:
         print(f"Error fetching dashboard stats: {str(e)}")
         return jsonify({'error': 'Failed to fetch dashboard stats'}), 500
+
+@app.route('/api/stokvel/register-group', methods=['POST'])
+@token_required
+def register_stokvel_group(current_user):
+    try:
+        data = request.get_json()
+        
+        # Validate required fields
+        required_fields = ['name', 'description', 'contribution_amount', 'frequency', 'max_members']
+        if not all(field in data for field in required_fields):
+            return jsonify({'error': 'Missing required fields'}), 400
+
+        # Generate unique group code
+        while True:
+            group_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+            if not StokvelGroup.query.filter_by(group_code=group_code).first():
+                break
+
+        # Create new stokvel group
+        new_group = StokvelGroup(
+            name=data['name'],
+            description=data['description'],
+            contribution_amount=float(data['contribution_amount']),
+            frequency=data['frequency'],
+            max_members=int(data['max_members']),
+            admin_id=current_user.id,
+            group_code=group_code
+        )
+        
+        db.session.add(new_group)
+        
+        # Create membership for the admin
+        admin_membership = StokvelMember(
+            user_id=current_user.id,
+            group_id=new_group.id,
+            status='active',
+            role='admin'
+        )
+        
+        db.session.add(admin_membership)
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Stokvel group created successfully',
+            'group': new_group.to_dict(),
+            'group_code': group_code  # Send this to admin to share with members
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/stokvel/join-group', methods=['POST'])
+@token_required
+def join_stokvel_group(current_user):
+    try:
+        data = request.get_json()
+        group_code = data.get('group_code')
+        
+        if not group_code:
+            return jsonify({'error': 'Group code is required'}), 400
+            
+        # Find group by code
+        group = StokvelGroup.query.filter_by(group_code=group_code).first()
+        if not group:
+            return jsonify({'error': 'Invalid group code'}), 404
+            
+        # Check if user is already a member
+        existing_membership = StokvelMember.query.filter_by(
+            user_id=current_user.id,
+            group_id=group.id
+        ).first()
+        
+        if existing_membership:
+            return jsonify({'error': 'You are already a member of this group'}), 400
+            
+        # Check if group is full
+        if group.max_members and len(group.members) >= group.max_members:
+            return jsonify({'error': 'Group has reached maximum member limit'}), 400
+            
+        # Create new membership
+        new_membership = StokvelMember(
+            user_id=current_user.id,
+            group_id=group.id,
+            status='active',
+            role='member'
+        )
+        
+        db.session.add(new_membership)
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Successfully joined stokvel group',
+            'group': group.to_dict()
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
 
 def validate_email(email):
     # Add email validation
@@ -577,6 +853,216 @@ def validate_phone(phone):
     # Add phone validation
     pass
 
+@app.route('/api/auth/verify', methods=['POST'])
+def verify_otp():
+    try:
+        data = request.get_json()
+        user_id = data.get('user_id')
+        otp_code = data.get('otp_code')
+
+        if not user_id or not otp_code:
+            return jsonify({'error': 'User ID and OTP code are required'}), 400
+
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+
+        otp = OTP.query.filter_by(
+            user_id=user_id,
+            code=otp_code,
+            is_used=False
+        ).order_by(OTP.created_at.desc()).first()
+
+        if not otp or not otp.is_valid():
+            return jsonify({'error': 'Invalid or expired OTP'}), 400
+
+        # Mark OTP as used and verify user
+        otp.is_used = True
+        user.is_verified = True
+        db.session.commit()
+
+        return jsonify({
+            'message': 'Account verified successfully',
+            'user': {
+                'id': user.id,
+                'full_name': user.full_name,
+                'email': user.email,
+                'role': user.role
+            }
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/api/delete-all-users', methods=['GET'])
+def delete_all_users():
+    try:
+        # Delete all OTPs first
+        OTP.query.delete()
+        # Then delete all users
+        User.query.delete()
+        db.session.commit()
+        return jsonify({'message': 'All users and OTPs deleted successfully'}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/test-users', methods=['GET'])
+def test_users():
+    try:
+        users = User.query.all()
+        return jsonify({
+            'count': len(users),
+            'users': [{'id': user.id, 'email': user.email} for user in users]
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 # Run
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    with app.app_context():
+        try:
+            # Test database connection first
+            db.engine.connect()
+            print("Database connection successful")
+            
+            # Run the application
+            app.run(
+                debug=True,
+                port=5001,
+                host='0.0.0.0'
+            )
+        except Exception as e:
+            print(f"Error starting application: {str(e)}")
+
+@app.route('/test-email')
+def test_email():
+    try:
+        msg = Message(
+            'Test Email from iStokvel',
+            sender=app.config['MAIL_USERNAME'],
+            recipients=[app.config['MAIL_USERNAME']]  # Sends to your own email
+        )
+        msg.body = 'This is a test email from your Flask app. If you receive this, your email configuration is working!'
+        mail.send(msg)
+        return jsonify({'message': 'Test email sent successfully!'}), 200
+    except Exception as e:
+        return jsonify({'error': f'Failed to send email: {str(e)}'}), 500
+
+
+# After your app configuration
+try:
+   # db.engine.connect()
+    logger.info("Database connection successful")
+except Exception as e:
+    logger.error(f"Database connection failed: {str(e)}")
+    raise
+
+@app.route('/api/test-connection')
+def test_connection():
+    try:
+        # Test database
+        db.engine.connect()
+        db_status = "Database: Connected"
+        
+        # Test email
+        mail_status = "Email: Not tested"
+        if app.config['MAIL_USERNAME'] and app.config['MAIL_PASSWORD']:
+            mail_status = "Email: Configured"
+        
+        return jsonify({
+            'status': 'success',
+            'database': db_status,
+            'email': mail_status,
+            'database_url': app.config['SQLALCHEMY_DATABASE_URI'].replace('postgres:postgres', '***:***')  # Hide password
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+@app.route('/api/dashboard/users', methods=['GET'])
+@role_required(['admin'])
+def get_users():
+    # Only admin can access this endpoint
+    users = User.query.all()
+    return jsonify([user.to_dict() for user in users])
+
+@app.route('/api/dashboard/contributions', methods=['GET'])
+@role_required(['admin', 'member'])
+def get_contributions():
+    # Both admin and members can access this endpoint
+    user_id = get_jwt_identity()
+    if request.args.get('all') and User.query.get(user_id).role == 'admin':
+        # Admin can see all contributions
+        contributions = Contribution.query.all()
+    else:
+        # Members can only see their own contributions
+        contributions = Contribution.query.filter_by(user_id=user_id).all()
+    return jsonify([contribution.to_dict() for contribution in contributions])
+
+@app.route('/api/verify-email', methods=['POST'])
+def verify_email():
+    try:
+        data = request.get_json()
+        email = data.get('email')
+        code = data.get('verification_code')
+        
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        if user.is_verified:
+            return jsonify({'error': 'Email already verified'}), 400
+        
+        if not user.verification_code or not user.verification_code_expiry:
+            return jsonify({'error': 'No verification code found for this user'}), 400
+        
+        if datetime.utcnow() > user.verification_code_expiry:
+            return jsonify({'error': 'Verification code expired'}), 400
+        
+        if user.verification_code != code.strip():
+            return jsonify({'error': 'Invalid verification code'}), 400
+        
+        # Mark user as verified
+        user.is_verified = True
+        user.verification_code = None
+        user.verification_code_expiry = None
+        db.session.commit()
+        
+        return jsonify({'message': 'Email verified successfully'}), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/resend-verification', methods=['POST'])
+def resend_verification():
+    try:
+        data = request.get_json()
+        email = data.get('email')
+        
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        if user.is_verified:
+            return jsonify({'error': 'Email already verified'}), 400
+        
+        # Generate and send new verification code
+        verification_code = user.generate_verification()
+        success, message = send_verification_email(user.email, verification_code)
+        
+        if not success:
+            db.session.rollback()
+            return jsonify({'error': 'Failed to send verification email: ' + message}), 500
+        
+        db.session.commit()
+
+        return jsonify({'message': 'New verification code sent successfully'}), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
