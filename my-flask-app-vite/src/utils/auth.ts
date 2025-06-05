@@ -64,9 +64,9 @@ export const login = async (email: string, password: string) => {
     const response = await authAPI.login(email, password);
     console.log('Login response:', response.data);
     
-    if (response.data && response.data.token && response.data.user) {
+    if (response.data && response.data.access_token && response.data.user) {
       // Store token and user data
-      localStorage.setItem('token', response.data.token);
+      localStorage.setItem('token', response.data.access_token);
       localStorage.setItem('user', JSON.stringify(response.data.user));
     
       // Use setTimeout to ensure state is updated before navigation
@@ -141,12 +141,15 @@ export const getUserRole = () => {
 
 export const verifyEmailCode = async (email: string, verificationCode: string) => {
   try {
-    const response = await authAPI.verifyEmail(email, verificationCode);
+    // Clean the verification code by removing any spaces
+    const cleanCode = verificationCode.replace(/\s/g, '');
+    const response = await authAPI.verifyEmail(email, cleanCode);
     return {
       success: true,
       message: response.data.message || 'Account verified successfully'
     };
   } catch (error: any) {
+    console.error('Verification error:', error);
     return {
       success: false,
       message: error.response?.data?.error || 'Verification failed'
