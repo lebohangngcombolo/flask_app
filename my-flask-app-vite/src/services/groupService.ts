@@ -1,4 +1,4 @@
-import axios from 'axios';
+import api from './api';  // Import the shared API instance
 
 export interface GroupData {
   name: string;
@@ -21,15 +21,8 @@ export interface Group {
   created_at: string;
 }
 
-const apiClient = axios.create({
-  baseURL: '/api',
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
-
 // Add token to requests
-apiClient.interceptors.request.use((config) => {
+api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
@@ -39,22 +32,22 @@ apiClient.interceptors.request.use((config) => {
 
 export const groupService = {
   createGroup: async (groupData: GroupData): Promise<{ group: Group; group_code: string }> => {
-    const response = await apiClient.post('/stokvel/register-group', groupData);
+    const response = await api.post('/api/stokvel/register-group', groupData);
     return response.data;
   },
 
   getGroupByCode: async (groupCode: string): Promise<{ group: Group }> => {
-    const response = await apiClient.get(`/stokvel/group/${groupCode}`);
+    const response = await api.get(`/api/stokvel/group/${groupCode}`);
     return response.data;
   },
 
   joinGroup: async (groupCode: string): Promise<{ message: string; group: Group }> => {
-    const response = await apiClient.post('/stokvel/join-group', { group_code: groupCode });
+    const response = await api.post('/api/stokvel/join-group', { group_code: groupCode });
     return response.data;
   },
 
   getUserGroups: async (): Promise<Group[]> => {
-    const response = await apiClient.get('/dashboard/stats');
+    const response = await api.get('/api/dashboard/stats');
     return response.data.activeGroups;
   }
 };

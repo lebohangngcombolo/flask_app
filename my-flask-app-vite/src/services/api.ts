@@ -2,35 +2,39 @@ import axios from 'axios';
 
 // Create an axios instance with default config
 const api = axios.create({
-  baseURL: 'http://localhost:5001/api',
+  // Remove any baseURL to use relative URLs with the Vite proxy
   headers: {
     'Content-Type': 'application/json',
   },
   withCredentials: true
 });
 
-// Add request interceptor
+// Add request interceptor with better logging
 api.interceptors.request.use((config) => {
+  // Log the full URL being requested
+  const fullUrl = config.url;
   console.log('Making API request:', {
-    url: config.url,
+    url: fullUrl,
     method: config.method,
-    data: config.data
+    data: config.data,
+    headers: config.headers
   });
   
-    const token = localStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
 });
 
-// Add response interceptor for better error handling
+// Add response interceptor with better error logging
 api.interceptors.response.use(
   (response) => {
     console.log('API response received:', {
       url: response.config.url,
       status: response.status,
-      data: response.data
+      data: response.data,
+      headers: response.headers
     });
     return response;
   },
@@ -38,17 +42,17 @@ api.interceptors.response.use(
     console.error('API error:', {
       url: error.config?.url,
       status: error.response?.status,
-      data: error.response?.data
+      data: error.response?.data,
+      headers: error.response?.headers,
+      message: error.message
     });
+    
     if (error.response?.status === 401) {
-      // Handle unauthorized access
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.location.href = '/login';
     } else if (error.response?.status === 403) {
-      // Insufficient permissions
       console.error('Access denied:', error.response.data.error);
-      // You might want to show a notification or redirect to a "not authorized" page
     }
     return Promise.reject(error);
   }
@@ -58,23 +62,28 @@ api.interceptors.response.use(
 export const authAPI = {
   register: (userData: any) => {
     console.log('API register request:', userData); // Debug log
-    return api.post('/auth/register', userData);
+    return api.post('/api/auth/register', userData);
   },
   
   login: (email: string, password: string) => {
-    return api.post('/auth/login', { 
+    return api.post('/api/auth/login', {
       email: email.trim(),
-      password: password 
+      password: password
     });
   },
   
-  getCurrentUser: () => api.get('/auth/me'),
+  getCurrentUser: () => api.get('/api/auth/me'),
   
-  verifyEmail: (email: string, verificationCode: string) =>
-    api.post('/api/verify-email', {
+  verifyEmail: (email: string, verificationCode: string) => {
+    return api.post('/api/verify-email', {
       email: email,
       verification_code: verificationCode
-    }),
+    }, {
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+  },
   
   resendVerificationCode: (email: string) =>
     api.post('/api/resend-verification', { email: email }),
