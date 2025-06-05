@@ -68,8 +68,16 @@ const Signup: React.FC = () => {
     newOtp[index] = value;
     setOtp(newOtp);
 
-    // Auto-focus next input
-    if (value && index < 5) {
+    // If this is the last input and a value was entered
+    if (index === 5 && value) {
+        // Wait a brief moment for the last digit to be visible
+        setTimeout(() => {
+            // Automatically submit the form
+            const verificationCode = newOtp.join('');
+            handleVerifyOtp(new Event('submit') as any, verificationCode);
+        }, 100); // Small delay to ensure the last digit is visible
+    } else if (value && index < 5) {
+        // Auto-focus next input for other positions
       const nextInput = document.querySelector(`input[name=otp-${index + 1}]`) as HTMLInputElement;
       if (nextInput) nextInput.focus();
     }
@@ -116,9 +124,9 @@ const Signup: React.FC = () => {
     }
   };
 
-  const handleVerifyOtp = async (e: React.FormEvent) => {
+  const handleVerifyOtp = async (e: React.FormEvent, code?: string) => {
     e.preventDefault();
-    const verificationCode = otp.join('');
+    const verificationCode = code || otp.join('');
     
     if (verificationCode.length !== 6) {
       setOtpError('Please enter the complete 6-digit code');
@@ -136,9 +144,8 @@ const Signup: React.FC = () => {
         setOtp(['', '', '', '', '', '']);
         setOtpError('');
 
-        setTimeout(() => {
+            // Redirect to login page immediately after success
           navigate('/login');
-        }, 2000);
       } else {
         setOtpError(result.message);
       }

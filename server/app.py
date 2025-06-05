@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Response
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import func
 from dotenv import load_dotenv
 import os
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import JWTManager, jwt_required, create_access_token, get_jwt_identity
 from sqlalchemy.exc import SQLAlchemyError
 from flask_mail import Mail, Message
 import random
@@ -37,15 +37,28 @@ app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD')
 app.config['SENDGRID_API_KEY'] = os.getenv('SENDGRID_API_KEY')
 app.config['SENDGRID_FROM_EMAIL'] = os.getenv('SENDGRID_FROM_EMAIL')
 
+# Add JWT configuration
+app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'your-jwt-secret-key')  # Change this in production
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=1)  # Token expires in 1 hour
+
 # Initialize extensions
 db = SQLAlchemy(app)
 mail = Mail(app)
-CORS(app, resources={r"/api/*": {"origins": "http://localhost:5173"}}, supports_credentials=True)
 migrate = Migrate(app, db)
+jwt = JWTManager(app)  # Initialize JWT
 
 # Add this after creating the app
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
+
+# Simple CORS setup - only needed for production
+if os.getenv('FLASK_ENV') == 'production':
+    CORS(app, resources={
+        r"/api/*": {
+            "origins": ["https://your-production-domain.com"],
+            "supports_credentials": True
+        }
+    })
 
 # Add these functions after the imports and before the models
 def generate_otp():
@@ -294,128 +307,128 @@ def test():
     logger.debug('Test route accessed')
     return jsonify({"message": "Server is working!"}), 200
 
-@app.route('/api/auth/register', methods=['POST'])
+@app.route('/api/auth/register', methods=['POST', 'OPTIONS'])
 def register():
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({'error': 'No data provided'}), 400
+    if request.method == 'OPTIONS':
+        # Explicitly handle OPTIONS preflight request
+        response = Response()
+        response.headers.add('Access-Control-Allow-Origin', 'http://localhost:5173')
+        response.headers.add('Access-Control-Allow-Headers', request.headers.get('Access-Control-Request-Headers'))
+        response.headers.add('Access-Control-Allow-Methods', request.headers.get('Access-Control-Request-Method'))
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        response.headers.add('Access-Control-Max-Age', '3600')
+        return response, 200
 
-        email = data.get('email')
-        password = data.get('password')
-        full_name = data.get('full_name')
-        phone = data.get('phone')
-
-        if not email or not password or not full_name or not phone:
-            return jsonify({'error': 'Missing required fields'}), 400
-
-        # Check if user already exists
-        if User.query.filter_by(email=data['email']).first():
-            return jsonify({'error': 'Email already registered'}), 400
-
-        # Create new user
-        user = User(
-            email=email,
-            full_name=full_name,
-            phone=phone,
-            role='member' # Default role
-        )
-        user.set_password(password)
-
-        db.session.add(user)
-        # db.session.commit() # Commit needed to get user.id for verification, but we'll handle later
-
-        # --- TEMPORARY WORKAROUND: Auto-verify user for development ---
-        # In a real application, you would NOT do this. Verification should happen
-        # via email confirmation. This is solely to unblock your login issue.
-        user.is_verified = True
-        # --- END TEMPORARY WORKAROUND ---
-
-        # Generate and send verification code (this part might still fail, but won't block registration)
-        print(f"Attempting to send verification email to: {user.email}")
-        # We need to commit first to get the user.id for generating verification code if logic requires it
-        # For this workaround, we commit after setting is_verified
-        db.session.commit() # Commit the new user to the database
-
-        # The following email sending logic will still run, but the user is already marked as verified
-        # If email sending fails, the user can still log in.
+    # Handle the POST request
+    if request.method == 'POST':
         try:
-            verification_code = user.generate_verification() # This will also commit
-            print(f"Generated verification code: {verification_code}")
-            success, message = send_verification_email(user.email, verification_code)
-            print(f"SendGrid send result: Success={success}, Message={message}")
+            data = request.get_json()
+            if not data:
+                return jsonify({'error': 'No data provided'}), 400
 
-            if not success:
-                 # Log the email sending failure, but don't rollback registration
-                 print(f"Warning: Failed to send verification email: {message}")
-                 # return jsonify({'error': 'Failed to send verification email: ' + message}), 500 # Don't return error here
+            email = data.get('email')
+            password = data.get('password')
+            full_name = data.get('full_name')
+            phone = data.get('phone')
+        
+            # Check if user already exists
+            if User.query.filter_by(email=email).first():
+                return jsonify({'error': 'Email already registered'}), 400
+        
+            # Create new user
+            user = User(
+                email=email,
+                full_name=full_name,
+                phone=phone,
+                role='member'  # Default role
+            )
+            user.set_password(password)
 
-        except Exception as email_e:
-             print(f"Warning: Exception during verification email sending: {str(email_e)}")
-             import traceback
-             traceback.print_exc()
-             # Continue registration success even if email sending fails
+            db.session.add(user)
+            # Commit now to get user.id for potential verification code generation if needed
+            db.session.commit()
 
-        # If we reached here, user is added and auto-verified (temporarily)
-        return jsonify({
-            'message': 'Registration successful (auto-verified for development).',
-            'email': user.email,
-            'user': { # Optionally return user info
-                'id': user.id,
-                'full_name': user.full_name,
+            # Generate and send verification code
+            print(f"Attempting to send verification email to: {user.email}")
+            try:
+                verification_code = user.generate_verification()  # This will also commit the code and expiry
+                print(f"Generated verification code: {verification_code}")
+                success, message = send_verification_email(user.email, verification_code)
+                print(f"SendGrid send result: Success={success}, Message={message}")
+
+                if not success:
+                    # Log the email sending failure, but don't rollback registration if user is created
+                    print(f"Warning: Failed to send verification email: {message}")
+            
+            except Exception as email_e:
+                print(f"Warning: Exception during verification email sending: {str(email_e)}")
+                import traceback
+                traceback.print_exc()
+                # Continue registration success even if email sending fails
+
+            # Registration successful in terms of user creation
+            return jsonify({
+                'message': 'Registration successful. Please check your email for verification code.',
                 'email': user.email,
-                'role': user.role
-            }
-        }), 201
+                'user_id': user.id  # Include user_id for potential verification step on frontend
+            }), 201
+        
+        except Exception as e:
+            db.session.rollback()  # Rollback if any error occurred before commit or in critical steps
+            print(f"Error during registration: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': 'An unexpected error occurred during registration'}), 500
 
-    except Exception as e:
-        db.session.rollback()
-        print(f"Error during registration: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'error': 'An unexpected error occurred during registration'}), 500
-
-@app.route('/api/auth/login', methods=['POST'])
+@app.route('/api/auth/login', methods=['POST', 'OPTIONS'])
 def login():
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({'error': 'No data provided'}), 400
+    if request.method == 'OPTIONS':
+        # Explicitly handle OPTIONS preflight request
+        response = Response()
+        response.headers.add('Access-Control-Allow-Origin', 'http://localhost:5173')
+        response.headers.add('Access-Control-Allow-Headers', request.headers.get('Access-Control-Request-Headers'))
+        response.headers.add('Access-Control-Allow-Methods', request.headers.get('Access-Control-Request-Method'))
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        response.headers.add('Access-Control-Max-Age', '3600')
+        return response, 200
 
-        email = data.get('email')
-        password = data.get('password')
+    # Handle the POST request
+    if request.method == 'POST':
+        try:
+            data = request.get_json()
+            if not data:
+                return jsonify({'error': 'No data provided'}), 400
 
-        if not email or not password:
-            return jsonify({'error': 'Email and password are required'}), 400
+            email = data.get('email')
+            password = data.get('password')
 
-        user = User.query.filter_by(email=email).first()
-        if not user or not user.check_password(password):
-            return jsonify({'error': 'Invalid email or password'}), 401
+            if not email or not password:
+                return jsonify({'error': 'Email and password are required'}), 400
 
-        # Generate JWT token
-        token = jwt.encode(
-            {
-                'user_id': user.id,
-                'exp': datetime.utcnow() + timedelta(days=1)
-            },
-            app.config['SECRET_KEY'],
-            algorithm="HS256"
-        )
+            user = User.query.filter_by(email=email).first()
+            if not user or not user.check_password(password):
+                return jsonify({'error': 'Invalid email or password'}), 401
 
-        return jsonify({
-            'message': 'Login successful',
-            'token': token,
-            'user': {
-                'id': user.id,
-                'full_name': user.full_name,
-                'email': user.email,
-                'role': user.role
-            }
-        }), 200
+            if not user.is_verified:
+                return jsonify({'error': 'Please verify your email first'}), 401
 
-    except Exception as e:
-        print(f"Login error: {str(e)}")
-        return jsonify({'error': 'An error occurred during login'}), 500
+            # Create access token using Flask-JWT-Extended
+            access_token = create_access_token(identity=user.id)
+
+            return jsonify({
+                'message': 'Login successful',
+                'access_token': access_token,
+                'user': {
+                    'id': user.id,
+                    'email': user.email,
+                    'name': user.full_name,
+                    'role': user.role
+                }
+            }), 200
+
+        except Exception as e:
+            logger.error(f"Login error: {str(e)}")
+            return jsonify({'error': str(e)}), 500
 
 @app.route('/api/auth/me', methods=['GET'])
 @token_required
@@ -921,20 +934,7 @@ def test_users():
 
 # Run
 if __name__ == '__main__':
-    with app.app_context():
-        try:
-            # Test database connection first
-            db.engine.connect()
-            print("Database connection successful")
-            
-            # Run the application
-            app.run(
-                debug=True,
-                port=5001,
-                host='0.0.0.0'
-            )
-        except Exception as e:
-            print(f"Error starting application: {str(e)}")
+    app.run(port=5001, debug=True)
 
 @app.route('/test-email')
 def test_email():
@@ -1003,40 +1003,65 @@ def get_contributions():
         contributions = Contribution.query.filter_by(user_id=user_id).all()
     return jsonify([contribution.to_dict() for contribution in contributions])
 
-@app.route('/api/verify-email', methods=['POST'])
+@app.route('/api/verify-email', methods=['POST', 'OPTIONS'])
 def verify_email():
-    try:
-        data = request.get_json()
-        email = data.get('email')
-        code = data.get('verification_code')
-        
-        user = User.query.filter_by(email=email).first()
-        if not user:
-            return jsonify({'error': 'User not found'}), 404
-        
-        if user.is_verified:
-            return jsonify({'error': 'Email already verified'}), 400
-        
-        if not user.verification_code or not user.verification_code_expiry:
-            return jsonify({'error': 'No verification code found for this user'}), 400
-        
-        if datetime.utcnow() > user.verification_code_expiry:
-            return jsonify({'error': 'Verification code expired'}), 400
-        
-        if user.verification_code != code.strip():
-            return jsonify({'error': 'Invalid verification code'}), 400
-        
-        # Mark user as verified
-        user.is_verified = True
-        user.verification_code = None
-        user.verification_code_expiry = None
-        db.session.commit()
-        
-        return jsonify({'message': 'Email verified successfully'}), 200
-        
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+    if request.method == 'OPTIONS':
+        # Explicitly handle OPTIONS preflight request
+        response = Response()
+        response.headers.add('Access-Control-Allow-Origin', 'http://localhost:5173')
+        response.headers.add('Access-Control-Allow-Headers', request.headers.get('Access-Control-Request-Headers'))
+        response.headers.add('Access-Control-Allow-Methods', request.headers.get('Access-Control-Request-Method'))
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        response.headers.add('Access-Control-Max-Age', '3600')
+        return response, 200
+
+    # Handle the POST request
+    if request.method == 'POST':
+        try:
+            data = request.get_json()
+            if not data:
+                return jsonify({'error': 'No data provided'}), 400
+
+            email = data.get('email')
+            code = data.get('verification_code')
+            
+            if not email or not code:
+                return jsonify({'error': 'Email and verification code are required'}), 400
+
+            # Clean the verification code
+            code = code.replace(' ', '')
+            
+            user = User.query.filter_by(email=email).first()
+            if not user:
+                return jsonify({'error': 'User not found'}), 404
+            
+            if user.is_verified:
+                return jsonify({'error': 'Email already verified'}), 400
+            
+            if not user.verification_code or not user.verification_code_expiry:
+                return jsonify({'error': 'No verification code found for this user'}), 400
+            
+            if datetime.utcnow() > user.verification_code_expiry:
+                return jsonify({'error': 'Verification code expired'}), 400
+            
+            # Clean the stored verification code for comparison
+            stored_code = user.verification_code.replace(' ', '')
+            if stored_code != code:
+                print(f"Code mismatch - Received: '{code}', Stored: '{stored_code}'")  # Debug log
+                return jsonify({'error': 'Invalid verification code'}), 400
+            
+            # Mark user as verified
+            user.is_verified = True
+            user.verification_code = None
+            user.verification_code_expiry = None
+            db.session.commit()
+            
+            return jsonify({'message': 'Email verified successfully'}), 200
+            
+        except Exception as e:
+            db.session.rollback()
+            print(f"Verification error: {str(e)}")  # Debug log
+            return jsonify({'error': str(e)}), 500
 
 @app.route('/api/resend-verification', methods=['POST'])
 def resend_verification():
