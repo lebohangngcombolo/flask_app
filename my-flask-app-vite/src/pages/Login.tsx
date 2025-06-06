@@ -23,14 +23,14 @@ const Login: React.FC = () => {
       
       if (result.success) {
         console.log('Login successful, redirecting...');
-        // The redirect is handled in the login function
+        navigate(result.redirectTo);
       } else {
         setError(result.message);
+        setLoading(false);
       }
     } catch (err) {
       console.error('Login error:', err);
       setError('An error occurred during login');
-    } finally {
       setLoading(false);
     }
   };

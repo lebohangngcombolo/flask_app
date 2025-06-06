@@ -68,15 +68,12 @@ export const login = async (email: string, password: string) => {
       // Store token and user data
       localStorage.setItem('token', response.data.access_token);
       localStorage.setItem('user', JSON.stringify(response.data.user));
-    
-      // Use setTimeout to ensure state is updated before navigation
-      setTimeout(() => {
-        window.location.href = response.data.user.role === 'admin' ? '/admin/dashboard' : '/dashboard';
-      }, 100);
       
+      // Return success with navigation info instead of navigating directly
       return { 
         success: true, 
-        user: response.data.user
+        user: response.data.user,
+        redirectTo: response.data.user.role === 'admin' ? '/admin/dashboard' : '/dashboard'
       };
     }
     
