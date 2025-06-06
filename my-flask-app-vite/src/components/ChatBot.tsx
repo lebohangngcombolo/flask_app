@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+// Import RotateCcw icon
+import { Menu, X, User, LogOut, Bell, Search, ChevronDown, ChevronLeft, ChevronRight, Home, DollarSign, Activity, BarChart2, Briefcase, Calendar, RotateCcw } from 'lucide-react';
 
 const BOT_ICON_URL = "https://png.pngtree.com/png-clipart/20230401/original/pngtree-smart-chatbot-cartoon-clipart-png-image_9015126.png";
 
@@ -17,11 +19,12 @@ const ChatBot: React.FC = () => {
       // Simulate bot response (replace with actual API call later)
       setTimeout(() => {
         const responses = [
-          "I can help you understand how our stokvel savings work. Would you like to know more?",
-          "To join a savings group, you can click the 'Get Started' button and follow the registration process.",
-          "Our platform is secure and regulated. We use advanced encryption to protect your data.",
-          "You can access your savings anytime through our mobile app or website.",
-          "We offer different types of savings groups to suit your needs. Let me tell you more about them."
+          "I can help you understand how our stokvel savings work. Would you like to know more? topics like contributions, payouts, or joining groups.",
+          "To join a savings group, you can click the 'Get Started' button on the landing page or navigate to the 'Stokvel Groups' section in the dashboard.",
+          "Our platform is secure and regulated. We use advanced encryption to protect your data and comply with financial regulations.",
+          "You can access your savings anytime through our mobile app or website, available 24/7.",
+          "We offer different types of savings groups to suit your needs, including savings, grocery, burial, business, and investment groups. Which one are you interested in?",
+          "I'm still learning! Can you please rephrase your question?" // Add a fallback
         ];
         const randomResponse = responses[Math.floor(Math.random() * responses.length)];
         setMessages(prev => [...prev, { text: randomResponse, isUser: false }]);
@@ -29,6 +32,15 @@ const ChatBot: React.FC = () => {
       
       setInputMessage('');
     }
+  };
+
+  // Function to clear all messages
+  const handleClearMessages = () => {
+    setMessages([]); // Reset the messages array to empty
+     // Optional: Add an initial message again after clearing
+     setTimeout(() => {
+        setMessages([{ text: "👋 Hi! I'm your i-STOKVEL assistant. How can I help you today?", isUser: false }]);
+     }, 100); // Add a small delay
   };
 
   return (
@@ -54,18 +66,27 @@ const ChatBot: React.FC = () => {
 
       {/* Chat Window */}
       {isOpen && (
-        <div className="absolute bottom-16 right-0 w-80 sm:w-96 bg-white rounded-lg shadow-xl">
+        <div className="absolute bottom-16 right-0 w-80 sm:w-96 bg-white rounded-lg shadow-xl flex flex-col">
           {/* Chat Header */}
-          <div className="bg-blue-600 text-white p-4 rounded-t-lg flex items-center gap-3">
-            <img src={BOT_ICON_URL} alt="Chatbot" className="w-8 h-8 rounded-full bg-white p-1" />
-            <div>
-              <h3 className="font-semibold">i-STOKVEL Assistant</h3>
-              <p className="text-sm text-blue-100">We're here to help!</p>
+          <div className="bg-blue-600 text-white p-4 rounded-t-lg flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <img src={BOT_ICON_URL} alt="Chatbot" className="w-8 h-8 rounded-full bg-white p-1" />
+              <div>
+                <h3 className="font-semibold">i-STOKVEL Assistant</h3>
+                <p className="text-sm text-blue-100">We're here to help!</p>
+              </div>
             </div>
+            <button
+              onClick={handleClearMessages}
+              className="p-1 rounded-full text-blue-200 hover:text-white hover:bg-blue-500 focus:outline-none transition-colors duration-200"
+              title="Clear chat"
+            >
+              <RotateCcw className="w-5 h-5" />
+            </button>
           </div>
 
           {/* Chat Messages */}
-          <div className="h-96 overflow-y-auto p-4 space-y-4">
+          <div className="flex-1 max-h-[60vh] overflow-y-auto p-4 space-y-4">
             {messages.map((message, index) => (
               <div
                 key={index}

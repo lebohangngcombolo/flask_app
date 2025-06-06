@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import DashboardLayout from '../components/DashboardLayout';
+import DashboardLayout, { MarketplaceNavItemProp } from '../components/DashboardLayout';
 import api from '../services/api';
 import {
   Users,
@@ -23,12 +23,13 @@ import {
   MessageSquare,
   Home,
   FileText,
-  UserPlus
+  UserPlus,
+  ShieldCheck,
+  Search
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import moment from 'moment';
 import { toast } from 'react-toastify';
-import { GroupManagement } from '../components/groups/GroupManagement';
 
 interface UserData {
   id: number;
@@ -69,11 +70,9 @@ interface StokvelGroup {
 
 const userNavItems = [
   { id: 'user', label: 'User', icon: User, path: '/dashboard/profile' },
-  { id: 'payment', label: 'Payment Method', icon: CreditCard, path: '/dashboard/payment' },
+  { id: 'digital-wallet', label: 'Digital Wallet', icon: CreditCard, path: '/dashboard/digital-wallet' },
   { id: 'kyc', label: 'KYC', icon: CheckCircle, path: '/dashboard/kyc' },
-  { id: 'contributions', label: 'Contributions', icon: DollarSign, path: '/dashboard/contributions' },
-  { id: 'withdrawals', label: 'Withdrawals', icon: PiggyBank, path: '/dashboard/withdrawals' },
-  { id: 'history', label: 'Transaction History', icon: Activity, path: '/dashboard/history' },
+  { id: 'beneficiaries', label: 'Beneficiaries', icon: Users, path: '/dashboard/beneficiaries' },
   { id: 'refer', label: 'Refer & Earn', icon: Users, path: '/dashboard/refer' },
   { id: 'groups', label: 'Stokvel Groups', icon: Briefcase, path: '/dashboard/groups' },
 ];
@@ -88,6 +87,18 @@ const adminNavItems = [
   { id: 'meetings', label: 'Meetings', icon: Calendar, path: '/admin/meetings' },
   { id: 'messages', label: 'Messages', icon: MessageSquare, path: '/admin/messages' },
   { id: 'settings', label: 'Settings', icon: Shield, path: '/admin/settings' },
+];
+
+const marketplaceNavItem: MarketplaceNavItemProp =
+  { id: 'marketplace', label: 'Marketplace', icon: ShoppingBag, path: '/dashboard/marketplace' };
+
+const horizontalNavItems = [
+  { id: 'home', label: 'Home', path: '/dashboard' },
+  { id: 'offers', label: 'Offers', path: '/dashboard/offers' },
+  { id: 'contributions-overview', label: 'Contributions overview', path: '/dashboard/contributions-overview' },
+  { id: 'recent-activity', label: 'Recent activity', path: '/dashboard/recent-activity' },
+  { id: 'payout-schedule', label: 'Payout Schedule', path: '/dashboard/payout-schedule' },
+  { id: 'ai-features', label: 'AI features', path: '/dashboard/ai-features' },
 ];
 
 interface CategoryCardProps {
@@ -167,10 +178,32 @@ interface DashboardContentProps {
   availableGroups: StokvelGroup[];
   chartData: { month: string; Total: number }[];
   navigate: (path: string) => void;
+  offers: Offer[];
+  loading: boolean;
+  error: string | null;
 }
 
-const DashboardContent: React.FC<DashboardContentProps> = ({ user, userStats, availableGroups, chartData, navigate }) => {
+const DashboardContent: React.FC<DashboardContentProps> = ({ user, userStats, availableGroups, chartData, navigate, offers, loading, error }) => {
   const usingMockData = user?.email === mockUser.email;
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen-minus-header">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="max-w-4xl mx-auto p-4 mt-8">
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+          <strong className="font-bold">Error: </strong>
+          <span className="block sm:inline">{error}</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto p-4">
@@ -196,6 +229,19 @@ const DashboardContent: React.FC<DashboardContentProps> = ({ user, userStats, av
             Admin
           </span>
         )}
+      </div>
+
+      <div className="flex justify-center mb-6">
+        <div className="w-full max-w-md">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+            <input
+              type="text"
+              placeholder="Search..."
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+        </div>
       </div>
 
       {user?.role !== 'admin' && (
@@ -224,11 +270,6 @@ const DashboardContent: React.FC<DashboardContentProps> = ({ user, userStats, av
             icon={TrendingUp}
             title="Investment"
             onClick={() => navigate('/dashboard/investment')}
-          />
-          <CategoryCard
-            icon={ShoppingBag}
-            title="Marketplace"
-            onClick={() => navigate('/dashboard/marketplace')}
           />
         </div>
       )}
@@ -321,186 +362,84 @@ const Dashboard: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [userStats, setUserStats] = useState<UserStats | null>(null);
   const [availableGroups, setAvailableGroups] = useState<StokvelGroup[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [offers, setOffers] = useState([]);
+
+  const fetchDashboardData = async () => {
+    try {
+      const userResponse = await api.authAPI.getCurrentUser();
+      const currentUser = userResponse.data.user;
+
+      setUser(currentUser);
+
+      let statsResponse;
+      let groupsResponse;
+
+      if (currentUser.role === 'admin') {
+        statsResponse = await api.adminAPI.getStats();
+        groupsResponse = await api.adminAPI.getGroups();
+      } else {
+        statsResponse = await api.userAPI.getUserStats();
+        groupsResponse = await api.userAPI.getAvailableGroups();
+      }
+
+      setUserStats(statsResponse.data);
+      setAvailableGroups(groupsResponse.data);
+
+      setError(null);
+
+    } catch (err: any) {
+      console.error('Error fetching dashboard data:', err);
+      setError(err.response?.data?.message || 'Failed to fetch dashboard data.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchDashboardData = async () => {
-      try {
-        setLoading(true);
-
-        const token = localStorage.getItem('token');
-        if (!token) {
-          console.log('No token found, attempting to load with mock data.');
-          setUser(mockUser);
-          setUserStats(mockUserStats);
-          setAvailableGroups(mockAvailableGroups);
-          setError(null);
-          setLoading(false);
-          return;
-        }
-
-        try {
-          const userResponse = await api.get('/api/auth/me');
-          console.log('User data response:', userResponse.data);
-          setUser(userResponse.data);
-        } catch (userError: any) {
-          console.error('Error fetching user data:', userError);
-          if (userError.response?.status === 401) {
-            console.log('Token expired or invalid, redirecting to login');
-            localStorage.removeItem('token');
-            localStorage.removeItem('user');
-          navigate('/login');
-            return;
-          }
-          setUser(mockUser);
-        }
-
-        try {
-          const statsResponse = await api.get('/api/dashboard/stats');
-          console.log('Dashboard stats response:', statsResponse.data);
-          setUserStats(statsResponse.data);
-        } catch (statsError: any) {
-          console.error('Error fetching dashboard stats:', statsError);
-          setUserStats(mockUserStats);
-          setError(statsError.response?.data?.error || 'Failed to fetch dashboard stats. Displaying demo data.');
-        }
-
-        try {
-          const groupsResponse = await api.get('/api/groups/available');
-          console.log('Available groups response:', groupsResponse.data);
-          setAvailableGroups(groupsResponse.data.groups);
-        } catch (groupsError: any) {
-          console.error('Error fetching available groups:', groupsError);
-          setAvailableGroups(mockAvailableGroups);
-          setError(prevError => prevError + ' ' + (groupsError.response?.data?.error || 'Failed to fetch available groups. Displaying demo data.'));
-        }
-
-        if (!error) {
-          setError(null);
-        }
-      } catch (overallError: any) {
-        console.error('Overall error in fetchDashboardData:', overallError);
-        if (!userStats) setUserStats(mockUserStats);
-        if (availableGroups.length === 0) setAvailableGroups(mockAvailableGroups);
-
-        if (!error) {
-          if (overallError.response?.data?.error) {
-            setError(overallError.response.data.error);
-          } else {
-            setError('An unexpected error occurred. Displaying demo data.');
-          }
-        }
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    console.log('Fetching dashboard data...');
     fetchDashboardData();
-  }, [navigate]);
+  }, []);
 
-  const chartData = userStats?.monthlySummary?.map(item => ({
-    month: moment(item.month, 'YYYY-MM').format('MMM YY'),
+  const chartData = userStats?.monthlySummary ? userStats.monthlySummary.map(item => ({
+    month: moment(item.month).format('MMM'),
     Total: item.total
-  })) || [];
+  })) : [];
 
-  if (loading) {
-    const layoutUser = user || mockUser;
-    const layoutNavItems = layoutUser.role === 'admin' ? adminNavItems : userNavItems;
-    return (
-      <DashboardLayout user={layoutUser} navItems={layoutNavItems}>
-        <div className="flex justify-center items-center min-h-screen-minus-header">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-        </div>
-      </DashboardLayout>
-    );
-  }
+  const currentSidebarNavItems = user?.role === 'admin' ? adminNavItems : userNavItems;
 
-  if (error && !loading) {
-    const currentNavItems = (user?.role === 'admin' ? adminNavItems : userNavItems) || userNavItems;
-    return (
-      <DashboardLayout user={user} navItems={currentNavItems}>
-        <div className="max-w-4xl mx-auto p-4 mt-8">
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
-            <strong className="font-bold">Error: </strong>
-            <span className="block sm:inline">{error}</span>
-          </div>
-          {user && userStats && availableGroups && (
-            <DashboardContent
-              user={user}
-              userStats={userStats}
-              availableGroups={availableGroups}
-              chartData={chartData}
-              navigate={navigate}
-            />
-          )}
-        </div>
-      </DashboardLayout>
-    );
-  }
-
-  const currentNavItems = (user?.role === 'admin' ? adminNavItems : userNavItems) || userNavItems;
   return (
-    <DashboardLayout 
-      user={user} 
-      navItems={currentNavItems}
+    <DashboardLayout
+      user={user}
+      sidebarNavItems={currentSidebarNavItems}
+      marketplaceNavItem={marketplaceNavItem}
     >
-      <div className="container mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold mb-8">Dashboard</h1>
-        
-        <DashboardContent
-          user={user}
-          userStats={userStats}
-          availableGroups={availableGroups}
-          chartData={chartData}
-          navigate={navigate}
-        />
-      </div>
+      <DashboardContent
+        user={user}
+        userStats={userStats}
+        availableGroups={availableGroups}
+        chartData={chartData}
+        navigate={navigate}
+        offers={offers}
+        loading={loading}
+        error={error}
+      />
     </DashboardLayout>
   );
 };
 
-// Add ErrorBoundary component
-class ErrorBoundary extends React.Component {
-  state = { hasError: false, error: null };
-
-  static getDerivedStateFromError(error) {
-    return { hasError: true, error };
-  }
-
-  componentDidCatch(error, errorInfo) {
-    console.error('Error caught by boundary:', error, errorInfo);
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div className="p-4 bg-red-50 border border-red-200 rounded">
-          <h2 className="text-red-800">Something went wrong</h2>
-          <p className="text-red-600">Please try refreshing the page</p>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
-
-export default Dashboard; 
-
-// Add form validation for partner portal
 const validateEmail = (email: string): boolean => {
-  const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const re = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;
   return re.test(email);
 };
 
 const handlePartnerSubmit = (e: React.FormEvent) => {
   e.preventDefault();
   const email = (e.target as HTMLFormElement).elements.namedItem('partner-email') as HTMLInputElement;
-  
+
   if (!validateEmail(email.value)) {
     toast.error('Please enter a valid email address');
     return;
   }
   // proceed with submission
-}; 
+};
+
+export default Dashboard; 
