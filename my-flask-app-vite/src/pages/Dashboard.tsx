@@ -25,11 +25,11 @@ import {
   FileText,
   UserPlus,
   ShieldCheck,
-  Search
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import moment from 'moment';
 import { toast } from 'react-toastify';
+import { userNavItems, adminNavItems, marketplaceNavItem } from '../navItems';
 
 interface UserData {
   id: number;
@@ -67,30 +67,6 @@ interface StokvelGroup {
   maxMembers: number;
   status: 'active' | 'pending' | 'inactive';
 }
-
-const userNavItems = [
-  { id: 'user', label: 'User', icon: User, path: '/dashboard/profile' },
-  { id: 'digital-wallet', label: 'Digital Wallet', icon: CreditCard, path: '/dashboard/digital-wallet' },
-  { id: 'kyc', label: 'KYC', icon: CheckCircle, path: '/dashboard/kyc' },
-  { id: 'beneficiaries', label: 'Beneficiaries', icon: Users, path: '/dashboard/beneficiaries' },
-  { id: 'refer', label: 'Refer & Earn', icon: Users, path: '/dashboard/refer' },
-  { id: 'groups', label: 'Stokvel Groups', icon: Briefcase, path: '/dashboard/groups' },
-];
-
-const adminNavItems = [
-  { id: 'admin-dashboard', label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
-  { id: 'users', label: 'User Management', icon: UserPlus, path: '/admin/users' },
-  { id: 'groups', label: 'Group Management', icon: Briefcase, path: '/admin/groups' },
-  { id: 'transactions', label: 'Transactions', icon: DollarSign, path: '/admin/transactions' },
-  { id: 'reports', label: 'Reports', icon: FileText, path: '/admin/reports' },
-  { id: 'polls', label: 'Polls', icon: BarChart2, path: '/admin/polls' },
-  { id: 'meetings', label: 'Meetings', icon: Calendar, path: '/admin/meetings' },
-  { id: 'messages', label: 'Messages', icon: MessageSquare, path: '/admin/messages' },
-  { id: 'settings', label: 'Settings', icon: Shield, path: '/admin/settings' },
-];
-
-const marketplaceNavItem: MarketplaceNavItemProp =
-  { id: 'marketplace', label: 'Marketplace', icon: ShoppingBag, path: '/dashboard/marketplace' };
 
 const horizontalNavItems = [
   { id: 'home', label: 'Home', path: '/dashboard' },
@@ -229,19 +205,6 @@ const DashboardContent: React.FC<DashboardContentProps> = ({ user, userStats, av
             Admin
           </span>
         )}
-      </div>
-
-      <div className="flex justify-center mb-6">
-        <div className="w-full max-w-md">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
-            <input
-              type="text"
-              placeholder="Search..."
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
-          </div>
-        </div>
       </div>
 
       {user?.role !== 'admin' && (

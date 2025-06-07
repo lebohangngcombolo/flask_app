@@ -8,6 +8,7 @@ import {
   Clock
 } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
+import { memberNavItems, marketplaceNavItem } from '../../navItems';
 
 const MemberDashboard: React.FC = () => {
   const [memberData, setMemberData] = useState({
@@ -18,13 +19,6 @@ const MemberDashboard: React.FC = () => {
     recentActivity: []
   });
 
-  const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: Activity, path: '/dashboard' },
-    { id: 'wallet', label: 'My Wallet', icon: CreditCard, path: '/wallet' },
-    { id: 'groups', label: 'My Groups', icon: Users, path: '/groups' },
-    { id: 'calendar', label: 'Calendar', icon: Calendar, path: '/calendar' }
-  ];
-
   return (
     <DashboardLayout
       user={{
@@ -32,7 +26,8 @@ const MemberDashboard: React.FC = () => {
         email: "member@example.com",
         role: "member"
       }}
-      navItems={navItems}
+      sidebarNavItems={memberNavItems}
+      marketplaceNavItem={marketplaceNavItem}
     >
       <div className="max-w-7xl mx-auto">
         {/* Welcome Section */}

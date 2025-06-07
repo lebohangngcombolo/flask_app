@@ -50,7 +50,7 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
-      window.location.href = '/login';
+      window.location.href = '/';
     } else if (error.response?.status === 403) {
       console.error('Access denied:', error.response.data.error);
     }
@@ -72,7 +72,7 @@ export const authAPI = {
     });
   },
   
-  getCurrentUser: () => api.get('/api/auth/me'),
+  getCurrentUser: () => api.get('/api/auth/current-user'),
   
   verifyEmail: (email: string, verificationCode: string) => {
     return api.post('/api/verify-email', {
@@ -93,6 +93,8 @@ export const authAPI = {
 export const userAPI = {
   getProfile: () => api.get('/auth/me'),
   updateProfile: (data: any) => api.put('/auth/me', data),
+  getUserStats: () => api.get('/api/user/stats'),
+  getAvailableGroups: () => api.get('/api/user/groups'),
 };
 
 // Stokvel API calls
@@ -105,8 +107,8 @@ export const stokvelAPI = {
 
 // Admin API calls
 export const adminAPI = {
-  getStats: () => api.get('/admin/stats'),
-  getGroups: () => api.get('/admin/groups'),
+  getStats: () => api.get('/api/admin/stats'),
+  getGroups: () => api.get('/api/admin/groups'),
   createGroup: (data: any) => api.post('/admin/groups', data),
 };
 
@@ -163,7 +165,7 @@ export {
 
 export const dashboardAPI = {
   // Admin endpoints
-  getUsers: () => api.get('/dashboard/users'),
+  getUsers: () => api.get('/api/dashboard/users'),
   manageGroups: () => api.get('/dashboard/groups'),
   
   // Common endpoints (accessible by both roles)
