@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import Button from './Button';
 
 interface LayoutProps {
@@ -9,8 +9,8 @@ interface LayoutProps {
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const location = useLocation();
-  const hideAuthButtons = location.pathname === "/" || 
-                         location.pathname === "/signup" || 
+  const navigate = useNavigate();
+  const hideAuthButtons = location.pathname === "/signup" || 
                          location.pathname === "/dashboard";
 
   return (
@@ -60,13 +60,13 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                 <>
                   <Button 
                     variant="secondary" 
-                    onClick={() => window.location.href = '/login'} 
+                    onClick={() => navigate('/login')} 
                     className="bg-white text-blue-600 border-2 border-blue-600 hover:bg-blue-50 px-6 py-2 text-base"
                   >
                     Login
                   </Button>
                   <Button 
-                    onClick={() => window.location.href = '/signup'} 
+                    onClick={() => navigate('/signup')} 
                     className="bg-blue-600 text-white hover:bg-blue-700 px-6 py-2 text-base"
                   >
                     Sign Up
@@ -89,13 +89,13 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                   <>
                     <Button 
                       variant="secondary" 
-                      onClick={() => window.location.href = '/login'} 
+                      onClick={() => navigate('/login')} 
                       className="w-full bg-white text-blue-600 border-2 border-blue-600 hover:bg-blue-50 px-6 py-2 text-base"
                     >
                       Login
                     </Button>
                     <Button 
-                      onClick={() => window.location.href = '/signup'} 
+                      onClick={() => navigate('/signup')} 
                       className="w-full bg-blue-600 text-white hover:bg-blue-700 px-6 py-2 text-base"
                     >
                       Sign Up

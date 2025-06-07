@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import LandingPage from './pages/LandingPage';
 import Login from './pages/Login';
@@ -13,6 +13,11 @@ import UserProfile from './pages/UserProfile';
 import UserManagement from './pages/UserManagement';
 import StokvelManagement from './components/admin/StokvelManagement';
 import { isAuthenticated, getCurrentUser } from './utils/auth';
+import { useAuth } from './hooks/useAuth';
+import ChatBot from './components/ChatBot';
+import ForgotPassword from './pages/ForgotPassword';
+import Programs from './pages/Programs';
+import DigitalWallet from './pages/DigitalWallet';
 
 // Protected route for regular users
 const UserRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -49,13 +54,24 @@ const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 };
 
 const App: React.FC = () => {
+  // Fetch user on app load to check authentication status
+  const { fetchUser } = useAuth();
+  useEffect(() => {
+    fetchUser();
+  }, [fetchUser]);
+
   return (
     <Router>
+      {/* ChatBot is placed outside of Routes so it's always visible */}
+      {/* You might want to conditionally render this based on user login status */}
+      <ChatBot />
       <Routes>
         {/* Public routes */}
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/programs" element={<Programs />} />
         <Route path="/about" element={<AboutUs />} />
         <Route path="/contact" element={<Contact />} />
         <Route path="/news" element={<News />} />
@@ -67,10 +83,7 @@ const App: React.FC = () => {
               <Route index element={<Dashboard />} />
               <Route path="profile" element={<UserProfile />} />
               <Route path="marketplace" element={<Marketplace />} />
-              {/* Comment out routes that don't have components yet */}
-              {/* <Route path="groups" element={<UserGroups />} /> */}
-              {/* <Route path="contributions" element={<Contributions />} /> */}
-              {/* <Route path="withdrawals" element={<Withdrawals />} /> */}
+              <Route path="digital-wallet" element={<DigitalWallet />} />
             </Routes>
           </UserRoute>
         } />
@@ -83,11 +96,6 @@ const App: React.FC = () => {
               <Route path="/dashboard" element={<AdminDashboard />} />
               <Route path="/users" element={<UserManagement />} />
               <Route path="/stokvels" element={<StokvelManagement />} />
-              {/* Other admin routes */}
-              {/* <Route path="groups" element={<GroupManagement />} /> */}
-              {/* <Route path="transactions" element={<TransactionManagement />} /> */}
-              {/* <Route path="reports" element={<Reports />} /> */}
-              {/* <Route path="settings" element={<AdminSettings />} /> */}
             </Routes>
           </AdminRoute>
         } />
