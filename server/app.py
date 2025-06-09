@@ -81,8 +81,12 @@ class User(db.Model):
     role = db.Column(db.String(20), default='member')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     profile_picture = db.Column(db.String(200))
+    gender = db.Column(db.String(10))
+    employment_status = db.Column(db.String(100))
     is_verified = db.Column(db.Boolean, default=False)
+    two_factor_enabled = db.Column(db.Boolean, default=False)
     otps = db.relationship('OTP', backref='user', lazy=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     verification_code = db.Column(db.String(6), nullable=True)
     verification_code_expiry = db.Column(db.DateTime, nullable=True)
     __table_args__ = (
