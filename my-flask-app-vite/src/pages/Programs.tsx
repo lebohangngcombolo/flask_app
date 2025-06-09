@@ -15,7 +15,7 @@ import {
 import { Link } from 'react-router-dom';
 
 interface ProgramCardProps {
-  icon: React.ComponentType;
+  icon: React.ComponentType<{ className?: string }>;
   title: string;
   description: string;
   features: string[];

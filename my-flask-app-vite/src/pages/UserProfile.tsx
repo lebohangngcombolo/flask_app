@@ -9,13 +9,13 @@ import {
   ChevronRight, // Use ChevronRight for the "View" button icon
   Mail, // for email notification toggle
   Bell, // for push notification toggle
-  Key,
   ShieldCheck,
   LogOut as LogoutIcon,
   Monitor,
   Download,
   FileText,
-  ExternalLink
+  ExternalLink,
+  Key
 } from 'lucide-react'; // Import necessary icons
 import moment from 'moment'; // Import moment for date formatting
 // Import navigation items from the new file
@@ -388,7 +388,7 @@ const UserProfile: React.FC = () => {
                  {/* Change Password Section - Updated Structure */}
                  <div>
                    <h3 className="text-xl font-semibold text-gray-900 mb-3 flex items-center space-x-2">
-                      <Key className="w-6 h-6 text-gray-600" />
+                       <Key className="w-6 h-6 text-gray-600" />
                        <span>Change Password</span>
                     </h3>
                    <p className="text-gray-600 mb-4">Update your password to keep your account secure.</p>
