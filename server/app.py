@@ -20,6 +20,8 @@ import logging
 import string
 from iStokvel.utils.email_utils import send_verification_email
 from flask_migrate import Migrate
+from twilio.rest import Client
+import phonenumbers
 
 # Load environment variables from .env file
 load_dotenv()
@@ -65,11 +67,27 @@ def generate_otp():
     """Generate a 6-digit OTP"""
     return ''.join([str(random.randint(0, 9)) for _ in range(6)])
 
-
 def send_verification_sms(phone_number, otp_code):
-    """Send verification SMS with OTP"""
-    # Implement SMS sending logic here
-    pass
+    """Send verification SMS with OTP using Twilio"""
+    try:
+        account_sid = os.getenv('TWILIO_ACCOUNT_SID')
+        auth_token = os.getenv('TWILIO_AUTH_TOKEN')
+        twilio_phone = os.getenv('TWILIO_PHONE_NUMBER')
+        client = Client(account_sid, auth_token)
+
+        # Format phone number to E.164
+        parsed_number = phonenumbers.parse(phone_number, "ZA")
+        formatted_number = phonenumbers.format_number(parsed_number, phonenumbers.PhoneNumberFormat.E164)
+
+        message = client.messages.create(
+            body=f"Your i-STOKVEL verification code is: {otp_code}",
+            from_=twilio_phone,
+            to=formatted_number
+        )
+        return True, message.sid
+    except Exception as e:
+        print(f"SMS sending error: {str(e)}")
+        return False, str(e)
 
 # Models
 class User(db.Model):
@@ -349,22 +367,28 @@ def register():
             db.session.commit()
 
             # Generate and send verification code
-            print(f"Attempting to send verification email to: {user.email}")
-            try:
-                verification_code = user.generate_verification()  # This will also commit the code and expiry
-                print(f"Generated verification code: {verification_code}")
-                success, message = send_verification_email(user.email, verification_code)
-                print(f"SendGrid send result: Success={success}, Message={message}")
+            verification_code = user.generate_verification()  # This will also commit the code and expiry
 
-                if not success:
-                    # Log the email sending failure, but don't rollback registration if user is created
-                    print(f"Warning: Failed to send verification email: {message}")
-            
-            except Exception as email_e:
-                print(f"Warning: Exception during verification email sending: {str(email_e)}")
-                import traceback
-                traceback.print_exc()
-                # Continue registration success even if email sending fails
+            if email:
+                # Send email verification
+                print(f"Attempting to send verification email to: {user.email}")
+                try:
+                    success, message = send_verification_email(user.email, verification_code)
+                    print(f"SendGrid send result: Success={success}, Message={message}")
+                    if not success:
+                        print(f"Warning: Failed to send verification email: {message}")
+                except Exception as email_e:
+                    print(f"Error sending verification email: {email_e}")
+            else:
+                # Send SMS verification
+                print(f"Attempting to send verification SMS to: {user.phone}")
+                try:
+                    success, message = send_verification_sms(user.phone, verification_code)
+                    print(f"Twilio send result: Success={success}, Message={message}")
+                    if not success:
+                        print(f"Warning: Failed to send verification SMS: {message}")
+                except Exception as sms_e:
+                    print(f"Error sending verification SMS: {sms_e}")
 
             # Registration successful in terms of user creation
             return jsonify({
@@ -1090,4 +1114,44 @@ def resend_verification():
         
     except Exception as e:
         db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/auth/verify-phone', methods=['POST'])
+def verify_phone():
+    try:
+        data = request.get_json()
+        phone = data.get('phone')
+        code = data.get('verification_code')
+        user = User.query.filter_by(phone=phone).first()
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        if not user.verification_code or not user.verification_code_expiry:
+            return jsonify({'error': 'No verification code found for this user'}), 400
+        if datetime.utcnow() > user.verification_code_expiry:
+            return jsonify({'error': 'Verification code expired'}), 400
+        if user.verification_code != code:
+            return jsonify({'error': 'Invalid verification code'}), 400
+        user.is_verified = True
+        user.verification_code = None
+        user.verification_code_expiry = None
+        db.session.commit()
+        return jsonify({'message': 'Phone number verified successfully'}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/auth/resend-sms', methods=['POST'])
+def resend_sms():
+    try:
+        data = request.get_json()
+        phone = data.get('phone')
+        user = User.query.filter_by(phone=phone).first()
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        verification_code = user.generate_verification()
+        success, message = send_verification_sms(user.phone, verification_code)
+        if not success:
+            return jsonify({'error': 'Failed to send SMS'}), 500
+        return jsonify({'message': 'Verification SMS sent'})
+    except Exception as e:
         return jsonify({'error': str(e)}), 500
