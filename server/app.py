@@ -1,3 +1,4 @@
+# -------------------- IMPORTS --------------------
 from flask import Flask, request, jsonify, Response
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
@@ -21,10 +22,9 @@ import string
 from iStokvel.utils.email_utils import send_verification_email
 from flask_migrate import Migrate
 
-# Load environment variables from .env file
+# -------------------- CONFIGURATION --------------------
 load_dotenv()
 
-# Config
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key')
 app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:property007@localhost:5432/authdb'
@@ -36,22 +36,19 @@ app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME')
 app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD')
 app.config['SENDGRID_API_KEY'] = os.getenv('SENDGRID_API_KEY')
 app.config['SENDGRID_FROM_EMAIL'] = os.getenv('SENDGRID_FROM_EMAIL')
+app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'your-jwt-secret-key')
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=1)
 
-# Add JWT configuration
-app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'your-jwt-secret-key')  # Change this in production
-app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=1)  # Token expires in 1 hour
-
-# Initialize extensions
+# -------------------- INITIALIZE EXTENSIONS --------------------
 db = SQLAlchemy(app)
 mail = Mail(app)
 migrate = Migrate(app, db)
-jwt = JWTManager(app)  # Initialize JWT
+jwt = JWTManager(app)
 
-# Add this after creating the app
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-# Simple CORS setup - only needed for production
+# -------------------- CORS SETUP --------------------
 if os.getenv('FLASK_ENV') == 'production':
     CORS(app, resources={
         r"/api/*": {
@@ -60,18 +57,17 @@ if os.getenv('FLASK_ENV') == 'production':
         }
     })
 
-# Add these functions after the imports and before the models
+# -------------------- UTILITY FUNCTIONS --------------------
 def generate_otp():
     """Generate a 6-digit OTP"""
     return ''.join([str(random.randint(0, 9)) for _ in range(6)])
-
 
 def send_verification_sms(phone_number, otp_code):
     """Send verification SMS with OTP"""
     # Implement SMS sending logic here
     pass
 
-# Models
+# -------------------- MODELS --------------------
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     full_name = db.Column(db.String(100), nullable=False)
@@ -89,9 +85,6 @@ class User(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     verification_code = db.Column(db.String(6), nullable=True)
     verification_code_expiry = db.Column(db.DateTime, nullable=True)
-    date_of_birth = db.Column(db.Date, nullable=True)
-    gender = db.Column(db.String(20), nullable=True)
-    employment_status = db.Column(db.String(50), nullable=True)
     __table_args__ = (
         db.Index('idx_user_email', 'email'),
         db.Index('idx_user_phone', 'phone'),
@@ -230,7 +223,7 @@ class OTP(db.Model):
     def is_valid(self):
         return datetime.utcnow() < self.expires_at and not self.is_used
 
-# JWT token decorator
+# -------------------- DECORATORS --------------------
 def token_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
@@ -248,8 +241,10 @@ def token_required(f):
             current_user = User.query.get(data['user_id'])
             if not current_user:
                 return jsonify({'error': 'User not found'}), 404
-        except Exception as e:
-            return jsonify({'error': str(e)}), 401
+        except jwt.ExpiredSignatureError:
+            return jsonify({'error': 'Token has expired'}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({'error': 'Invalid token'}), 401
 
         return f(current_user, *args, **kwargs)
     return decorated
@@ -270,8 +265,10 @@ def admin_required(f):
                 return jsonify({'error': 'Admin access required'}), 403
                 
             return f(*args, **kwargs)
-        except Exception as e:
-            return jsonify({'error': str(e)}), 401
+        except jwt.ExpiredSignatureError:
+            return jsonify({'error': 'Token has expired'}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({'error': 'Invalid token'}), 401
             
     return decorated_function
 
@@ -295,14 +292,15 @@ def role_required(allowed_roles):
                     return jsonify({'error': 'Insufficient permissions'}), 403
                     
                 return f(*args, **kwargs)
-            except Exception as e:
-                return jsonify({'error': str(e)}), 401
+            except jwt.ExpiredSignatureError:
+                return jsonify({'error': 'Token has expired'}), 401
+            except jwt.InvalidTokenError:
+                return jsonify({'error': 'Invalid token'}), 401
                 
         return decorated_function
     return decorator
 
-#--------------------------------- Routes ---------------------------------
-
+# -------------------- ROUTES --------------------
 @app.route('/api/test', methods=['GET'])
 def test():
     logger.debug('Test route accessed')
@@ -440,15 +438,10 @@ def get_current_user():
         return jsonify({'error': 'User not found'}), 404
     return jsonify({
         'id': user.id,
-        'full_name': user.full_name,
-        'phone': user.phone,
+        'name': user.full_name,
         'email': user.email,
         'role': user.role,
-        'profile_picture': user.profile_picture,
-        'date_of_birth': user.date_of_birth.isoformat() if user.date_of_birth else None,
-        'gender': user.gender,
-        'employment_status': user.employment_status,
-        'created_at': user.created_at.isoformat()
+        'profilePicture': user.profile_picture
     })
 
 @app.route('/api/admin/groups', methods=['GET'])
@@ -508,8 +501,6 @@ def create_stokvel_group(current_user):
         print(f"Error creating stokvel group: {str(e)}")
         db.session.rollback()
         return jsonify({'error': 'Failed to create stokvel group'}), 500
-
-# -------------------- CLI Commands Section --------------------
 
 @app.cli.command('init-db')
 @with_appcontext
@@ -940,6 +931,72 @@ def test_users():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/test-email')
+def test_email():
+    try:
+        msg = Message(
+            'Test Email from iStokvel',
+            sender=app.config['MAIL_USERNAME'],
+            recipients=[app.config['MAIL_USERNAME']]  # Sends to your own email
+        )
+        msg.body = 'This is a test email from your Flask app. If you receive this, your email configuration is working!'
+        mail.send(msg)
+        return jsonify({'message': 'Test email sent successfully!'}), 200
+    except Exception as e:
+        return jsonify({'error': f'Failed to send email: {str(e)}'}), 500
+
+# After your app configuration
+try:
+   # db.engine.connect()
+    logger.info("Database connection successful")
+except Exception as e:
+    logger.error(f"Database connection failed: {str(e)}")
+    raise
+
+@app.route('/api/test-connection')
+def test_connection():
+    try:
+        # Test database
+        db.engine.connect()
+        db_status = "Database: Connected"
+        
+        # Test email
+        mail_status = "Email: Not tested"
+        if app.config['MAIL_USERNAME'] and app.config['MAIL_PASSWORD']:
+            mail_status = "Email: Configured"
+        
+        return jsonify({
+            'status': 'success',
+            'database': db_status,
+            'email': mail_status,
+            'database_url': app.config['SQLALCHEMY_DATABASE_URI'].replace('postgres:postgres', '***:***')  # Hide password
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+@app.route('/api/dashboard/users', methods=['GET'])
+@role_required(['admin'])
+def get_users():
+    # Only admin can access this endpoint
+    users = User.query.all()
+    return jsonify([user.to_dict() for user in users])
+
+@app.route('/api/dashboard/contributions', methods=['GET'])
+@role_required(['admin', 'member'])
+def get_contributions():
+    # Both admin and members can access this endpoint
+    user_id = get_jwt_identity()
+    if request.args.get('all') and User.query.get(user_id).role == 'admin':
+        # Admin can see all contributions
+        contributions = Contribution.query.all()
+    else:
+        # Members can only see their own contributions
+        contributions = Contribution.query.filter_by(user_id=user_id).all()
+    return jsonify([contribution.to_dict() for contribution in contributions])
+
 @app.route('/api/verify-email', methods=['POST', 'OPTIONS'])
 def verify_email():
     if request.method == 'OPTIONS':
@@ -961,45 +1018,74 @@ def verify_email():
 
             email = data.get('email')
             code = data.get('verification_code')
-
+            
             if not email or not code:
                 return jsonify({'error': 'Email and verification code are required'}), 400
 
             # Clean the verification code
             code = code.replace(' ', '')
-
+            
             user = User.query.filter_by(email=email).first()
             if not user:
                 return jsonify({'error': 'User not found'}), 404
-
+            
             if user.is_verified:
                 return jsonify({'error': 'Email already verified'}), 400
-
+            
             if not user.verification_code or not user.verification_code_expiry:
                 return jsonify({'error': 'No verification code found for this user'}), 400
-
+            
             if datetime.utcnow() > user.verification_code_expiry:
                 return jsonify({'error': 'Verification code expired'}), 400
-
+            
             # Clean the stored verification code for comparison
             stored_code = user.verification_code.replace(' ', '')
             if stored_code != code:
                 print(f"Code mismatch - Received: '{code}', Stored: '{stored_code}'")  # Debug log
                 return jsonify({'error': 'Invalid verification code'}), 400
-
+            
             # Mark user as verified
             user.is_verified = True
             user.verification_code = None
             user.verification_code_expiry = None
             db.session.commit()
-
+            
             return jsonify({'message': 'Email verified successfully'}), 200
-
+            
         except Exception as e:
             db.session.rollback()
             print(f"Verification error: {str(e)}")  # Debug log
             return jsonify({'error': str(e)}), 500
 
+@app.route('/api/resend-verification', methods=['POST'])
+def resend_verification():
+    try:
+        data = request.get_json()
+        email = data.get('email')
+        
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        if user.is_verified:
+            return jsonify({'error': 'Email already verified'}), 400
+        
+        # Generate and send new verification code
+        verification_code = user.generate_verification()
+        success, message = send_verification_email(user.email, verification_code)
+        
+        if not success:
+            db.session.rollback()
+            return jsonify({'error': 'Failed to send verification email: ' + message}), 500
+        
+        db.session.commit()
+
+        return jsonify({'message': 'New verification code sent successfully'}), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+    
 @app.route('/api/profile', methods=['PUT'])
 @jwt_required()
 def update_profile():
@@ -1026,6 +1112,7 @@ def update_profile():
         db.session.rollback()
         return jsonify({'error': 'Failed to update profile', 'details': str(e)}), 500
 
-# -------------------- Main Entry Point --------------------
+# -------------------- MAIN --------------------
 if __name__ == '__main__':
     app.run(port=5001, debug=True)
+
