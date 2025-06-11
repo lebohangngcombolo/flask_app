@@ -223,6 +223,14 @@ class OTP(db.Model):
     def is_valid(self):
         return datetime.utcnow() < self.expires_at and not self.is_used
 
+class UserSession(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    user_agent = db.Column(db.String(256))
+    ip_address = db.Column(db.String(45))
+    login_time = db.Column(db.DateTime, default=datetime.utcnow)
+    is_active = db.Column(db.Boolean, default=True)
+
 # -------------------- DECORATORS --------------------
 def token_required(f):
     @wraps(f)
@@ -379,55 +387,52 @@ def register():
             traceback.print_exc()
             return jsonify({'error': 'An unexpected error occurred during registration'}), 500
 
-@app.route('/api/auth/login', methods=['POST', 'OPTIONS'])
+@app.route('/api/auth/login', methods=['POST'])
 def login():
-    if request.method == 'OPTIONS':
-        # Explicitly handle OPTIONS preflight request
-        response = Response()
-        response.headers.add('Access-Control-Allow-Origin', 'http://localhost:5173')
-        response.headers.add('Access-Control-Allow-Headers', request.headers.get('Access-Control-Request-Headers'))
-        response.headers.add('Access-Control-Allow-Methods', request.headers.get('Access-Control-Request-Method'))
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
-        response.headers.add('Access-Control-Max-Age', '3600')
-        return response, 200
+    data = request.get_json()
+    email = data.get('email')
+    password = data.get('password')
+    user = User.query.filter_by(email=email).first()
+    if not user or not user.check_password(password):
+        return jsonify({'error': 'Invalid email or password'}), 401
 
-    # Handle the POST request
-    if request.method == 'POST':
-        try:
-            data = request.get_json()
-            if not data:
-                return jsonify({'error': 'No data provided'}), 400
+    if user.two_factor_enabled:
+        # 2FA logic here
+        pass
 
-            email = data.get('email')
-            password = data.get('password')
+    # Normal login if 2FA is not enabled
+    access_token = create_access_token(identity=str(user.id))
 
-            if not email or not password:
-                return jsonify({'error': 'Email and password are required'}), 400
+    # --- Add this block to create a session ---
+    user_agent = request.headers.get('User-Agent', 'Unknown')
+    ip_address = request.remote_addr or 'Unknown'
+    session = UserSession(
+        user_id=user.id,
+        user_agent=user_agent,
+        ip_address=ip_address
+    )
+    db.session.add(session)
+    db.session.commit()
+    # ------------------------------------------
 
-            user = User.query.filter_by(email=email).first()
-            if not user or not user.check_password(password):
-                return jsonify({'error': 'Invalid email or password'}), 401
-
-            if not user.is_verified:
-                return jsonify({'error': 'Please verify your email first'}), 401
-
-            # Create access token using Flask-JWT-Extended
-            access_token = create_access_token(identity=str(user.id))
-
-            return jsonify({
-                'message': 'Login successful',
-                'access_token': access_token,
-                'user': {
-                    'id': user.id,
-                    'email': user.email,
-                    'name': user.full_name,
-                    'role': user.role
-                }
-            }), 200
-
-        except Exception as e:
-            logger.error(f"Login error: {str(e)}")
-            return jsonify({'error': str(e)}), 500
+    user_data = {
+        "id": user.id,
+        "full_name": user.full_name,
+        "email": user.email,
+        "phone": user.phone,
+        "role": user.role,
+        "profile_picture": user.profile_picture,
+        "gender": user.gender,
+        "employment_status": user.employment_status,
+        "is_verified": user.is_verified,
+        "two_factor_enabled": user.two_factor_enabled
+    }
+    return jsonify({
+        "success": True,
+        "message": "Login successful",
+        "access_token": access_token,
+        "user": user_data
+    }), 200
 
 @app.route('/api/auth/me', methods=['GET'])
 @jwt_required()
@@ -1018,40 +1023,40 @@ def verify_email():
 
             email = data.get('email')
             code = data.get('verification_code')
-            
+
             if not email or not code:
                 return jsonify({'error': 'Email and verification code are required'}), 400
 
             # Clean the verification code
             code = code.replace(' ', '')
-            
+
             user = User.query.filter_by(email=email).first()
             if not user:
                 return jsonify({'error': 'User not found'}), 404
-            
+
             if user.is_verified:
                 return jsonify({'error': 'Email already verified'}), 400
-            
+
             if not user.verification_code or not user.verification_code_expiry:
                 return jsonify({'error': 'No verification code found for this user'}), 400
-            
+
             if datetime.utcnow() > user.verification_code_expiry:
                 return jsonify({'error': 'Verification code expired'}), 400
-            
+
             # Clean the stored verification code for comparison
             stored_code = user.verification_code.replace(' ', '')
             if stored_code != code:
                 print(f"Code mismatch - Received: '{code}', Stored: '{stored_code}'")  # Debug log
                 return jsonify({'error': 'Invalid verification code'}), 400
-            
+
             # Mark user as verified
             user.is_verified = True
             user.verification_code = None
             user.verification_code_expiry = None
             db.session.commit()
-            
+
             return jsonify({'message': 'Email verified successfully'}), 200
-            
+
         except Exception as e:
             db.session.rollback()
             print(f"Verification error: {str(e)}")  # Debug log
@@ -1111,6 +1116,112 @@ def update_profile():
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': 'Failed to update profile', 'details': str(e)}), 500
+
+@app.route('/api/account/change-password', methods=['POST'])
+@jwt_required()
+def change_password():
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    data = request.get_json()
+    current_password = data.get('current_password')
+    new_password = data.get('new_password')
+
+    if not user or not user.check_password(current_password):
+        return jsonify({'error': 'Current password is incorrect'}), 400
+
+    user.set_password(new_password)
+    db.session.commit()
+    return jsonify({'message': 'Password changed successfully'})
+
+@app.route('/api/account/enable-2fa', methods=['POST'])
+@jwt_required()
+def enable_2fa():
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+
+    otp_code = generate_otp()
+    expiry = datetime.utcnow() + timedelta(minutes=10)
+    otp = OTP(user_id=user.id, code=otp_code, expires_at=expiry)
+    db.session.add(otp)
+    db.session.commit()
+    send_verification_email(user.email, otp_code)
+    return jsonify({'message': 'OTP sent to your email for 2FA activation'})
+
+@app.route('/api/account/verify-2fa', methods=['POST'])
+@jwt_required()
+def verify_2fa():
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    data = request.get_json()
+    otp_code = data.get('otp_code')
+
+    otp = OTP.query.filter_by(user_id=user.id, code=otp_code, is_used=False).order_by(OTP.created_at.desc()).first()
+    if not otp or not otp.is_valid():
+        return jsonify({'error': 'Invalid or expired OTP'}), 400
+
+    otp.is_used = True
+    user.two_factor_enabled = True
+    db.session.commit()
+    return jsonify({'message': 'Two-factor authentication enabled'})
+
+@app.route('/api/account/disable-2fa', methods=['POST'])
+@jwt_required()
+def disable_2fa():
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    user.two_factor_enabled = False
+    db.session.commit()
+    return jsonify({'message': 'Two-factor authentication disabled'})
+
+@app.route('/api/account/verify-2fa-login', methods=['POST'])
+def verify_2fa_login():
+    data = request.get_json()
+    user_id = data.get('user_id')
+    otp_code = data.get('otp_code')
+    user = User.query.get(user_id)
+    otp = OTP.query.filter_by(user_id=user.id, code=otp_code, is_used=False).order_by(OTP.created_at.desc()).first()
+    if not otp or not otp.is_valid():
+        return jsonify({'error': 'Invalid or expired OTP'}), 400
+    otp.is_used = True
+    db.session.commit()
+    access_token = create_access_token(identity=str(user.id))
+    return jsonify({'message': '2FA login successful', 'access_token': access_token}), 200
+
+@app.route('/api/account', methods=['DELETE'])
+@jwt_required()
+def delete_account():
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    db.session.delete(user)
+    db.session.commit()
+    return jsonify({'message': 'Account deleted successfully'})
+
+@app.route('/api/account/sessions', methods=['GET'])
+@jwt_required()
+def list_sessions():
+    user_id = get_jwt_identity()
+    sessions = UserSession.query.filter_by(user_id=user_id, is_active=True).all()
+    return jsonify([
+        {
+            "id": s.id,
+            "user_agent": s.user_agent,
+            "ip_address": s.ip_address,
+            "login_time": s.login_time.isoformat()
+        } for s in sessions
+    ])
+
+@app.route('/api/account/sessions/<int:session_id>', methods=['DELETE'])
+@jwt_required()
+def revoke_session(session_id):
+    user_id = get_jwt_identity()
+    session = UserSession.query.filter_by(id=session_id, user_id=user_id, is_active=True).first()
+    if not session:
+        return jsonify({"error": "Session not found"}), 404
+    session.is_active = False
+    db.session.commit()
+    return jsonify({"message": "Session revoked"})
 
 # -------------------- MAIN --------------------
 if __name__ == '__main__':
