@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
 import { motion } from 'framer-motion';
 import { Calendar, User } from 'lucide-react'; // Icons for date and author
+import { newsAPI } from '../services/api';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -18,47 +19,23 @@ const itemVariants = {
   visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: 'easeOut' } },
 };
 
-// Placeholder data for news articles
-const newsArticles = [
-  {
-    id: 1,
-    title: 'i-STOKVEL Launches New Investment Programs',
-    date: '2023-10-26',
-    author: 'i-STOKVEL Team',
-    excerpt: 'Discover our exciting new investment programs designed to help your stokvel grow wealth collectively...',
-    link: '#', // Placeholder link
-    image: 'https://images.unsplash.com/photo-1624996752398-bde96cd0b89b?auto=format&fit=crop&w=800&q=80' // Placeholder image
-  },
-  {
-    id: 2,
-    title: 'Enhancing Security: New Features Added',
-    date: '2023-10-20',
-    author: 'Security Team',
-    excerpt: 'We are constantly working to make i-STOKVEL the most secure platform for your savings. Learn about our latest security updates...',
-    link: '#', // Placeholder link
-    image: 'https://images.unsplash.com/photo-1563221014-03e9d00768c1?auto=format&fit=crop&w=800&q=80' // Placeholder image
-  },
-  {
-    id: 3,
-    title: 'Tips for Managing Your Stokvel Effectively',
-    date: '2023-10-15',
-    author: 'Community Experts',
-    excerpt: 'Get practical advice and tips on how to manage your stokvel group effectively using the i-STOKVEL platform...',
-    link: '#', // Placeholder link
-    image: 'https://images.unsplash.com/photo-1507679799937-cd433729d79f?auto=format&fit=crop&w=800&q=80' // Placeholder image
-  },
-   {
-    id: 4,
-    title: 'i-STOKVEL Partners with Local Businesses',
-    date: '2023-10-10',
-    author: 'Partnership Team',
-    excerpt: 'We are excited to announce new partnerships with local businesses, bringing exclusive deals to i-STOKVEL members...',
-    link: '#', // Placeholder link
-    image: 'https://images.unsplash.com/photo-1504868584819-df0ad4b494f0?auto=format&fit=crop&w=800&q=80' // Placeholder image
-  },
-];
-
 const News: React.FC = () => {
+  const [newsArticles, setNewsArticles] = useState([]);
+
+  useEffect(() => {
+    const fetchNews = async () => {
+      try {
+        const response = await newsAPI.getNews();
+        setNewsArticles(response.data);
+      } catch (err) {
+        console.error('Error fetching news:', err);
+        // Handle error appropriately
+      }
+    };
+
+    fetchNews();
+  }, []);
+
   return (
     <Layout>
       <div className="container mx-auto px-4 py-16 md:py-24">

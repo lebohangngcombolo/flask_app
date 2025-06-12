@@ -23,6 +23,7 @@ module.exports = {
         'shake': 'shake 0.5s ease-in-out',
         'slide-out': 'slideOut 0.5s ease-in',
         'slide-up': 'slideUp 0.5s ease-out',
+        'spin': 'spin 1s linear infinite',
       },
       keyframes: {
         growTrunk: {
@@ -82,6 +83,10 @@ module.exports = {
         slideUp: {
           '0%': { transform: 'translateY(20px)', opacity: '0' },
           '100%': { transform: 'translateY(0)', opacity: '1' },
+        },
+        spin: {
+          from: { transform: 'rotate(0deg)' },
+          to: { transform: 'rotate(360deg)' },
         },
       },
       colors: {

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getCurrentUser, isAuthenticated } from '../utils/auth';
+import { useNavigate } from 'react-router-dom';
+import { getCurrentUser, logout as authLogout, isAuthenticated } from '../utils/auth';
 
 interface User {
   id?: string;
@@ -12,6 +13,7 @@ interface User {
 export const useAuth = () => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   const fetchUser = useCallback(async () => {
     try {
@@ -34,11 +36,9 @@ export const useAuth = () => {
   }, [fetchUser]);
 
   const logout = useCallback(() => {
-    // Clear any auth tokens from localStorage
-    localStorage.removeItem('token');
-    // Clear user state
-    setUser(null);
-  }, []);
+    authLogout();
+    navigate('/login');
+  }, [navigate]);
 
   return {
     user,

@@ -59,54 +59,80 @@ export const signup = async (userData: {
 
 export const login = async (email: string, password: string) => {
   try {
-    console.log('Login attempt started:', { email });
-    
     const response = await authAPI.login(email, password);
-    console.log('Login response:', response.data);
+    const { access_token, user } = response.data;
     
-    if (response.data && response.data.access_token && response.data.user) {
-      // Store token and user data
-      localStorage.setItem('token', response.data.access_token);
-      localStorage.setItem('user', JSON.stringify(response.data.user));
-      
-      // Return success with navigation info instead of navigating directly
-      return { 
-        success: true, 
-        user: response.data.user,
-        redirectTo: response.data.user.role === 'admin' ? '/admin/dashboard' : '/dashboard'
-      };
-    }
+    // Store auth data
+    localStorage.setItem('token', access_token);
+    localStorage.setItem('user', JSON.stringify(user));
+    
+    // Determine redirect path based on user role
+    const redirectTo = user.role === 'admin' ? '/admin-dashboard' : '/dashboard';
     
     return {
-      success: false,
-      message: 'Invalid response from server'
+      success: true,
+      message: 'Login successful',
+      redirectTo,
+      user
     };
   } catch (error: any) {
     console.error('Login error:', error);
-    
-    if (error.response?.status === 401) {
-      return {
-        success: false,
-        message: 'Invalid email or password'
-      };
-    }
-    
     return {
       success: false,
-      message: error.response?.data?.error || 'Login failed. Please try again.'
+      message: error.response?.data?.error || 'Login failed. Please check your credentials.'
     };
   }
 };
 
 export const logout = () => {
-  localStorage.removeItem('token');
-  localStorage.removeItem('user');
-  window.location.href = '/';
+  try {
+    // Clear auth state
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    
+    // Attempt to call logout endpoint
+    authAPI.post('/api/auth/logout').catch(error => {
+      console.error('Logout API call failed:', error);
+    });
+    
+    // Redirect to login page
+    window.location.href = '/login';
+  } catch (error) {
+    console.error('Logout error:', error);
+    // Force redirect even if there's an error
+    window.location.href = '/login';
+  }
 };
 
 export const isAuthenticated = (): boolean => {
-  const token = localStorage.getItem('token');
-  return !!token;
+  try {
+    const token = localStorage.getItem('token');
+    if (!token) return false;
+    
+    // Validate token structure
+    const parts = token.split('.');
+    if (parts.length !== 3) {
+      throw new Error('Invalid token format');
+    }
+    
+    const tokenData = JSON.parse(atob(parts[1]));
+    const expirationTime = tokenData.exp * 1000;
+    const currentTime = Date.now();
+    
+    // Check if token is expired or about to expire
+    if (expirationTime <= currentTime) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      return false;
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Token validation error:', error);
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    return false;
+  }
 };
 
 export const getCurrentUser = () => {
@@ -168,3 +194,41 @@ export const resendEmailVerificationCode = async (email: string) => {
     };
   }
 };
+
+export const verifyPhoneCode = async (phone: string, verificationCode: string) => {
+  try {
+    const response = await authAPI.verifyPhone(phone, verificationCode);
+    return {
+      success: true,
+      message: response.data.message || 'Phone number verified successfully'
+    };
+  } catch (error: any) {
+    return {
+      success: false,
+      message: error.response?.data?.error || 'Verification failed'
+    };
+  }
+};
+
+export const resendSmsVerificationCode = async (phone: string) => {
+  try {
+    const response = await authAPI.resendSmsVerificationCode(phone);
+    return {
+      success: true,
+      message: response.data.message || 'New verification code sent'
+    };
+  } catch (error: any) {
+    return {
+      success: false,
+      message: error.response?.data?.error || 'Failed to resend code'
+    };
+  }
+};
+
+export async function sendSmsVerificationCode(phone: string) {
+  // This should POST to /api/auth/send-otp (or your initial send endpoint)
+  // Example:
+  return authAPI.post('/api/auth/send-otp', { phone })
+    .then(res => res.data)
+    .catch(err => ({ success: false, message: err?.response?.data?.message || 'Failed to send code' }));
+}

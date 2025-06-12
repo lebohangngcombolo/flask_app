@@ -1,6 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import DashboardLayout from '../components/DashboardLayout'; // Assuming DashboardLayout is the correct layout component
 import {
   Archive, // Example icon for Marketplace tab
   Heart, // Example icon for My Offers
@@ -32,6 +31,7 @@ import {
   Filter // Add Filter icon import
 } from 'lucide-react'; // Import necessary icons
 import { toast } from 'react-hot-toast';
+import { marketplaceAPI } from '../services/api';
 
 
 // --- Mock Data for Offers ---
@@ -143,6 +143,7 @@ const OfferCard: React.FC<OfferCardProps> = ({ offer, navigate }) => {
 const Marketplace: React.FC = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('marketplace');
+  const [offers, setOffers] = useState<Offer[]>([]);
 
   // Define the sidebar navigation items
   const sidebarNavItems = [
@@ -170,99 +171,107 @@ const Marketplace: React.FC = () => {
     email: 'user@example.com'
   };
 
+  useEffect(() => {
+    const fetchOffers = async () => {
+      try {
+        const response = await marketplaceAPI.getOffers();
+        setOffers(response.data);
+      } catch (err) {
+        console.error('Error fetching offers:', err);
+        // Handle error appropriately
+      }
+    };
+
+    fetchOffers();
+  }, []);
+
   return (
-    <DashboardLayout 
-      user={mockUser} 
-      sidebarNavItems={sidebarNavItems}
-      marketplaceNavItem={marketplaceNavItem}
-    >
-      <div className="flex-1 p-4">
-        <div className="flex justify-center mb-6">
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-900">iStokvel Deals</h1>
-        </div>
+    <div className="flex-1 p-4">
+      <div className="flex justify-center mb-6">
+        <h1 className="text-2xl md:text-3xl font-bold text-gray-900">iStokvel Deals</h1>
+      </div>
 
-        <div className="border-b border-gray-200 mb-6">
-          <nav className="flex justify-center space-x-8" aria-label="Tabs">
-            <button
-              onClick={() => setActiveTab('marketplace')}
-              aria-label="Switch to marketplace tab"
-              role="tab"
-              aria-selected={activeTab === 'marketplace'}
-              className={`whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'marketplace'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
-              }`}
-            >
-              <Archive className="inline-block w-4 h-4 mr-2" />
-              Marketplace
-            </button>
-            <button
-              onClick={() => setActiveTab('my-offers')}
-              aria-label="Switch to my offers tab"
-              role="tab"
-              aria-selected={activeTab === 'my-offers'}
-              className={`whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'my-offers'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
-              }`}
-            >
-               <Heart className="inline-block w-4 h-4 mr-2" />
-              My Offers
-            </button>
-             <button
-              onClick={() => setActiveTab('track-orders')}
-              className={`whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'track-orders'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
-              }`}
-            >
-               <Package className="inline-block w-4 h-4 mr-2" />
-              Track Orders
-            </button>
-             <button
-              onClick={() => setActiveTab('partner-portal')}
-              className={`whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'partner-portal'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
-              }`}
-            >
-               <Users className="inline-block w-4 h-4 mr-2" />
-              Partner Portal
-            </button>
-          </nav>
-        </div>
+      <div className="border-b border-gray-200 mb-6">
+        <nav className="flex justify-center space-x-8" aria-label="Tabs">
+          <button
+            onClick={() => setActiveTab('marketplace')}
+            aria-label="Switch to marketplace tab"
+            role="tab"
+            aria-selected={activeTab === 'marketplace'}
+            className={`whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'marketplace'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+            }`}
+          >
+            <Archive className="inline-block w-4 h-4 mr-2" />
+            Marketplace
+          </button>
+          <button
+            onClick={() => setActiveTab('my-offers')}
+            aria-label="Switch to my offers tab"
+            role="tab"
+            aria-selected={activeTab === 'my-offers'}
+            className={`whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'my-offers'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+            }`}
+          >
+             <Heart className="inline-block w-4 h-4 mr-2" />
+            My Offers
+          </button>
+           <button
+            onClick={() => setActiveTab('track-orders')}
+            className={`whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'track-orders'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+            }`}
+          >
+             <Package className="inline-block w-4 h-4 mr-2" />
+            Track Orders
+          </button>
+           <button
+            onClick={() => setActiveTab('partner-portal')}
+            className={`whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'partner-portal'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+            }`}
+          >
+             <Users className="inline-block w-4 h-4 mr-2" />
+            Partner Portal
+          </button>
+        </nav>
+      </div>
 
-        <div className="w-full flex justify-center mb-6">
-          <div className="w-full max-w-3xl flex items-center space-x-4">
-            <button
-              onClick={() => {/* handle search */}}
-              className="flex-1 flex items-center justify-center space-x-2 px-4 py-3 bg-white border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors duration-200"
-            >
-              <Search className="w-5 h-5" />
-              <span>Search deals...</span>
-            </button>
+      <div className="w-full flex justify-center mb-6">
+        <div className="w-full max-w-3xl flex items-center space-x-4">
+          <button
+            onClick={() => {/* handle search */}}
+            className="flex-1 flex items-center justify-center space-x-2 px-4 py-3 bg-white border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors duration-200"
+          >
+            <Search className="w-5 h-5" />
+            <span>Search deals...</span>
+          </button>
 
-            <button
-              onClick={() => {/* handle filter */}}
-              className="flex items-center space-x-2 px-4 py-3 bg-white border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors duration-200"
-            >
-              <Filter className="w-5 h-5" />
-              <span>Filter</span>
-            </button>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {mockOffers.map(offer => (
-            <OfferCard key={offer.id} offer={offer} navigate={navigate} />
-          ))}
+          <button
+            onClick={() => {/* handle filter */}}
+            className="flex items-center space-x-2 px-4 py-3 bg-white border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors duration-200"
+          >
+            <Filter className="w-5 h-5" />
+            <span>Filter</span>
+          </button>
         </div>
       </div>
-    </DashboardLayout>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {offers.map(offer => (
+          <OfferCard key={offer.id} offer={offer} navigate={navigate} />
+        ))}
+      </div>
+    </div>
   );
 };
 
