@@ -1298,37 +1298,60 @@ def get_news():
 
 @app.route('/api/auth/send-otp', methods=['POST'])
 def send_otp():
-    data = request.get_json()
-    phone = data.get('phone')
-    if not phone:
-        return jsonify({'error': 'Phone number is required'}), 400
-
-    otp_code = str(random.randint(100000, 999999))
-    expiry = datetime.utcnow() + timedelta(minutes=10)
-
-    # Find the user by phone number
-    user = User.query.filter_by(phone=phone).first()
-    if not user:
-        return jsonify({'error': 'User not found'}), 404
-
-    # Save OTP and expiry
-    user.verification_code = otp_code
-    user.verification_code_expiry = expiry
-    db.session.commit()
-
-    # Send the OTP via Twilio
     try:
-        account_sid = os.getenv('TWILIO_ACCOUNT_SID')
-        auth_token = os.getenv('TWILIO_AUTH_TOKEN')
-        twilio_number = os.getenv('TWILIO_PHONE_NUMBER')
-        client = Client(account_sid, auth_token)
-        message = client.messages.create(
-            body=f"Your verification code is: {otp_code}",
-            from_=twilio_number,
-            to=phone
-        )
-        return jsonify({'success': True, 'message': 'OTP sent successfully'})
+        data = request.get_json()
+        phone = data.get('phone')
+        if not phone:
+            return jsonify({'error': 'Phone number is required'}), 400
+
+        # Find the user by phone number
+        user = User.query.filter_by(phone=phone).first()
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+
+        # Generate new OTP
+        otp_code = str(random.randint(100000, 999999))
+        expiry = datetime.utcnow() + timedelta(minutes=10)
+
+        # Save OTP and expiry
+        user.verification_code = otp_code
+        user.verification_code_expiry = expiry
+        db.session.commit()
+
+        # Send the OTP via Twilio
+        try:
+            account_sid = os.getenv('TWILIO_ACCOUNT_SID')
+            auth_token = os.getenv('TWILIO_AUTH_TOKEN')
+            twilio_number = os.getenv('TWILIO_PHONE_NUMBER')
+            
+            if not all([account_sid, auth_token, twilio_number]):
+                return jsonify({'error': 'SMS service not configured properly'}), 500
+
+            client = Client(account_sid, auth_token)
+            message = client.messages.create(
+                body=f"Your verification code is: {otp_code}",
+                from_=twilio_number,
+                to=phone
+            )
+            
+            if message.sid:
+                return jsonify({
+                    'success': True, 
+                    'message': 'OTP sent successfully',
+                    'message_sid': message.sid
+                })
+            else:
+                raise Exception("Failed to get message SID from Twilio")
+                
+        except Exception as e:
+            # Rollback the OTP save if SMS sending fails
+            db.session.rollback()
+            print(f"Twilio error: {str(e)}")  # For debugging
+            return jsonify({'error': 'Failed to send SMS. Please try again.'}), 500
+            
     except Exception as e:
+        db.session.rollback()
+        print(f"General error in send_otp: {str(e)}")  # For debugging
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/kyc/submit', methods=['POST'])

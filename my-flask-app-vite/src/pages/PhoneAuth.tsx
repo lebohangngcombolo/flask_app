@@ -25,6 +25,7 @@ const PhoneAuth: React.FC = () => {
 
   const handlePhoneSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log("Submitting phone:", phone);
     setStep('verify');
     setCodeSent(true);
     sendSmsVerificationCode(phone)
