@@ -1,6 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
+<<<<<<< HEAD
 import { useNavigate } from 'react-router-dom';
 import { getCurrentUser, logout as authLogout, isAuthenticated } from '../utils/auth';
+=======
+import { getCurrentUser, isAuthenticated } from '../utils/auth';
+>>>>>>> origin/master
 
 interface User {
   id?: string;
@@ -13,7 +17,10 @@ interface User {
 export const useAuth = () => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+<<<<<<< HEAD
   const navigate = useNavigate();
+=======
+>>>>>>> origin/master
 
   const fetchUser = useCallback(async () => {
     try {
@@ -36,9 +43,17 @@ export const useAuth = () => {
   }, [fetchUser]);
 
   const logout = useCallback(() => {
+<<<<<<< HEAD
     authLogout();
     navigate('/login');
   }, [navigate]);
+=======
+    // Clear any auth tokens from localStorage
+    localStorage.removeItem('token');
+    // Clear user state
+    setUser(null);
+  }, []);
+>>>>>>> origin/master
 
   return {
     user,

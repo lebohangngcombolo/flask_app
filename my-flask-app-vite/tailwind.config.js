@@ -23,7 +23,10 @@ module.exports = {
         'shake': 'shake 0.5s ease-in-out',
         'slide-out': 'slideOut 0.5s ease-in',
         'slide-up': 'slideUp 0.5s ease-out',
+<<<<<<< HEAD
         'spin': 'spin 1s linear infinite',
+=======
+>>>>>>> origin/master
       },
       keyframes: {
         growTrunk: {
@@ -84,10 +87,13 @@ module.exports = {
           '0%': { transform: 'translateY(20px)', opacity: '0' },
           '100%': { transform: 'translateY(0)', opacity: '1' },
         },
+<<<<<<< HEAD
         spin: {
           from: { transform: 'rotate(0deg)' },
           to: { transform: 'rotate(360deg)' },
         },
+=======
+>>>>>>> origin/master
       },
       colors: {
         'google-red': '#DB4437',

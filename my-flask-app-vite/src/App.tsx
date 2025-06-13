@@ -1,5 +1,10 @@
+<<<<<<< HEAD
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, Outlet } from 'react-router-dom';
+=======
+import React, { useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+>>>>>>> origin/master
 import LandingPage from './pages/LandingPage';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
@@ -18,6 +23,7 @@ import ChatBot from './components/ChatBot';
 import ForgotPassword from './pages/ForgotPassword';
 import Programs from './pages/Programs';
 import DigitalWallet from './pages/DigitalWallet';
+<<<<<<< HEAD
 import PhoneAuth from './pages/PhoneAuth';
 import KYCPage from './pages/KYC';
 import { getCurrentUser as getCurrentUserService } from './services/auth';
@@ -33,6 +39,8 @@ const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
   
   return <>{children}</>;
 };
+=======
+>>>>>>> origin/master
 
 // Protected route for regular users
 const UserRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -69,6 +77,7 @@ const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 };
 
 const App: React.FC = () => {
+<<<<<<< HEAD
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -94,6 +103,13 @@ const App: React.FC = () => {
   if (loading) {
     return <div>Loading...</div>;
   }
+=======
+  // Fetch user on app load to check authentication status
+  const { fetchUser } = useAuth();
+  useEffect(() => {
+    fetchUser();
+  }, [fetchUser]);
+>>>>>>> origin/master
 
   return (
     <Router>
@@ -111,6 +127,7 @@ const App: React.FC = () => {
         <Route path="/contact" element={<Contact />} />
         <Route path="/news" element={<News />} />
 
+<<<<<<< HEAD
         {/* User dashboard routes */}
         <Route path="/dashboard" element={<UserRoute><DashboardLayout /></UserRoute>}>
           <Route index element={<Dashboard />} />
@@ -129,6 +146,31 @@ const App: React.FC = () => {
 
         {/* Phone Auth route */}
         <Route path="/phone-auth" element={<PhoneAuth />} />
+=======
+        {/* User routes */}
+        <Route path="/dashboard/*" element={
+          <UserRoute>
+            <Routes>
+              <Route index element={<Dashboard />} />
+              <Route path="profile" element={<UserProfile />} />
+              <Route path="marketplace" element={<Marketplace />} />
+              <Route path="digital-wallet" element={<DigitalWallet />} />
+            </Routes>
+          </UserRoute>
+        } />
+
+        {/* Admin routes */}
+        <Route path="/admin/*" element={
+          <AdminRoute>
+            <Routes>
+              <Route path="/" element={<AdminDashboard />} />
+              <Route path="/dashboard" element={<AdminDashboard />} />
+              <Route path="/users" element={<UserManagement />} />
+              <Route path="/stokvels" element={<StokvelManagement />} />
+            </Routes>
+          </AdminRoute>
+        } />
+>>>>>>> origin/master
 
         {/* Catch all route */}
         <Route path="*" element={<Navigate to="/" replace />} />

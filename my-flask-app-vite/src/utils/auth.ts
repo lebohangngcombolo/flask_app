@@ -59,6 +59,7 @@ export const signup = async (userData: {
 
 export const login = async (email: string, password: string) => {
   try {
+<<<<<<< HEAD
     const response = await authAPI.login(email, password);
     const { access_token, user } = response.data;
     
@@ -80,11 +81,49 @@ export const login = async (email: string, password: string) => {
     return {
       success: false,
       message: error.response?.data?.error || 'Login failed. Please check your credentials.'
+=======
+    console.log('Login attempt started:', { email });
+    
+    const response = await authAPI.login(email, password);
+    console.log('Login response:', response.data);
+    
+    if (response.data && response.data.access_token && response.data.user) {
+      // Store token and user data
+      localStorage.setItem('token', response.data.access_token);
+      localStorage.setItem('user', JSON.stringify(response.data.user));
+      
+      // Return success with navigation info instead of navigating directly
+      return { 
+        success: true, 
+        user: response.data.user,
+        redirectTo: response.data.user.role === 'admin' ? '/admin/dashboard' : '/dashboard'
+      };
+    }
+    
+    return {
+      success: false,
+      message: 'Invalid response from server'
+    };
+  } catch (error: any) {
+    console.error('Login error:', error);
+    
+    if (error.response?.status === 401) {
+      return {
+        success: false,
+        message: 'Invalid email or password'
+      };
+    }
+    
+    return {
+      success: false,
+      message: error.response?.data?.error || 'Login failed. Please try again.'
+>>>>>>> origin/master
     };
   }
 };
 
 export const logout = () => {
+<<<<<<< HEAD
   try {
     // Clear auth state
     localStorage.removeItem('token');
@@ -133,6 +172,16 @@ export const isAuthenticated = (): boolean => {
     localStorage.removeItem('user');
     return false;
   }
+=======
+  localStorage.removeItem('token');
+  localStorage.removeItem('user');
+  window.location.href = '/';
+};
+
+export const isAuthenticated = (): boolean => {
+  const token = localStorage.getItem('token');
+  return !!token;
+>>>>>>> origin/master
 };
 
 export const getCurrentUser = () => {
@@ -194,6 +243,7 @@ export const resendEmailVerificationCode = async (email: string) => {
     };
   }
 };
+<<<<<<< HEAD
 
 export const verifyPhoneCode = async (phone: string, verificationCode: string) => {
   try {
@@ -232,3 +282,5 @@ export async function sendSmsVerificationCode(phone: string) {
     .then(res => res.data)
     .catch(err => ({ success: false, message: err?.response?.data?.message || 'Failed to send code' }));
 }
+=======
+>>>>>>> origin/master
