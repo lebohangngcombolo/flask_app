@@ -196,8 +196,12 @@ class Wallet(db.Model):
 class NotificationSettings(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    email_notifications = db.Column(db.Boolean, default=True)
-    sms_notifications = db.Column(db.Boolean, default=True)
+    email_announcements = db.Column(db.Boolean, default=True)
+    email_stokvel_updates = db.Column(db.Boolean, default=True)
+    email_marketplace_offers = db.Column(db.Boolean, default=False)
+    push_announcements = db.Column(db.Boolean, default=True)
+    push_stokvel_updates = db.Column(db.Boolean, default=True)
+    push_marketplace_offers = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     user = db.relationship('User', backref='notification_settings')
@@ -208,6 +212,9 @@ class UserPreferences(db.Model):
     language = db.Column(db.String(10), default='en')
     currency = db.Column(db.String(3), default='ZAR')
     theme = db.Column(db.String(10), default='light')
+    data_for_personalization = db.Column(db.Boolean, default=True)
+    data_for_analytics = db.Column(db.Boolean, default=True)
+    data_for_third_parties = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     user = db.relationship('User', backref='preferences')
@@ -1222,6 +1229,100 @@ def revoke_session(session_id):
     session.is_active = False
     db.session.commit()
     return jsonify({"message": "Session revoked"})
+
+@app.route('/api/notification-settings', methods=['GET'])
+@jwt_required()
+def get_notification_settings():
+    user_id = get_jwt_identity()
+    settings = NotificationSettings.query.filter_by(user_id=user_id).first()
+    if not settings:
+        settings = NotificationSettings(user_id=user_id)
+        db.session.add(settings)
+        db.session.commit()
+    return jsonify({
+        "email_announcements": settings.email_announcements,
+        "email_stokvel_updates": settings.email_stokvel_updates,
+        "email_marketplace_offers": settings.email_marketplace_offers,
+        "push_announcements": settings.push_announcements,
+        "push_stokvel_updates": settings.push_stokvel_updates,
+        "push_marketplace_offers": settings.push_marketplace_offers,
+    })
+
+@app.route('/api/notification-settings', methods=['PUT'])
+@jwt_required()
+def update_notification_settings():
+    user_id = get_jwt_identity()
+    data = request.get_json()
+    settings = NotificationSettings.query.filter_by(user_id=user_id).first()
+    if not settings:
+        settings = NotificationSettings(user_id=user_id)
+        db.session.add(settings)
+    for field in [
+        "email_announcements", "email_stokvel_updates", "email_marketplace_offers",
+        "push_announcements", "push_stokvel_updates", "push_marketplace_offers"
+    ]:
+        if field in data:
+            setattr(settings, field, data[field])
+    db.session.commit()
+    return jsonify({"message": "Notification settings updated."})
+
+@app.route('/api/privacy-settings', methods=['GET'])
+@jwt_required()
+def get_privacy_settings():
+    user_id = get_jwt_identity()
+    prefs = UserPreferences.query.filter_by(user_id=user_id).first()
+    if not prefs:
+        prefs = UserPreferences(user_id=user_id)
+        db.session.add(prefs)
+        db.session.commit()
+    return jsonify({
+        "data_for_personalization": prefs.data_for_personalization,
+        "data_for_analytics": prefs.data_for_analytics,
+        "data_for_third_parties": prefs.data_for_third_parties,
+    })
+
+@app.route('/api/privacy-settings', methods=['PUT'])
+@jwt_required()
+def update_privacy_settings():
+    user_id = get_jwt_identity()
+    data = request.get_json()
+    prefs = UserPreferences.query.filter_by(user_id=user_id).first()
+    if not prefs:
+        prefs = UserPreferences(user_id=user_id)
+        db.session.add(prefs)
+    for field in [
+        "data_for_personalization", "data_for_analytics", "data_for_third_parties"
+    ]:
+        if field in data:
+            setattr(prefs, field, data[field])
+    db.session.commit()
+    return jsonify({"message": "Privacy settings updated."})
+
+@app.route('/api/download-data', methods=['GET'])
+@jwt_required()
+def download_data():
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    prefs = UserPreferences.query.filter_by(user_id=user_id).first()
+    # Add more data as needed
+    data = {
+        "user": {
+            "id": user.id,
+            "full_name": user.full_name,
+            "email": user.email,
+            "phone": user.phone,
+            "created_at": user.created_at.isoformat(),
+        },
+        "preferences": {
+            "language": prefs.language if prefs else None,
+            "currency": prefs.currency if prefs else None,
+            "theme": prefs.theme if prefs else None,
+            "data_for_personalization": prefs.data_for_personalization if prefs else None,
+            "data_for_analytics": prefs.data_for_analytics if prefs else None,
+            "data_for_third_parties": prefs.data_for_third_parties if prefs else None,
+        }
+    }
+    return jsonify(data)
 
 # -------------------- MAIN --------------------
 if __name__ == '__main__':
