@@ -20,6 +20,10 @@ import logging
 import string
 from iStokvel.utils.email_utils import send_verification_email
 from flask_migrate import Migrate
+from openai import OpenAI
+from models import db, User, Conversation, Message
+import uuid
+import os
 
 # Load environment variables from .env file
 load_dotenv()
