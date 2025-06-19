@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -11,6 +11,8 @@ import {
   Filler
 } from 'chart.js';
 import { Line } from 'react-chartjs-2';
+import { useAuth } from '../hooks/useAuth';
+import api from '../services/api';
 
 ChartJS.register(
   CategoryScale,
@@ -24,172 +26,29 @@ ChartJS.register(
 );
 
 const DigitalWallet: React.FC = () => {
+  const { user } = useAuth();
   const [selectedPeriod, setSelectedPeriod] = useState<'weekly' | 'monthly' | 'yearly'>('weekly');
   const [activeTab, setActiveTab] = useState<'marketplace' | 'history' | 'payment'>('marketplace');
   const [isConnecting, setIsConnecting] = useState(false);
+  const [walletData, setWalletData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   
-  // Mock user data (replace with real user data from your auth system)
-  const user = {
-    name: "Leonardo C",
-    email: "leonardoc@gmail.com",
-    role: "member" as const,
-    profilePicture: "https://i.pravatar.cc/100"
-  };
+  useEffect(() => {
+    const fetchWallet = async () => {
+      try {
+        const res = await api.get('/api/wallet');
+        setWalletData(res.data);
+      } catch (err) {
+        // Handle error
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchWallet();
+  }, []);
 
-  // Mock data (replace with API calls later)
-  const [walletData] = useState({
-    balance: 3500.00,
-    cardNumber: '**** **** **** 1234',
-    cardExpiry: '12/25',
-    cardHolder: 'Leonardo C',
-    earning: 21500,
-    earningChange: '+12%',
-    spending: 5392,
-    spendingChange: '-8%',
-    totalBalance: 81910,
-    totalBalanceChange: '+12.81%',
-    transactions: [
-        {
-          id: 1,
-          type: 'credit',
-        amount: 1500.00,
-        description: 'Monthly Contribution',
-          date: '2024-03-15',
-        status: 'Completed'
-        },
-        {
-          id: 2,
-          type: 'debit',
-        amount: 1200.00,
-        description: 'Group Payment',
-          date: '2024-03-10',
-        status: 'Completed'
-      },
-      {
-        id: 3,
-        type: 'credit',
-        amount: 1300.00,
-        description: 'Member Payment',
-        date: '2024-03-05',
-        status: 'Completed'
-      },
-      {
-        id: 4,
-        type: 'debit',
-        amount: 1150.00,
-        description: 'Emergency Fund',
-        date: '2024-03-01',
-        status: 'Completed'
-      }
-    ],
-    monthlyPayments: [
-      {
-        id: 1,
-        name: 'Monthly Contribution',
-        amount: 1500.00,
-        dueDate: '2024-04-01'
-      },
-      {
-        id: 2,
-        name: 'Emergency Fund',
-        amount: 1100.00,
-        dueDate: '2024-04-01'
-      },
-      {
-        id: 3,
-        name: 'Social Fund',
-        amount: 1050.00,
-        dueDate: '2024-04-01'
-        }
-      ],
-      linkedAccounts: [
-      { id: 1, type: 'card', name: 'Capitec Card', lastFour: '1890' },
-      { id: 2, type: 'bank', name: 'FNB Bank', lastFour: '1234' },
-    ],
-    notifications: [
-      { id: 1, message: 'Josep Akbar sent you R930,000', time: 'Just now' },
-      { id: 2, message: 'Water bill (R15.00)', time: 'Due', action: 'Pay now' },
-    ],
-    quickTransfer: [
-      { id: 1, name: 'Alice', avatar: 'https://i.pravatar.cc/40?img=1' },
-      { id: 2, name: 'Bob', avatar: 'https://i.pravatar.cc/40?img=2' },
-      { id: 3, name: 'Carol', avatar: 'https://i.pravatar.cc/40?img=3' },
-      { id: 4, name: 'Dave', avatar: 'https://i.pravatar.cc/40?img=4' },
-      { id: 5, name: 'Eve', avatar: 'https://i.pravatar.cc/40?img=5' },
-    ],
-    user: {
-      name: 'Leonardo C',
-      email: 'leonardoc@gmail.com',
-      avatar: 'https://i.pravatar.cc/100',
-    },
-    statistics: {
-      weekly: {
-        earning: 21500,
-        spending: 5392,
-        change: '+12%'
-      },
-      monthly: {
-        earning: 85600,
-        spending: 21500,
-        change: '+8%'
-      },
-      yearly: {
-        earning: 1027200,
-        spending: 258000,
-        change: '+15%'
-      }
-    },
-    marketplaces: [
-    {
-      id: 1,
-        name: 'Takealot',
-        logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/8a/Takealot_logo.svg/1200px-Takealot_logo.svg.png',
-        category: 'Retail'
-    },
-    {
-      id: 2,
-        name: 'Amazon',
-        logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/Amazon_logo.svg/1200px-Amazon_logo.svg.png',
-        category: 'Retail'
-    },
-    {
-      id: 3,
-        name: 'Woolworths',
-        logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/Woolworths_Logo.svg/1200px-Woolworths_Logo.svg.png',
-        category: 'Grocery'
-      },
-      {
-        id: 4,
-        name: 'Checkers',
-        logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/8a/Checkers_Logo.svg/1200px-Checkers_Logo.svg.png',
-        category: 'Grocery'
-      },
-      {
-        id: 5,
-        name: 'Pick n Pay',
-        logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/2a/Pick_n_Pay_logo.svg/1200px-Pick_n_Pay_logo.svg.png',
-        category: 'Grocery'
-      },
-      {
-        id: 6,
-        name: 'Shoprite',
-        logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/8a/Shoprite_Logo.svg/1200px-Shoprite_Logo.svg.png',
-        category: 'Grocery'
-      },
-      {
-        id: 7,
-        name: 'Makro',
-        logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/8a/Makro_Logo.svg/1200px-Makro_Logo.svg.png',
-        category: 'Wholesale'
-      },
-      {
-        id: 8,
-        name: 'Game',
-        logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/8a/Game_Logo.svg/1200px-Game_Logo.svg.png',
-        category: 'Retail'
-      }
-    ]
-  });
+  if (loading) return <div>Loading...</div>;
+  if (!walletData) return <div>No wallet data found.</div>;
 
   // Chart data configuration
   const chartData = {

@@ -27,10 +27,20 @@ export const login = async (email: string, password: string) => {
       profile_picture: user.profile_picture || null
     }));
     
-    return user;
-  } catch (error) {
+    // Return the expected format for the Login component
+    return {
+      success: true,
+      message: 'Login successful',
+      user: user,
+      redirectTo: user.role === 'admin' ? '/admin-dashboard' : '/dashboard'
+    };
+  } catch (error: any) {
     console.error('Login error:', error);
-    throw error;
+    // Return error in the expected format instead of throwing
+    return {
+      success: false,
+      message: error.response?.data?.error || 'Login failed. Please check your credentials.'
+    };
   }
 };
 

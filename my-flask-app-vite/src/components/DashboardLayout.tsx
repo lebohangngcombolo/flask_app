@@ -11,6 +11,8 @@ import {
   Menu
 } from 'lucide-react';
 import ProfileDropdown from './ProfileDropdown';
+import { useAuth } from '../hooks/useAuth';
+import ReactTooltip from 'react-tooltip';
 
 const sidebarItems = [
   { label: 'User', path: '/dashboard/profile', icon: User },
@@ -31,17 +33,11 @@ const topNavItems = [
   'AI features',
 ];
 
-// Dummy user for ProfileDropdown (replace with real user data)
-const user = {
-  name: 'Member User',
-  email: 'member@example.com',
-  // profilePicture: 'url-to-profile-pic.jpg'
-};
-
 const DashboardLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false); // Collapsed by default
+  const { user } = useAuth();
 
   return (
     <div className="flex h-screen">

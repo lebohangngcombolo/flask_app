@@ -58,16 +58,9 @@ const adminCards = [
 ];
 
 const AdminDashboard: React.FC = () => {
-  const [stats, setStats] = useState({
-    totalMembers: 0,
-    totalContributions: 0,
-    monthlyGoal: 0,
-    goalProgress: 0,
-    recentTransactions: [],
-    upcomingEvents: [],
-    notifications: []
-  });
-  const [groups, setGroups] = useState([]);
+  const [stats, setStats] = useState<any>(null);
+  const [groups, setGroups] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showCreateGroup, setShowCreateGroup] = useState(false);
 
@@ -78,27 +71,17 @@ const AdminDashboard: React.FC = () => {
           adminAPI.getStats(),
           adminAPI.getGroups()
         ]);
-        
         setStats(statsResponse.data);
         setGroups(groupsResponse.data);
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
         setError('Failed to load dashboard data. Please try again later.');
+      } finally {
+        setLoading(false);
       }
     };
-
     fetchData();
   }, []);
-
-  // Mock chart data
-  const chartData = [
-    { name: 'Jan', value: 12000 },
-    { name: 'Feb', value: 19000 },
-    { name: 'Mar', value: 15000 },
-    { name: 'Apr', value: 25000 },
-    { name: 'May', value: 22000 },
-    { name: 'Jun', value: 30000 }
-  ];
 
   const handleCreateGroup = async (data: any) => {
     try {
@@ -110,6 +93,8 @@ const AdminDashboard: React.FC = () => {
       toast.error('Failed to create group');
     }
   };
+
+  if (loading) return <div>Loading...</div>;
 
   return (
     <div className="flex min-h-screen bg-gray-50">

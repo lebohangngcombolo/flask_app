@@ -6,13 +6,17 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 interface ProfileDropdownProps {
   user: {
-    name: string;
-    email: string;
+    name?: string;
+    email?: string;
     profilePicture?: string;
-  };
+  } | null;
 }
 
 const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ user }) => {
+  if (!user) {
+    return <div>Loading...</div>;
+  }
+
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState({
     email: true,

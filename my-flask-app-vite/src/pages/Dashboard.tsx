@@ -6,7 +6,7 @@ import api from '../services/api';
 const Dashboard = () => {
   const [user, setUser] = useState(null);
   const [userStats, setUserStats] = useState(null);
-  const [availableGroups, setAvailableGroups] = useState([]);
+  const [availableGroups, setAvailableGroups] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const navigate = useNavigate();
@@ -116,32 +116,36 @@ const Dashboard = () => {
         <div className="bg-white p-6 rounded-lg shadow-md">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Available Groups</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {availableGroups.map((group) => (
-              <div key={group.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
-                <h3 className="font-medium text-gray-900">{group.name}</h3>
-                <p className="text-sm text-gray-600 mt-1">{group.description}</p>
-                <div className="mt-4 space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Contribution:</span>
-                    <span className="font-medium">R{group.contributionAmount?.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Frequency:</span>
-                    <span className="font-medium">{group.contributionFrequency}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Members:</span>
-                    <span className="font-medium">{group.memberCount}/{group.maxMembers || '∞'}</span>
-                  </div>
+              {Array.isArray(availableGroups) ? (
+                availableGroups.map((group) => (
+                  <div key={group.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
+                    <h3 className="font-medium text-gray-900">{group.name}</h3>
+                    <p className="text-sm text-gray-600 mt-1">{group.description}</p>
+                    <div className="mt-4 space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Contribution:</span>
+                        <span className="font-medium">R{group.contributionAmount?.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Frequency:</span>
+                        <span className="font-medium">{group.contributionFrequency}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Members:</span>
+                        <span className="font-medium">{group.memberCount}/{group.maxMembers || '∞'}</span>
+                      </div>
                     </div>
                     <button
-                  onClick={() => navigate(`/groups/${group.id}`)}
-                  className="mt-4 w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                      onClick={() => navigate(`/groups/${group.id}`)}
+                      className="mt-4 w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                     >
                       View Details
                     </button>
                   </div>
-              ))}
+                ))
+              ) : (
+                <div>Loading...</div>
+              )}
         </div>
         </div>
     </div>

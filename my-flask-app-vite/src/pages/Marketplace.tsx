@@ -32,6 +32,7 @@ import {
 } from 'lucide-react'; // Import necessary icons
 import { toast } from 'react-hot-toast';
 import { marketplaceAPI } from '../services/api';
+import { useAuth } from '../hooks/useAuth';
 
 
 // --- Mock Data for Offers ---
@@ -141,9 +142,10 @@ const OfferCard: React.FC<OfferCardProps> = ({ offer, navigate }) => {
 };
 
 const Marketplace: React.FC = () => {
-  const navigate = useNavigate();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('marketplace');
   const [offers, setOffers] = useState<Offer[]>([]);
+  const [loading, setLoading] = useState(true);
 
   // Define the sidebar navigation items
   const sidebarNavItems = [
@@ -164,26 +166,21 @@ const Marketplace: React.FC = () => {
     path: '/dashboard/marketplace'
   };
 
-  // Mock user data
-  const mockUser = {
-    name: 'User',
-    role: 'member' as const,
-    email: 'user@example.com'
-  };
-
   useEffect(() => {
     const fetchOffers = async () => {
       try {
         const response = await marketplaceAPI.getOffers();
         setOffers(response.data);
       } catch (err) {
-        console.error('Error fetching offers:', err);
-        // Handle error appropriately
+        // Handle error
+      } finally {
+        setLoading(false);
       }
     };
-
     fetchOffers();
   }, []);
+
+  if (loading) return <div>Loading...</div>;
 
   return (
     <div className="flex-1 p-4">
@@ -268,7 +265,7 @@ const Marketplace: React.FC = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {offers.map(offer => (
-          <OfferCard key={offer.id} offer={offer} navigate={navigate} />
+          <OfferCard key={offer.id} offer={offer} navigate={useNavigate()} />
         ))}
       </div>
     </div>
