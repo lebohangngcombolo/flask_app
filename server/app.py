@@ -77,11 +77,19 @@ class User(db.Model):
     full_name = db.Column(db.String(100), nullable=False)
     phone = db.Column(db.String(20), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
+    date_of_birth = db.Column(db.Date)
+    gender = db.Column(db.String(20))
+    employment_status = db.Column(db.String(100))
+    two_factor_enabled = db.Column(db.Boolean, default=False)
     password = db.Column(db.String(200), nullable=False)
+    conversations = db.relationship('Conversation', backref='user', lazy=True)
     role = db.Column(db.String(20), default='member')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     profile_picture = db.Column(db.String(200))
+    email_announcements = db.Column(db.Boolean, default=True)
     is_verified = db.Column(db.Boolean, default=False)
+    push_announcements = db.Column(db.Boolean, default=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     otps = db.relationship('OTP', backref='user', lazy=True)
     verification_code = db.Column(db.String(6), nullable=True)
     verification_code_expiry = db.Column(db.DateTime, nullable=True)
@@ -103,6 +111,47 @@ class User(db.Model):
         self.verification_code_expiry = datetime.utcnow() + timedelta(minutes=10)
         db.session.commit()
         return self.verification_code
+
+def serialize_profile(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "email": self.email,
+            "phone": self.phone,
+            "date_of_birth": str(self.date_of_birth) if self.date_of_birth else None,
+            "gender": self.gender,
+            "employment_status": self.employment_status,
+        }
+
+    def serialize_communication(self):
+        return {
+            "email_announcements": self.email_announcements,
+            "email_stokvel_updates": self.email_stokvel_updates,
+            "push_announcements": self.push_announcements
+        }
+
+    def serialize_privacy(self):
+        return {
+            "data_for_personalization": True,  # Make dynamic if needed
+            "data_for_analytics": True,
+            "data_for_third_parties": False
+        }
+
+    def get_sessions(self):
+        return []  # Implement session store if needed
+
+    def revoke_session(self, session_id):
+        pass  # Implement session logic if needed
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'email': self.email,
+            'phone': self.phone,
+            'role': self.role,
+            'is_verified': self.is_verified
+        }
 
 class StokvelGroup(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -222,6 +271,29 @@ class OTP(db.Model):
 
     def is_valid(self):
         return datetime.utcnow() < self.expires_at and not self.is_used
+
+class Conversation(db.Model):
+    __tablename__ = 'conversations'
+
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = db.Column(db.String(36), db.ForeignKey('users.id'))
+    title = db.Column(db.String(200))
+    is_stokvel_related = db.Column(db.Boolean, default=False)
+    stokvel_id = db.Column(db.String(36), db.ForeignKey('stokvels.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    messages = db.relationship('Message', backref='conversation', lazy=True, cascade='all, delete-orphan')
+
+
+class Message(db.Model):
+    __tablename__ = 'messages'
+
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    conversation_id = db.Column(db.String(36), db.ForeignKey('conversations.id'), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    role = db.Column(db.String(20), nullable=False)  # 'user', 'assistant'
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    is_read = db.Column(db.Boolean, default=False)
 
 # JWT token decorator
 def token_required(f):
@@ -1091,3 +1163,218 @@ def resend_verification():
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
+
+@app.route('/start', methods=['POST'])
+@jwt_required()
+def start_chat():
+    user_id = get_jwt_identity()
+    data = request.get_json() or {}
+    title = data.get('title', 'New Chat')
+    is_stokvel_related = data.get('is_stokvel_related', False)
+    stokvel_id = data.get('stokvel_id')
+
+    conversation = Conversation(
+        id=str(uuid.uuid4()),
+        user_id=user_id,
+        title=title,
+        is_stokvel_related=is_stokvel_related,
+        stokvel_id=stokvel_id
+    )
+    db.session.add(conversation)
+    db.session.commit()
+
+    # Add system message
+    system_message = Message(
+        conversation_id=conversation.id,
+        role='system',
+        content='You are a helpful assistant. Answer concisely in 1-3 sentences.'
+    )
+    db.session.add(system_message)
+    db.session.commit()
+
+    return jsonify({"conversation_id": conversation.id}), 201
+
+@app.route('/message', methods=['POST'])
+@jwt_required()
+def send_message():
+    user_id = get_jwt_identity()
+    data = request.get_json()
+    conversation_id = data.get('conversation_id')
+    user_message = data.get('message')
+
+    conversation = Conversation.query.filter_by(id=conversation_id, user_id=user_id).first()
+    if not conversation:
+        return jsonify({"error": "Conversation not found."}), 404
+
+    # Add user message
+    user_msg = Message(
+        conversation_id=conversation_id,
+        role='user',
+        content=user_message
+    )
+    db.session.add(user_msg)
+    db.session.commit()
+
+    # Fetch all messages for OpenAI context
+    messages = [
+        {"role": m.role, "content": m.content}
+        for m in Message.query.filter_by(conversation_id=conversation_id).order_by(Message.created_at).all()
+    ]
+
+    # Call OpenRouter API
+    try:
+        completion = client.chat.completions.create(
+            extra_headers={
+                "HTTP-Referer": os.getenv('FRONTEND_URL', 'http://localhost:3000'),
+                "X-Title": "Stokvel Assistant",
+            },
+            model="meta-llama/llama-3.3-8b-instruct:free",
+            messages=messages,
+            max_tokens=150
+        )
+        ai_response = completion.choices[0].message.content
+
+        # Store AI response
+        assistant_msg = Message(
+            conversation_id=conversation_id,
+            role='assistant',
+            content=ai_response
+        )
+        db.session.add(assistant_msg)
+        db.session.commit()
+
+        return jsonify({
+            "response": ai_response,
+            "conversation_id": conversation_id
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# ===========================
+# ROUTES - USER PROFILE
+# ===========================
+
+@app.route('/api/user/profile', methods=['GET'])
+@jwt_required()
+@token_required
+def get_profile(user):
+    try:
+        return jsonify({
+            "name": user.name,
+            "email": user.email,
+            "phone": user.phone,
+            "date_of_birth": user.date_of_birth.isoformat() if user.date_of_birth else None,
+            "gender": user.gender,
+            "employment_status": user.employment_status,
+            "registration_date": user.created_at.isoformat(),
+            "role": user.role,
+            "two_factor_enabled": user.two_factor_enabled
+        }), 200
+    except Exception as e:
+        return handle_error(e, log_trace=True)
+
+@app.route('/api/user/profile', methods=['PUT', 'OPTIONS'])
+@jwt_required()
+@token_required
+def update_profile(user):
+    try:
+        data = request.get_json()
+        user.name = data.get('name', user.name)
+        user.email = data.get('email', user.email)
+        user.phone = data.get('phone', user.phone)
+        user.gender = data.get('gender', user.gender)
+        user.employment_status = data.get('employment_status', user.employment_status)
+        if 'date_of_birth' in data:
+            user.date_of_birth = datetime.fromisoformat(data['date_of_birth'])
+
+        db.session.commit()
+        return jsonify({"message": "Profile updated successfully"}), 200
+    except ValueError:
+        return jsonify({"error": "Invalid date format. Use YYYY-MM-DD."}), 400
+    except Exception as e:
+        return handle_error(e, log_trace=True)
+
+@app.route('/api/user/security/password', methods=['PUT', 'OPTIONS'])
+@jwt_required()
+@token_required
+def change_password(user):
+    try:
+        data = request.get_json()
+        if not all(k in data for k in ['current_password', 'new_password']):
+            return jsonify({"error": "Missing required fields"}), 400
+
+        if not verify_password(user.password_hash, data['current_password']):
+            return jsonify({"error": "Current password is incorrect"}), 401
+
+        update_password(user, data['new_password'])
+        db.session.commit()
+        return jsonify({"message": "Password changed successfully"}), 200
+    except Exception as e:
+        return handle_error(e, log_trace=True)
+
+@app.route('/api/user/security/2fa', methods=['POST', 'OPTIONS'])
+@jwt_required()
+@token_required
+def toggle_two_factor(user):
+    try:
+        user.two_factor_enabled = not user.two_factor_enabled
+        db.session.commit()
+        return jsonify({
+            "message": "Two-factor authentication updated",
+            "two_factor_enabled": user.two_factor_enabled
+        }), 200
+    except Exception as e:
+        return handle_error(e, log_trace=True)
+
+@app.route('/api/user/communication', methods=['GET', 'OPTIONS'])
+@skip_auth_for_options
+@jwt_required()
+@token_required
+def get_communication_preferences(user):
+    try:
+        return jsonify({
+            "email_announcements": user.email_announcements,
+            "email_stokvel_updates": user.email_stokvel_updates,
+            "push_announcements": user.push_announcements
+        }), 200
+    except Exception as e:
+        return handle_error(e, log_trace=True)
+
+@app.route('/api/user/communication', methods=['PUT', 'OPTIONS'])
+@jwt_required()
+@token_required
+def update_communication_preferences(user):
+    try:
+        data = request.get_json()
+        for field in ["email_announcements", "email_stokvel_updates", "push_announcements"]:
+            if field in data:
+                setattr(user, field, data[field])
+
+        db.session.commit()
+        return jsonify({"message": "Communication preferences updated successfully"}), 200
+    except Exception as e:
+        return handle_error(e, log_trace=True)
+
+@app.route('/api/user/privacy', methods=['GET', 'OPTIONS'])
+@jwt_required()
+@token_required
+def get_privacy_settings(user):
+    try:
+        return jsonify({
+            "data_for_personalization": True,
+            "data_for_analytics": True,
+            "data_for_third_parties": False
+        }), 200
+    except Exception as e:
+        return handle_error(e, log_trace=True)
+
+@app.route('/api/user/account', methods=['DELETE', 'OPTIONS'])
+@jwt_required()
+@token_required
+def delete_account(user):
+    try:
+        db.session.delete(user)
+        db.session.commit()
+        return jsonify({"message": "Account deleted successfully"}), 200
+    except Exception as e:
+        return handle_error(e, log_trace=True)
