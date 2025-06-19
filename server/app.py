@@ -21,6 +21,9 @@ import logging
 import string
 from iStokvel.utils.email_utils import send_verification_email
 from flask_migrate import Migrate
+from openai import OpenAI
+from models import db, User, Conversation, Message
+import uuid
 
 # -------------------- CONFIGURATION --------------------
 load_dotenv()
@@ -103,6 +106,48 @@ class User(db.Model):
         self.verification_code_expiry = datetime.utcnow() + timedelta(minutes=10)
         db.session.commit()
         return self.verification_code
+
+    def serialize_profile(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "email": self.email,
+            "phone": self.phone,
+            "date_of_birth": str(self.date_of_birth) if self.date_of_birth else None,
+            "gender": self.gender,
+            "employment_status": self.employment_status,
+        }
+
+    def serialize_communication(self):
+        return {
+            "email_announcements": self.email_announcements,
+            "email_stokvel_updates": self.email_stokvel_updates,
+            "push_announcements": self.push_announcements
+        }
+
+    def serialize_privacy(self):
+        return {
+            "data_for_personalization": True,  # Make dynamic if needed
+            "data_for_analytics": True,
+            "data_for_third_parties": False
+        }
+
+    def get_sessions(self):
+        return []  # Implement session store if needed
+
+    def revoke_session(self, session_id):
+        pass  # Implement session logic if needed
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'email': self.email,
+            'phone': self.phone,
+            'role': self.role,
+            'is_verified': self.is_verified
+        }
+
 
 class StokvelGroup(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -237,6 +282,29 @@ class UserSession(db.Model):
     ip_address = db.Column(db.String(45))
     login_time = db.Column(db.DateTime, default=datetime.utcnow)
     is_active = db.Column(db.Boolean, default=True)
+
+class Conversation(db.Model):
+    __tablename__ = 'conversations'
+
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = db.Column(db.String(36), db.ForeignKey('users.id'))
+    title = db.Column(db.String(200))
+    is_stokvel_related = db.Column(db.Boolean, default=False)
+    stokvel_id = db.Column(db.String(36), db.ForeignKey('stokvels.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    messages = db.relationship('Message', backref='conversation', lazy=True, cascade='all, delete-orphan')
+
+
+class Message(db.Model):
+    __tablename__ = 'messages'
+
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    conversation_id = db.Column(db.String(36), db.ForeignKey('conversations.id'), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    role = db.Column(db.String(20), nullable=False)  # 'user', 'assistant'
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    is_read = db.Column(db.Boolean, default=False)
 
 # -------------------- DECORATORS --------------------
 def token_required(f):
@@ -1323,6 +1391,99 @@ def download_data():
         }
     }
     return jsonify(data)
+
+# Initialize OpenAI client
+client = OpenAI(
+    base_url="https://openrouter.ai/api/v1",
+    api_key=os.getenv("OPENROUTER_API_KEY")
+)
+
+@app.route('/start', methods=['POST'])
+@jwt_required()
+def start_chat():
+    user_id = get_jwt_identity()
+    data = request.get_json() or {}
+    title = data.get('title', 'New Chat')
+    is_stokvel_related = data.get('is_stokvel_related', False)
+    stokvel_id = data.get('stokvel_id')
+
+    conversation = Conversation(
+        id=str(uuid.uuid4()),
+        user_id=user_id,
+        title=title,
+        is_stokvel_related=is_stokvel_related,
+        stokvel_id=stokvel_id
+    )
+    db.session.add(conversation)
+    db.session.commit()
+
+    # Add system message
+    system_message = Message(
+        conversation_id=conversation.id,
+        role='system',
+        content='You are a helpful assistant. Answer concisely in 1-3 sentences.'
+    )
+    db.session.add(system_message)
+    db.session.commit()
+
+    return jsonify({"conversation_id": conversation.id}), 201
+
+@app.route('/message', methods=['POST'])
+@jwt_required()
+def send_message():
+    user_id = get_jwt_identity()
+    data = request.get_json()
+    conversation_id = data.get('conversation_id')
+    user_message = data.get('message')
+
+    conversation = Conversation.query.filter_by(id=conversation_id, user_id=user_id).first()
+    if not conversation:
+        return jsonify({"error": "Conversation not found."}), 404
+
+    # Add user message
+    user_msg = Message(
+        conversation_id=conversation_id,
+        role='user',
+        content=user_message
+    )
+    db.session.add(user_msg)
+    db.session.commit()
+
+    # Fetch all messages for OpenAI context
+    messages = [
+        {"role": m.role, "content": m.content}
+        for m in Message.query.filter_by(conversation_id=conversation_id).order_by(Message.created_at).all()
+    ]
+
+    # Call OpenRouter API
+    try:
+        completion = client.chat.completions.create(
+            extra_headers={
+                "HTTP-Referer": os.getenv('FRONTEND_URL', 'http://localhost:3000'),
+                "X-Title": "Stokvel Assistant",
+            },
+            model="meta-llama/llama-3.3-8b-instruct:free",
+            messages=messages,
+            max_tokens=150
+        )
+        ai_response = completion.choices[0].message.content
+
+        # Store AI response
+        assistant_msg = Message(
+            conversation_id=conversation_id,
+            role='assistant',
+            content=ai_response
+        )
+        db.session.add(assistant_msg)
+        db.session.commit()
+
+        return jsonify({
+            "response": ai_response,
+            "conversation_id": conversation_id
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 # -------------------- MAIN --------------------
 if __name__ == '__main__':
