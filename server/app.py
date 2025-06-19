@@ -51,6 +51,13 @@ mail = Mail(app)
 migrate = Migrate(app, db)
 jwt = JWTManager(app)  # Initialize JWT
 
+# Initialize OpenAI client
+client = OpenAI(
+    base_url="https://openrouter.ai/api/v1",
+    api_key=os.getenv("OPENROUTER_API_KEY")
+)
+
+
 # Add this after creating the app
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
