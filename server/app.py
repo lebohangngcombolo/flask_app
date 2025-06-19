@@ -1331,7 +1331,6 @@ def toggle_two_factor(user):
         return handle_error(e, log_trace=True)
 
 @app.route('/api/user/communication', methods=['GET', 'OPTIONS'])
-@skip_auth_for_options
 @jwt_required()
 @token_required
 def get_communication_preferences(user):
