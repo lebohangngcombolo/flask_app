@@ -23,6 +23,13 @@ module.exports = {
         'shake': 'shake 0.5s ease-in-out',
         'slide-out': 'slideOut 0.5s ease-in',
         'slide-up': 'slideUp 0.5s ease-out',
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+        'spin': 'spin 1s linear infinite',
+=======
+>>>>>>> origin/master
+>>>>>>> 03ccbce380626419915c5ff9484c34b37668a0ea
       },
       keyframes: {
         growTrunk: {
@@ -83,6 +90,16 @@ module.exports = {
           '0%': { transform: 'translateY(20px)', opacity: '0' },
           '100%': { transform: 'translateY(0)', opacity: '1' },
         },
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+        spin: {
+          from: { transform: 'rotate(0deg)' },
+          to: { transform: 'rotate(360deg)' },
+        },
+=======
+>>>>>>> origin/master
+>>>>>>> 03ccbce380626419915c5ff9484c34b37668a0ea
       },
       colors: {
         'google-red': '#DB4437',

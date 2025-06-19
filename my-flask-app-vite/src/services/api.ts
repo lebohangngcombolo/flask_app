@@ -2,6 +2,38 @@ import axios from 'axios';
 
 // Create an axios instance with default config
 const api = axios.create({
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+  baseURL: 'http://localhost:5001',
+  timeout: 15000,
+  headers: {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json'
+  },
+  withCredentials: false
+});
+
+// Request interceptor: Attach token if present
+api.interceptors.request.use(
+  (config) => {
+    // Use 'access_token' to match what your backend returns on login
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+// Response interceptor: Optional, for logging or error handling
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    // Optionally log or handle errors here
+=======
+>>>>>>> 03ccbce380626419915c5ff9484c34b37668a0ea
   // Remove any baseURL to use relative URLs with the Vite proxy
   headers: {
     'Content-Type': 'application/json',
@@ -54,10 +86,30 @@ api.interceptors.response.use(
     } else if (error.response?.status === 403) {
       console.error('Access denied:', error.response.data.error);
     }
+<<<<<<< HEAD
+=======
+>>>>>>> origin/master
+>>>>>>> 03ccbce380626419915c5ff9484c34b37668a0ea
     return Promise.reject(error);
   }
 );
 
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+// Auth API calls
+export const authAPI = {
+  register: (userData: any) => api.post('/api/auth/register', userData),
+  login: (email: string, password: string) => api.post('/api/auth/login', { email: email.trim(), password }),
+  getCurrentUser: () => api.get('/api/users/me'),
+  verifyEmail: (email: string, verificationCode: string) => 
+    api.post('/api/verify-email', { email, verification_code: verificationCode }),
+  resendVerificationCode: (email: string) => api.post('/api/resend-verification', { email }),
+  verifyPhone: (phone: string, verificationCode: string) => 
+    api.post('/api/auth/verify-phone', { phone, verification_code: verificationCode }),
+  resendSmsVerificationCode: (phone: string) => api.post('/api/auth/resend-sms', { phone })
+=======
+>>>>>>> 03ccbce380626419915c5ff9484c34b37668a0ea
 // Auth API calls matching your Flask endpoints
 export const authAPI = {
   register: (userData: any) => {
@@ -87,26 +139,105 @@ export const authAPI = {
   
   resendVerificationCode: (email: string) =>
     api.post('/api/resend-verification', { email: email }),
+<<<<<<< HEAD
+=======
+>>>>>>> origin/master
+>>>>>>> 03ccbce380626419915c5ff9484c34b37668a0ea
 };
 
 // User API calls
 export const userAPI = {
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+  getProfile: () => api.get('/api/users/me'),
+  updateProfile: (data: any) => api.put('/api/users/me', data),
+  getUserStats: () => api.get('/api/dashboard/stats'),
+  getAvailableGroups: () => api.get('/api/groups/available')
+=======
+>>>>>>> 03ccbce380626419915c5ff9484c34b37668a0ea
   getProfile: () => api.get('/auth/me'),
   updateProfile: (data: any) => api.put('/auth/me', data),
   getUserStats: () => api.get('/api/user/stats'),
   getAvailableGroups: () => api.get('/api/user/groups'),
+<<<<<<< HEAD
+=======
+>>>>>>> origin/master
+>>>>>>> 03ccbce380626419915c5ff9484c34b37668a0ea
 };
 
 // Stokvel API calls
 export const stokvelAPI = {
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+  getStokvels: () => api.get('/api/groups/available'),
+  createStokvel: (data: any) => api.post('/api/stokvel/register-group', data),
+  getStokvelDetails: (id: string) => api.get(`/api/groups/${id}`),
+  joinStokvel: (id: string) => api.post(`/api/stokvel/join-group`, { group_id: id })
+=======
+>>>>>>> 03ccbce380626419915c5ff9484c34b37668a0ea
   getStokvels: () => api.get('/groups'),
   createStokvel: (data: any) => api.post('/groups', data),
   getStokvelDetails: (id: string) => api.get(`/groups/${id}`),
   joinStokvel: (id: string) => api.post(`/groups/${id}/join`),
+<<<<<<< HEAD
+=======
+>>>>>>> origin/master
+>>>>>>> 03ccbce380626419915c5ff9484c34b37668a0ea
 };
 
 // Admin API calls
 export const adminAPI = {
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+  getStats: () => api.get('/api/dashboard/stats'),
+  getGroups: () => api.get('/api/admin/groups'),
+  createGroup: (data: any) => api.post('/api/admin/groups', data)
+};
+
+// Dashboard API calls
+export const dashboardAPI = {
+  getUsers: () => api.get('/api/dashboard/users'),
+  manageGroups: () => api.get('/api/admin/groups'),
+  getProfile: () => api.get('/api/users/me'),
+  updateProfile: (data: any) => api.put('/api/users/me', data),
+  getMyGroups: () => api.get('/api/groups/available'),
+  getContributions: () => api.get('/api/dashboard/contributions')
+};
+
+// Polls and Meetings
+const getPolls = async () => api.get('/api/polls');
+const createPoll = async (pollData: any) => api.post('/api/polls', pollData);
+const getMeetings = async () => api.get('/api/meetings');
+const createMeeting = async (meetingData: any) => api.post('/api/meetings', meetingData);
+
+// Withdrawals
+const getWithdrawals = async () => api.get('/api/withdrawals');
+const createWithdrawal = async (withdrawalData: any) => api.post('/api/withdrawals', withdrawalData);
+const approveWithdrawal = async (withdrawalId: number) => api.post(`/api/withdrawals/${withdrawalId}/approve`);
+const rejectWithdrawal = async (withdrawalId: number) => api.post(`/api/withdrawals/${withdrawalId}/reject`);
+
+// Wallet API calls
+export const walletAPI = {
+  getWalletData: () => api.get('/api/wallet'),
+  getTransactions: () => api.get('/api/wallet/transactions'),
+  getLinkedAccounts: () => api.get('/api/wallet/linked-accounts'),
+  addLinkedAccount: (accountData: any) => api.post('/api/wallet/linked-accounts', accountData),
+  removeLinkedAccount: (accountId: number) => api.delete(`/api/wallet/linked-accounts/${accountId}`)
+};
+
+export const marketplaceAPI = {
+  getOffers: () => api.get('/api/marketplace/offers'),
+  getOfferDetails: (id: number) => api.get(`/api/marketplace/offers/${id}`),
+};
+
+export const newsAPI = {
+  getNews: () => api.get('/api/news'),
+  getNewsArticle: (id: number) => api.get(`/api/news/${id}`),
+=======
+>>>>>>> 03ccbce380626419915c5ff9484c34b37668a0ea
   getStats: () => api.get('/api/admin/stats'),
   getGroups: () => api.get('/api/admin/groups'),
   createGroup: (data: any) => api.post('/admin/groups', data),
@@ -175,6 +306,10 @@ export const dashboardAPI = {
   // Member endpoints
   getMyGroups: () => api.get('/dashboard/my-groups'),
   getContributions: () => api.get('/dashboard/contributions'),
+<<<<<<< HEAD
+=======
+>>>>>>> origin/master
+>>>>>>> 03ccbce380626419915c5ff9484c34b37668a0ea
 };
 
 export default api; 

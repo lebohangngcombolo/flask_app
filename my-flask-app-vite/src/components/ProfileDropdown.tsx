@@ -240,6 +240,24 @@ const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ user }) => {
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center space-x-2 p-2 rounded-full hover:bg-gray-100 transition-colors"
       >
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+        <>
+          {user.profilePicture ? (
+            <img
+              src={user.profilePicture}
+              alt="Profile"
+              className="w-8 h-8 rounded-full object-cover ring-2 ring-blue-500"
+            />
+          ) : (
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white">
+              <User className="w-5 h-5" />
+            </div>
+          )}
+        </>
+=======
+>>>>>>> 03ccbce380626419915c5ff9484c34b37668a0ea
         {user.profilePicture ? (
           <img
             src={user.profilePicture}
@@ -251,6 +269,10 @@ const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ user }) => {
             <User className="w-5 h-5" />
           </div>
         )}
+<<<<<<< HEAD
+=======
+>>>>>>> origin/master
+>>>>>>> 03ccbce380626419915c5ff9484c34b37668a0ea
       </motion.button>
 
       {/* Dropdown Menu */}
@@ -270,6 +292,24 @@ const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ user }) => {
                   className="relative group cursor-pointer"
                   onClick={handleProfilePictureClick}
                 >
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+                  <>
+                    {user.profilePicture ? (
+                      <img
+                        src={user.profilePicture}
+                        alt="Profile"
+                        className="w-12 h-12 rounded-full object-cover ring-2 ring-blue-500"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white">
+                        <User className="w-6 h-6" />
+                      </div>
+                    )}
+                  </>
+=======
+>>>>>>> 03ccbce380626419915c5ff9484c34b37668a0ea
                   {user.profilePicture ? (
                     <img
                       src={user.profilePicture}
@@ -281,6 +321,10 @@ const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ user }) => {
                       <User className="w-6 h-6" />
                     </div>
                   )}
+<<<<<<< HEAD
+=======
+>>>>>>> origin/master
+>>>>>>> 03ccbce380626419915c5ff9484c34b37668a0ea
                   <div className="absolute inset-0 rounded-full bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
                     <Camera className="w-6 h-6 text-white" />
                   </div>
@@ -363,6 +407,11 @@ const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ user }) => {
 };
 
 export default ProfileDropdown;
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+=======
+>>>>>>> 03ccbce380626419915c5ff9484c34b37668a0ea
 
           {/* Upload Button */}
           <div className="flex justify-center">
@@ -521,3 +570,7 @@ export default ProfileDropdown;
 };
 
 export default ProfileDropdown;
+<<<<<<< HEAD
+=======
+>>>>>>> origin/master
+>>>>>>> 03ccbce380626419915c5ff9484c34b37668a0ea

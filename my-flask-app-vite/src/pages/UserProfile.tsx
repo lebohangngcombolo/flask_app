@@ -1,5 +1,14 @@
+<<<<<<< HEAD
 import React, { useState } from 'react';
 import DashboardLayout from '../components/DashboardLayout';
+=======
+<<<<<<< HEAD
+import React, { useState, useEffect } from 'react';
+=======
+import React, { useState } from 'react';
+import DashboardLayout from '../components/DashboardLayout';
+>>>>>>> origin/master
+>>>>>>> 03ccbce380626419915c5ff9484c34b37668a0ea
 import {
   User as UserIcon, // Alias to avoid conflict if User is used elsewhere
   Shield,
@@ -20,6 +29,18 @@ import {
 import moment from 'moment'; // Import moment for date formatting
 // Import navigation items from the new file
 import { userNavItems, marketplaceNavItem } from '../navItems';
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+import { authAPI } from '../services/api';
+
+// Add to your API service (api.ts)
+export const profileAPI = {
+  getUserProfile: () => api.get('/api/profile'),
+  updateUserProfile: (data: any) => api.put('/api/profile', data),
+  getActiveSessions: () => api.get('/api/profile/sessions'),
+=======
+>>>>>>> 03ccbce380626419915c5ff9484c34b37668a0ea
 
 // Mock user data (replace with fetching from your backend)
 // This mock data is now only used for the read-only email
@@ -32,6 +53,10 @@ const mockUser = {
   dateOfBirth: '1990-01-01', // This will not be used for initial state
   gender: 'Male', // This will not be used for initial state
   // registrationDate: '2023-01-15', // We will display the current date
+<<<<<<< HEAD
+=======
+>>>>>>> origin/master
+>>>>>>> 03ccbce380626419915c5ff9484c34b37668a0ea
 };
 
 // Mock Active Sessions data
@@ -116,9 +141,42 @@ const UserProfile: React.FC = () => {
      dataForThirdParties: false, // Be cautious with defaults for data sharing
    });
 
+<<<<<<< HEAD
   // Get current date for registration date display
   const currentRegistrationDate = moment().format('YYYY-MM-DD');
 
+=======
+<<<<<<< HEAD
+  const [userEmail, setUserEmail] = useState<string>('');
+
+  // Get current date for registration date display
+  const currentRegistrationDate = moment().format('YYYY-MM-DD');
+
+  // Add useEffect to fetch user data
+  useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        const response = await authAPI.getCurrentUser();
+        setUserEmail(response.data.email);
+        setUserDetails(prev => ({
+          ...prev,
+          name: response.data.name || '',
+          // Add other fields as needed
+        }));
+      } catch (err) {
+        console.error('Error fetching user data:', err);
+        // Handle error appropriately
+      }
+    };
+
+    fetchUserData();
+  }, []);
+=======
+  // Get current date for registration date display
+  const currentRegistrationDate = moment().format('YYYY-MM-DD');
+
+>>>>>>> origin/master
+>>>>>>> 03ccbce380626419915c5ff9484c34b37668a0ea
 
   // Handlers for card actions (placeholders)
   const handleViewDetails = () => {
@@ -280,7 +338,15 @@ const UserProfile: React.FC = () => {
                       id="email"
                       name="email"
                       className="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm bg-gray-100 cursor-not-allowed"
+<<<<<<< HEAD
                       value={mockUser.email} // Display mock email (read-only) - replace with actual user email
+=======
+<<<<<<< HEAD
+                      value={userEmail} // Use the real email from state
+=======
+                      value={mockUser.email} // Display mock email (read-only) - replace with actual user email
+>>>>>>> origin/master
+>>>>>>> 03ccbce380626419915c5ff9484c34b37668a0ea
                       readOnly
                     />
                  </div>
@@ -682,6 +748,14 @@ const UserProfile: React.FC = () => {
     }
   };
 
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-pink-200 via-blue-100 to-yellow-100 p-6">
+      <div className="container mx-auto px-4 py-6">
+=======
+>>>>>>> 03ccbce380626419915c5ff9484c34b37668a0ea
 
   return (
     <DashboardLayout
@@ -692,6 +766,10 @@ const UserProfile: React.FC = () => {
       {/* User Profile Page Content */}
       {/* The main content area below the tabs will keep the light blue background */}
       <div className="container mx-auto px-4 py-6 bg-blue-50">
+<<<<<<< HEAD
+=======
+>>>>>>> origin/master
+>>>>>>> 03ccbce380626419915c5ff9484c34b37668a0ea
         <h1 className="text-3xl font-bold text-gray-900 mb-6">My Account</h1>
 
         {/* Internal Horizontal Navigation - Dark background */}
@@ -719,7 +797,15 @@ const UserProfile: React.FC = () => {
           {renderContent()}
         </div>
       </div>
+<<<<<<< HEAD
     </DashboardLayout>
+=======
+<<<<<<< HEAD
+    </div>
+=======
+    </DashboardLayout>
+>>>>>>> origin/master
+>>>>>>> 03ccbce380626419915c5ff9484c34b37668a0ea
   );
 };
 

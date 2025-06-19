@@ -1,7 +1,21 @@
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+import React, { useState, useEffect } from 'react';
+import Layout from '../components/Layout';
+import { motion } from 'framer-motion';
+import { Calendar, User } from 'lucide-react'; // Icons for date and author
+import { newsAPI } from '../services/api';
+=======
+>>>>>>> 03ccbce380626419915c5ff9484c34b37668a0ea
 import React from 'react';
 import Layout from '../components/Layout';
 import { motion } from 'framer-motion';
 import { Calendar, User } from 'lucide-react'; // Icons for date and author
+<<<<<<< HEAD
+=======
+>>>>>>> origin/master
+>>>>>>> 03ccbce380626419915c5ff9484c34b37668a0ea
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -18,6 +32,28 @@ const itemVariants = {
   visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: 'easeOut' } },
 };
 
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+const News: React.FC = () => {
+  const [newsArticles, setNewsArticles] = useState([]);
+
+  useEffect(() => {
+    const fetchNews = async () => {
+      try {
+        const response = await newsAPI.getNews();
+        setNewsArticles(response.data);
+      } catch (err) {
+        console.error('Error fetching news:', err);
+        // Handle error appropriately
+      }
+    };
+
+    fetchNews();
+  }, []);
+
+=======
+>>>>>>> 03ccbce380626419915c5ff9484c34b37668a0ea
 // Placeholder data for news articles
 const newsArticles = [
   {
@@ -59,6 +95,10 @@ const newsArticles = [
 ];
 
 const News: React.FC = () => {
+<<<<<<< HEAD
+=======
+>>>>>>> origin/master
+>>>>>>> 03ccbce380626419915c5ff9484c34b37668a0ea
   return (
     <Layout>
       <div className="container mx-auto px-4 py-16 md:py-24">

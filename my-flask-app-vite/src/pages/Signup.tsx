@@ -1,8 +1,21 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+<<<<<<< HEAD
 import { signup, verifyEmailCode, resendEmailVerificationCode } from '../utils/auth';
 import { toast } from 'react-toastify';
 import PageTransition from '../components/PageTransition';
+=======
+<<<<<<< HEAD
+import { signup, verifyEmailCode, resendEmailVerificationCode, verifyPhoneCode, resendSmsVerificationCode } from '../utils/auth';
+import { toast } from 'react-toastify';
+import PageTransition from '../components/PageTransition';
+import GoogleAuthButton from '../components/GoogleAuthButton';
+=======
+import { signup, verifyEmailCode, resendEmailVerificationCode } from '../utils/auth';
+import { toast } from 'react-toastify';
+import PageTransition from '../components/PageTransition';
+>>>>>>> origin/master
+>>>>>>> 03ccbce380626419915c5ff9484c34b37668a0ea
 
 const Signup: React.FC = () => {
   const navigate = useNavigate();
@@ -20,6 +33,14 @@ const Signup: React.FC = () => {
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [otpError, setOtpError] = useState('');
   const [userEmailForVerification, setUserEmailForVerification] = useState('');
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+  const [userPhoneForVerification, setUserPhoneForVerification] = useState('');
+  const [verificationMethod, setVerificationMethod] = useState<'email' | 'phone' | null>(null);
+=======
+>>>>>>> origin/master
+>>>>>>> 03ccbce380626419915c5ff9484c34b37668a0ea
   const [showTransition, setShowTransition] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -105,6 +126,24 @@ const Signup: React.FC = () => {
           phoneNumber: formData.phoneNumber,
         });
 
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+        if (result.success) {
+          setSuccessMessage(result.message || 'Registration successful. Please verify your account.');
+          setErrors({});
+          setOtpError('');
+          setShowOtpVerification(true);
+
+          if (formData.email) {
+            setVerificationMethod('email');
+            setUserEmailForVerification(formData.email);
+          } else {
+            setVerificationMethod('phone');
+            setUserPhoneForVerification(formData.phoneNumber);
+          }
+=======
+>>>>>>> 03ccbce380626419915c5ff9484c34b37668a0ea
         // Check for successful registration
         if (result.success) {
           setSuccessMessage(result.message || 'Registration successful. Please verify your email.');
@@ -112,11 +151,22 @@ const Signup: React.FC = () => {
           setShowOtpVerification(true);
           setErrors({});
           setOtpError('');
+<<<<<<< HEAD
+=======
+>>>>>>> origin/master
+>>>>>>> 03ccbce380626419915c5ff9484c34b37668a0ea
         } else {
           setErrors({ submit: result.message || 'Registration failed' });
         }
       } catch (error: any) {
+<<<<<<< HEAD
         console.error('Registration error:', error);
+=======
+<<<<<<< HEAD
+=======
+        console.error('Registration error:', error);
+>>>>>>> origin/master
+>>>>>>> 03ccbce380626419915c5ff9484c34b37668a0ea
         setErrors({ 
           submit: error.response?.data?.error || error.response?.data?.message || 'An error occurred during registration' 
         });
@@ -137,6 +187,28 @@ const Signup: React.FC = () => {
 
     setIsLoading(true);
     try {
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+      let result;
+      if (verificationMethod === 'email') {
+        result = await verifyEmailCode(userEmailForVerification, verificationCode);
+      } else if (verificationMethod === 'phone') {
+        result = await verifyPhoneCode(userPhoneForVerification, verificationCode);
+      }
+
+      if (result?.success) {
+        toast.success(result.message);
+        setSuccessMessage(result.message);
+        setUserEmailForVerification('');
+        setUserPhoneForVerification('');
+        setOtp(['', '', '', '', '', '']);
+        setOtpError('');
+          navigate('/login');
+      } else {
+        setOtpError(result?.message || 'Verification failed');
+=======
+>>>>>>> 03ccbce380626419915c5ff9484c34b37668a0ea
       const result = await verifyEmailCode(userEmailForVerification, verificationCode);
 
       if (result.success) {
@@ -150,6 +222,10 @@ const Signup: React.FC = () => {
           navigate('/login');
       } else {
         setOtpError(result.message);
+<<<<<<< HEAD
+=======
+>>>>>>> origin/master
+>>>>>>> 03ccbce380626419915c5ff9484c34b37668a0ea
       }
     } catch (error: any) {
       setOtpError(error.response?.data?.error || error.response?.data?.message || 'Verification failed. Please try again.');
@@ -159,14 +235,35 @@ const Signup: React.FC = () => {
   };
 
   const handleResendCode = async () => {
+<<<<<<< HEAD
     if (!userEmailForVerification) return;
 
+=======
+<<<<<<< HEAD
+=======
+    if (!userEmailForVerification) return;
+
+>>>>>>> origin/master
+>>>>>>> 03ccbce380626419915c5ff9484c34b37668a0ea
     setIsLoading(true);
     setOtpError('');
     setSuccessMessage('');
 
     try {
+<<<<<<< HEAD
       const result = await resendEmailVerificationCode(userEmailForVerification);
+=======
+<<<<<<< HEAD
+      let result;
+      if (verificationMethod === 'email') {
+        result = await resendEmailVerificationCode(userEmailForVerification);
+      } else if (verificationMethod === 'phone') {
+        result = await resendSmsVerificationCode(userPhoneForVerification);
+      }
+=======
+      const result = await resendEmailVerificationCode(userEmailForVerification);
+>>>>>>> origin/master
+>>>>>>> 03ccbce380626419915c5ff9484c34b37668a0ea
       if (result.success) {
         toast.success(result.message);
         setOtp(['', '', '', '', '', '']);
@@ -189,6 +286,7 @@ const Signup: React.FC = () => {
     }, 500);
   };
 
+<<<<<<< HEAD
   // NEW: Google Sign-In Handler
   const handleGoogleSignIn = async () => {
     setIsLoading(true); // Optional: Set loading state while redirecting
@@ -216,6 +314,17 @@ const Signup: React.FC = () => {
     <div className="h-screen bg-gradient-to-br from-blue-50 via-white to-blue-50 relative overflow-hidden">
       <PageTransition show={showTransition} />
 
+=======
+  return (
+<<<<<<< HEAD
+    <PageTransition show={showTransition}>
+    <div className="h-screen bg-gradient-to-br from-blue-50 via-white to-blue-50 relative overflow-hidden">
+=======
+    <div className="h-screen bg-gradient-to-br from-blue-50 via-white to-blue-50 relative overflow-hidden">
+      <PageTransition show={showTransition} />
+
+>>>>>>> origin/master
+>>>>>>> 03ccbce380626419915c5ff9484c34b37668a0ea
       {/* Animated Coins Background */}
       <div className="absolute inset-0 overflow-hidden">
         {[...Array(20)].map((_, index) => (
@@ -256,11 +365,31 @@ const Signup: React.FC = () => {
               </svg>
             </button>
             <h2 className="text-2xl font-bold text-gray-900 mb-1">
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+                {showOtpVerification
+                  ? verificationMethod === 'email'
+                    ? 'Verify Your Email'
+                    : 'Verify Your Phone Number'
+                  : 'Create Your Account'}
+            </h2>
+            <p className="text-sm text-gray-600">
+              {showOtpVerification 
+                  ? verificationMethod === 'email'
+                ? `Enter the 6-digit code sent to ${userEmailForVerification}`
+                    : `Enter the 6-digit code sent to ${userPhoneForVerification}`
+=======
+>>>>>>> 03ccbce380626419915c5ff9484c34b37668a0ea
               {showOtpVerification ? 'Verify Your Account' : 'Create Your Account'}
             </h2>
             <p className="text-sm text-gray-600">
               {showOtpVerification 
                 ? `Enter the 6-digit code sent to ${userEmailForVerification}`
+<<<<<<< HEAD
+=======
+>>>>>>> origin/master
+>>>>>>> 03ccbce380626419915c5ff9484c34b37668a0ea
                 : 'Join i-STOKVEL and start your savings journey'}
             </p>
           </div>
@@ -457,10 +586,20 @@ const Signup: React.FC = () => {
             </div>
 
             <div className="space-y-3">
+<<<<<<< HEAD
               <button
                 type="button"
                 onClick={handleGoogleSignIn}
                 disabled={isLoading}
+=======
+<<<<<<< HEAD
+              <GoogleAuthButton onClick={() => {
+                window.location.href = 'http://127.0.0.1:5001/api/auth/google';
+              }} />
+=======
+              <button
+                type="button"
+>>>>>>> 03ccbce380626419915c5ff9484c34b37668a0ea
                 className="w-full flex items-center justify-center gap-2 bg-white text-gray-700 border border-gray-300 py-2 px-4 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 text-sm"
               >
                 <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none">
@@ -481,12 +620,23 @@ const Signup: React.FC = () => {
                 </svg>
                 Continue with Phone
               </button>
+<<<<<<< HEAD
+=======
+>>>>>>> origin/master
+>>>>>>> 03ccbce380626419915c5ff9484c34b37668a0ea
             </div>
           </form>
           )}
         </div>
       </div>
     </div>
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+    </PageTransition>
+=======
+>>>>>>> origin/master
+>>>>>>> 03ccbce380626419915c5ff9484c34b37668a0ea
   );
 };
 
