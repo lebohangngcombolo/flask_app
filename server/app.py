@@ -51,12 +51,13 @@ mail = Mail(app)
 migrate = Migrate(app, db)
 jwt = JWTManager(app)  # Initialize JWT
 
+----------------------------------------------------------init chatbot------------------------------------------------------------------------------
 # Initialize OpenAI client
 client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
     api_key=os.getenv("OPENROUTER_API_KEY")
 )
-
+------------------------------------------------------------------------------------------------------------------------------------------------------
 
 # Add this after creating the app
 logging.basicConfig(level=logging.DEBUG)
@@ -81,6 +82,8 @@ def send_verification_sms(phone_number, otp_code):
     """Send verification SMS with OTP"""
     # Implement SMS sending logic here
     pass
+
+------------------------------------------------------------------updated models user models------------------------------------------------------------------------------
 
 # Models
 class User(db.Model):
@@ -163,7 +166,7 @@ def serialize_profile(self):
             'role': self.role,
             'is_verified': self.is_verified
         }
-
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 class StokvelGroup(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
@@ -282,6 +285,7 @@ class OTP(db.Model):
 
     def is_valid(self):
         return datetime.utcnow() < self.expires_at and not self.is_used
+---------------------------------------------------------------------------new models---------------------------------------------------------------------------------
 
 class Conversation(db.Model):
     __tablename__ = 'conversations'
@@ -306,6 +310,7 @@ class Message(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     is_read = db.Column(db.Boolean, default=False)
 
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 # JWT token decorator
 def token_required(f):
     @wraps(f)
@@ -1174,6 +1179,8 @@ def resend_verification():
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
+
+// ----------------------------------------------------------------New Routes--------------------------------------------------------------------------------------
 
 @app.route('/start', methods=['POST'])
 @jwt_required()
