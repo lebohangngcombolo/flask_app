@@ -183,13 +183,37 @@ const UserProfile: React.FC = () => {
     };
 
      // Handler for communication toggle changes
-    const handleCommunicationToggle = (settingName: keyof typeof communicationSettings) => {
-       setCommunicationSettings(prevSettings => ({
-          ...prevSettings,
-          [settingName]: !prevSettings[settingName],
-       }));
-       console.log(`${settingName} toggled. New value: ${!communicationSettings[settingName]}`);
-       // In a real app, you would send this update to your backend
+    const handleCommunicationToggle = async (settingName: keyof typeof communicationSettings) => {
+      const newSettings = {
+        ...communicationSettings,
+        [settingName]: !communicationSettings[settingName]
+      };
+      setCommunicationSettings(newSettings);
+
+      // Map frontend keys to backend keys
+      const backendMapping = {
+        emailAnnouncements: 'email_announcements',
+        emailStokvelUpdates: 'email_stokvel_updates',
+        emailMarketplaceOffers: 'email_marketplace_offers',
+        pushAnnouncements: 'push_announcements',
+        pushStokvelUpdates: 'push_stokvel_updates',
+        pushMarketplaceOffers: 'push_marketplace_offers',
+      };
+
+      // Prepare payload for backend
+      const payload: any = {};
+      Object.keys(newSettings).forEach(key => {
+        payload[backendMapping[key as keyof typeof backendMapping]] = newSettings[key as keyof typeof newSettings];
+      });
+
+      await fetch('/api/user/communication', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
     };
 
     // Handler for privacy toggle changes
@@ -251,7 +275,7 @@ const UserProfile: React.FC = () => {
          new_password: newPassword,
        });
        toast.success(response.data.message || 'Password changed successfully!');
-       setSecuritySettings(prev => ({ ...prev, currentPassword: '', newPassword: '' }));
+      setSecuritySettings(prev => ({ ...prev, currentPassword: '', newPassword: '' }));
      } catch (err: any) {
        toast.error(
          err.response?.data?.error ||
@@ -649,7 +673,7 @@ const UserProfile: React.FC = () => {
                       Add an extra layer of security to your account by enabling two-factor authentication.
                     </p>
                     <div className="flex gap-4">
-                      <button
+                       <button
                         onClick={() => setShow2FAModal(true)}
                         className={`px-6 py-2 rounded-md font-semibold shadow-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50
                           ${securitySettings.twoFactorEnabled
@@ -668,7 +692,7 @@ const UserProfile: React.FC = () => {
                         disabled={!securitySettings.twoFactorEnabled}
                       >
                         Disable 2FA
-                      </button>
+                       </button>
                     </div>
                     {/* Enable 2FA Modal */}
                     {show2FAModal && (
@@ -783,23 +807,23 @@ const UserProfile: React.FC = () => {
                       .slice(0, 2) // Only show up to 2 unique sessions
                       .map(session => (
                         <div key={session.id} className="py-3 flex justify-between items-center">
-                          <div>
+                                <div>
                             <p className="font-medium text-gray-800">
                               {session.user_agent || 'Unknown Device'}
                             </p>
                             <p className="text-sm text-gray-600">
                               {session.ip_address || 'Unknown Location'} - {moment(session.login_time).format('YYYY-MM-DD HH:mm')}
                             </p>
-                          </div>
+                                </div>
                         </div>
                       ))}
                     <div className="mt-4">
-                      <button
+                                   <button
                         onClick={handleLogoutAllSessions}
                         className="px-6 py-2 bg-red-600 text-white rounded-md font-semibold shadow-md hover:bg-red-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50"
-                      >
+                                   >
                         Logout All Other Sessions
-                      </button>
+                                   </button>
                     </div>
                  </div>
 
@@ -1026,6 +1050,27 @@ const UserProfile: React.FC = () => {
     } finally {
       setIsSendingOtp(false);
     }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'communication') {
+      fetchCommunicationSettings();
+    }
+  }, [activeTab]);
+
+  const fetchCommunicationSettings = async () => {
+    const res = await fetch('/api/user/communication', {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const data = await res.json();
+    setCommunicationSettings({
+      emailAnnouncements: data.email_announcements,
+      emailStokvelUpdates: data.email_stokvel_updates,
+      emailMarketplaceOffers: data.email_marketplace_offers,
+      pushAnnouncements: data.push_announcements,
+      pushStokvelUpdates: data.push_stokvel_updates,
+      pushMarketplaceOffers: data.push_marketplace_offers,
+    });
   };
 
   return (

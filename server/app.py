@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, Response, make_response
+from flask import Flask, request, jsonify, Response, make_response, send_file
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -285,6 +285,38 @@ class Message(db.Model):
 
 #------------------------------------------------------------------------------------------
 
+class KYCVerification(db.Model):
+    __tablename__ = 'kyc_verification'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    status = db.Column(db.String(20), default='pending')
+    full_name = db.Column(db.String(100))
+    date_of_birth = db.Column(db.Date)
+    id_number = db.Column(db.String(20))
+    phone = db.Column(db.String(20))
+    email = db.Column(db.String(120))
+    employment_status = db.Column(db.String(50))
+    employer_name = db.Column(db.String(100))
+    street_address = db.Column(db.String(200))
+    city = db.Column(db.String(100))
+    province = db.Column(db.String(100))
+    postal_code = db.Column(db.String(10))
+    country = db.Column(db.String(100))
+    monthly_income = db.Column(db.Float)
+    income_source = db.Column(db.String(50))
+    employment_type = db.Column(db.String(50))
+    bank_name = db.Column(db.String(100))
+    account_number = db.Column(db.String(20))
+    account_type = db.Column(db.String(20))
+    branch_code = db.Column(db.String(10))
+    id_document_path = db.Column(db.String(200))
+    proof_of_address_path = db.Column(db.String(200))
+    proof_of_income_path = db.Column(db.String(200))
+    bank_statement_path = db.Column(db.String(200))
+    verification_date = db.Column(db.DateTime)
+    rejection_reason = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 # -------------------- DECORATORS --------------------
 def token_required(f):
@@ -1405,20 +1437,7 @@ def handle_error(error):
         return jsonify({"error": "Token has expired"}), 401
     return jsonify({"error": "An unexpected error occurred"}), 500
 
-# -------------------- MAIN --------------------
-if __name__ == '__main__':
-    app.run(port=5001, debug=True)
 
-@event.listens_for(Engine, "connect")
-def connect(dbapi_connection, connection_record):
-    connection_record.info['pid'] = os.getpid()
-
-@event.listens_for(Engine, "checkout")
-def checkout(dbapi_connection, connection_record, connection_proxy):
-    pid = os.getpid()
-    if connection_record.info['pid'] != pid:
-        connection_record.info['pid'] = pid
-        connection_record.info['checked_out'] = time.time()
 
 @app.before_request
 def handle_options_requests():
@@ -1538,3 +1557,302 @@ def logout_all_sessions():
             session.is_active = False
     db.session.commit()
     return jsonify({'message': 'Logged out from all other sessions.'})
+
+    # -------------------- MAIN --------------------
+if __name__ == '__main__':
+    app.run(port=5001, debug=True)
+
+@event.listens_for(Engine, "connect")
+def connect(dbapi_connection, connection_record):
+    connection_record.info['pid'] = os.getpid()
+
+@event.listens_for(Engine, "checkout")
+def checkout(dbapi_connection, connection_record, connection_proxy):
+    pid = os.getpid()
+    if connection_record.info['pid'] != pid:
+        connection_record.info['pid'] = pid
+        connection_record.info['checked_out'] = time.time()
+
+KYC_UPLOAD_FOLDER = os.path.join(os.getcwd(), 'uploads', 'kyc_docs')
+os.makedirs(KYC_UPLOAD_FOLDER, exist_ok=True)
+
+@app.route('/api/kyc/update', methods=['PATCH'])
+@jwt_required()
+def update_kyc():
+    user_id = get_jwt_identity()
+    
+    # Find existing KYC record or create a new one in 'draft' state
+    kyc = KYCVerification.query.filter_by(user_id=user_id).first()
+    if not kyc:
+        kyc = KYCVerification(user_id=user_id, status='draft')
+        db.session.add(kyc)
+
+    # Handle file uploads
+    if request.files:
+        files = request.files
+        
+        def save_file(field_name):
+            file = files.get(field_name)
+            if file and file.filename:
+                # Validate file type
+                allowed_extensions = {'pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx'}
+                file_extension = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else ''
+                
+                if file_extension not in allowed_extensions:
+                    raise ValueError(f'File type .{file_extension} is not allowed. Please upload PDF, JPG, PNG, or DOC files.')
+                
+                # Validate file size (10MB limit)
+                file.seek(0, 2)  # Seek to end
+                file_size = file.tell()
+                file.seek(0)  # Reset to beginning
+                
+                if file_size > 10 * 1024 * 1024:  # 10MB
+                    raise ValueError('File size must be less than 10MB.')
+                
+                filename = secure_filename(f"{user_id}_{field_name}_{file.filename}")
+                file_path = os.path.join(KYC_UPLOAD_FOLDER, filename)
+                file.save(file_path)
+                return file_path
+            return None
+
+        # Save uploaded files and update database paths
+        if 'documents.idDocument' in files:
+            kyc.id_document_path = save_file('documents.idDocument')
+        if 'documents.proofOfAddress' in files:
+            kyc.proof_of_address_path = save_file('documents.proofOfAddress')
+        if 'documents.proofOfIncome' in files:
+            kyc.proof_of_income_path = save_file('documents.proofOfIncome')
+        if 'documents.bankStatement' in files:
+            kyc.bank_statement_path = save_file('documents.bankStatement')
+
+    # Handle JSON data for form fields
+    if request.is_json:
+        data = request.get_json()
+        
+        # Map frontend camelCase to backend snake_case
+        key_map = {
+            'fullName': 'full_name', 'dateOfBirth': 'date_of_birth', 'idNumber': 'id_number',
+            'employmentStatus': 'employment_status', 'employerName': 'employer_name',
+            'streetAddress': 'street_address', 'postalCode': 'postal_code', 'monthlyIncome': 'monthly_income',
+            'incomeSource': 'income_source', 'employmentType': 'employment_type', 'bankName': 'bank_name',
+            'accountNumber': 'account_number', 'accountType': 'account_type', 'branchCode': 'branch_code'
+        }
+
+        # data will be like {'personal': {'fullName': 'John'}}
+        section_data = list(data.values())[0]
+
+        for camel_key, value in section_data.items():
+            snake_key = key_map.get(camel_key, camel_key)
+            if hasattr(kyc, snake_key):
+                # Safely handle empty strings for numeric fields
+                if snake_key == 'monthly_income' and (value == '' or value is None):
+                    setattr(kyc, snake_key, None)
+                else:
+                    setattr(kyc, snake_key, value)
+
+    try:
+        db.session.commit()
+        return jsonify({'message': 'KYC details saved successfully!'}), 200
+    except ValueError as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': 'An error occurred while saving KYC data.'}), 500
+
+@app.route('/api/kyc/submit', methods=['POST'])
+@jwt_required()
+def submit_kyc():
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+
+    # The final submission now assumes a draft KYC record exists
+    kyc = KYCVerification.query.filter_by(user_id=user_id).first()
+    if not kyc:
+        return jsonify({'error': 'Please save your details before submitting.'}), 400
+
+    files = request.files
+
+    def save_file(field):
+        file = files.get(field)
+        if file:
+            filename = secure_filename(f"{user_id}_{field}_{file.filename}")
+            file_path = os.path.join(KYC_UPLOAD_FOLDER, filename)
+            file.save(file_path)
+            return file_path
+        return None
+
+    # Update document paths
+    kyc.id_document_path = save_file('documents.idDocument') or kyc.id_document_path
+    kyc.proof_of_address_path = save_file('documents.proofOfAddress') or kyc.proof_of_address_path
+    kyc.proof_of_income_path = save_file('documents.proofOfIncome') or kyc.proof_of_income_path
+    kyc.bank_statement_path = save_file('documents.bankStatement') or kyc.bank_statement_path
+    
+    # Change status to 'pending' for review
+    kyc.status = 'pending'
+    db.session.commit()
+
+    return jsonify({'message': 'KYC submitted successfully for review', 'kyc_id': kyc.id}), 201
+
+@app.route('/api/kyc/status', methods=['GET'])
+@jwt_required()
+def get_kyc_status():
+    user_id = get_jwt_identity()
+    kyc = KYCVerification.query.filter_by(user_id=user_id).order_by(KYCVerification.created_at.desc()).first()
+    if not kyc:
+        return jsonify({'status': 'not_submitted', 'message': 'No KYC submission found.'}), 200
+
+    return jsonify({
+        'status': kyc.status,
+        'full_name': kyc.full_name,
+        'date_of_birth': str(kyc.date_of_birth) if kyc.date_of_birth else None,
+        'id_number': kyc.id_number,
+        'phone': kyc.phone,
+        'email': kyc.email,
+        'employment_status': kyc.employment_status,
+        'employer_name': kyc.employer_name,
+        'street_address': kyc.street_address,
+        'city': kyc.city,
+        'province': kyc.province,
+        'postal_code': kyc.postal_code,
+        'country': kyc.country,
+        'monthly_income': kyc.monthly_income,
+        'income_source': kyc.income_source,
+        'employment_type': kyc.employment_type,
+        'bank_name': kyc.bank_name,
+        'account_number': kyc.account_number,
+        'account_type': kyc.account_type,
+        'branch_code': kyc.branch_code,
+        'id_document_path': kyc.id_document_path,
+        'proof_of_address_path': kyc.proof_of_address_path,
+        'proof_of_income_path': kyc.proof_of_income_path,
+        'bank_statement_path': kyc.bank_statement_path,
+        'verification_date': str(kyc.verification_date) if kyc.verification_date else None,
+        'rejection_reason': kyc.rejection_reason,
+        'created_at': str(kyc.created_at),
+        'updated_at': str(kyc.updated_at)
+    }), 200
+
+@app.route('/api/admin/kyc/submissions', methods=['GET'])
+@role_required(['admin'])
+def get_kyc_submissions():
+    """Get all KYC submissions for admin review"""
+    try:
+        submissions = KYCVerification.query.all()
+        submissions_data = []
+        
+        for submission in submissions:
+            user = User.query.get(submission.user_id)
+            submissions_data.append({
+                'id': submission.id,
+                'user_id': submission.user_id,
+                'user_email': user.email if user else 'Unknown',
+                'user_name': user.full_name if user else 'Unknown',
+                'status': submission.status,
+                'full_name': submission.full_name,
+                'email': submission.email,
+                'phone': submission.phone,
+                'id_number': submission.id_number,
+                'employment_status': submission.employment_status,
+                'bank_name': submission.bank_name,
+                'account_number': submission.account_number,
+                'id_document_path': submission.id_document_path,
+                'proof_of_address_path': submission.proof_of_address_path,
+                'proof_of_income_path': submission.proof_of_income_path,
+                'bank_statement_path': submission.bank_statement_path,
+                'created_at': submission.created_at.isoformat(),
+                'updated_at': submission.updated_at.isoformat(),
+                'rejection_reason': submission.rejection_reason
+            })
+        
+        return jsonify(submissions_data), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/kyc/<int:submission_id>/approve', methods=['POST'])
+@role_required(['admin'])
+def approve_kyc(submission_id):
+    """Approve a KYC submission"""
+    try:
+        kyc = KYCVerification.query.get(submission_id)
+        if not kyc:
+            return jsonify({'error': 'KYC submission not found'}), 404
+        
+        kyc.status = 'approved'
+        kyc.verification_date = datetime.utcnow()
+        
+        # Update user verification status
+        user = User.query.get(kyc.user_id)
+        if user:
+            user.is_verified = True
+        
+        db.session.commit()
+        return jsonify({'message': 'KYC submission approved successfully'}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/kyc/<int:submission_id>/reject', methods=['POST'])
+@role_required(['admin'])
+def reject_kyc(submission_id):
+    """Reject a KYC submission"""
+    try:
+        data = request.get_json()
+        rejection_reason = data.get('rejection_reason', 'No reason provided')
+        
+        kyc = KYCVerification.query.get(submission_id)
+        if not kyc:
+            return jsonify({'error': 'KYC submission not found'}), 404
+        
+        kyc.status = 'rejected'
+        kyc.rejection_reason = rejection_reason
+        
+        db.session.commit()
+        return jsonify({'message': 'KYC submission rejected successfully'}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/kyc/document/<path:filename>', methods=['GET'])
+@jwt_required()
+def download_kyc_document(filename):
+    """Download a KYC document (only accessible by the document owner or admin)"""
+    try:
+        user_id = get_jwt_identity()
+        user = User.query.get(user_id)
+        
+        # Check if user is admin or the document belongs to them
+        if user.role != 'admin':
+            # Extract user_id from filename (format: user_id_fieldname_originalname)
+            filename_parts = filename.split('_')
+            if len(filename_parts) < 2 or filename_parts[0] != str(user_id):
+                return jsonify({'error': 'Access denied'}), 403
+        
+        file_path = os.path.join(KYC_UPLOAD_FOLDER, filename)
+        if not os.path.exists(file_path):
+            return jsonify({'error': 'File not found'}), 404
+        
+        return send_file(file_path, as_attachment=True)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/kyc/stats', methods=['GET'])
+@role_required(['admin'])
+def get_kyc_stats():
+    """Get KYC statistics for admin dashboard"""
+    try:
+        total_submissions = KYCVerification.query.count()
+        pending_submissions = KYCVerification.query.filter_by(status='pending').count()
+        approved_submissions = KYCVerification.query.filter_by(status='approved').count()
+        rejected_submissions = KYCVerification.query.filter_by(status='rejected').count()
+        
+        return jsonify({
+            'total_submissions': total_submissions,
+            'pending_submissions': pending_submissions,
+            'approved_submissions': approved_submissions,
+            'rejected_submissions': rejected_submissions
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
