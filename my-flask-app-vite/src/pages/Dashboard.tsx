@@ -18,7 +18,7 @@ const Dashboard = () => {
         setError(null);
         
         const [userResponse, statsResponse, groupsResponse] = await Promise.all([
-          api.get('/api/users/me'),
+          api.get('/api/user/profile'),
           api.get('/api/dashboard/stats'),
           api.get('/api/groups/available')
         ]);

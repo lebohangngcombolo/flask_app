@@ -22,6 +22,7 @@ import PhoneAuth from './pages/PhoneAuth';
 import KYCPage from './pages/KYC';
 import { getCurrentUser as getCurrentUserService } from './services/auth';
 import DashboardLayout from './components/DashboardLayout';
+import { Toaster } from 'react-hot-toast';
 
 const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
@@ -96,44 +97,47 @@ const App: React.FC = () => {
   }
 
   return (
-    <Router>
-      {/* ChatBot is placed outside of Routes so it's always visible */}
-      {/* You might want to conditionally render this based on user login status */}
-      <ChatBot />
-      <Routes>
-        {/* Public routes */}
-        <Route path="/" element={<LandingPage />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<Signup />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/programs" element={<Programs />} />
-        <Route path="/about" element={<AboutUs />} />
-        <Route path="/contact" element={<Contact />} />
-        <Route path="/news" element={<News />} />
+    <>
+      <Toaster position="top-center" reverseOrder={false} />
+      <Router>
+        {/* ChatBot is placed outside of Routes so it's always visible */}
+        {/* You might want to conditionally render this based on user login status */}
+        <ChatBot />
+        <Routes>
+          {/* Public routes */}
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<Signup />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/programs" element={<Programs />} />
+          <Route path="/about" element={<AboutUs />} />
+          <Route path="/contact" element={<Contact />} />
+          <Route path="/news" element={<News />} />
 
-        {/* User dashboard routes */}
-        <Route path="/dashboard" element={<UserRoute><DashboardLayout /></UserRoute>}>
-          <Route index element={<Dashboard />} />
-          <Route path="profile" element={<UserProfile />} />
-          <Route path="digital-wallet" element={<DigitalWallet />} />
-          <Route path="kyc" element={<KYCPage />} />
-          <Route path="marketplace" element={<Marketplace />} />
-          {/* Add more dashboard sub-pages here if needed */}
-        </Route>
+          {/* User dashboard routes */}
+          <Route path="/dashboard" element={<UserRoute><DashboardLayout /></UserRoute>}>
+            <Route index element={<Dashboard />} />
+            <Route path="profile" element={<UserProfile />} />
+            <Route path="digital-wallet" element={<DigitalWallet />} />
+            <Route path="kyc" element={<KYCPage />} />
+            <Route path="marketplace" element={<Marketplace />} />
+            {/* Add more dashboard sub-pages here if needed */}
+          </Route>
 
-        {/* Admin routes */}
-        <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
-        <Route path="/admin/dashboard" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
-        <Route path="/admin/users" element={<AdminRoute><UserManagement /></AdminRoute>} />
-        <Route path="/admin/stokvels" element={<AdminRoute><StokvelManagement /></AdminRoute>} />
+          {/* Admin routes */}
+          <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+          <Route path="/admin/dashboard" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+          <Route path="/admin/users" element={<AdminRoute><UserManagement /></AdminRoute>} />
+          <Route path="/admin/stokvels" element={<AdminRoute><StokvelManagement /></AdminRoute>} />
 
-        {/* Phone Auth route */}
-        <Route path="/phone-auth" element={<PhoneAuth />} />
+          {/* Phone Auth route */}
+          <Route path="/phone-auth" element={<PhoneAuth />} />
 
-        {/* Catch all route */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </Router>
+          {/* Catch all route */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Router>
+    </>
   );
 };
 

@@ -1,4 +1,5 @@
 import axios from 'axios';
+import api from '../services/api';
 
 // Create an axios instance with default config
 const api = axios.create({
@@ -37,7 +38,7 @@ api.interceptors.response.use(
 export const authAPI = {
   register: (userData: any) => api.post('/api/auth/register', userData),
   login: (email: string, password: string) => api.post('/api/auth/login', { email: email.trim(), password }),
-  getCurrentUser: () => api.get('/api/users/me'),
+  getCurrentUser: () => api.get('/api/user/profile'),
   verifyEmail: (email: string, verificationCode: string) => 
     api.post('/api/verify-email', { email, verification_code: verificationCode }),
   resendVerificationCode: (email: string) => api.post('/api/resend-verification', { email }),
@@ -48,10 +49,31 @@ export const authAPI = {
 
 // User API calls
 export const userAPI = {
-  getProfile: () => api.get('/api/users/me'),
-  updateProfile: (data: any) => api.put('/api/users/me', data),
+  getProfile: () => api.get('/api/user/profile'),
+  updateProfile: (data: any) => api.put('/api/user/profile', data),
   getUserStats: () => api.get('/api/dashboard/stats'),
   getAvailableGroups: () => api.get('/api/groups/available')
+};
+
+// Communication & Privacy
+export const communicationAPI = {
+  getPreferences: () => api.get('/api/user/communication'),
+  updatePreferences: (data: any) => api.put('/api/user/communication', data),
+};
+
+export const privacyAPI = {
+  getSettings: () => api.get('/api/user/privacy'),
+  updateSettings: (data: any) => api.put('/api/user/privacy', data),
+};
+
+// Security
+export const securityAPI = {
+  changePassword: (data: any) => api.put('/api/user/security/password', data),
+  toggle2FA: () => api.post('/api/user/security/2fa'),
+  deleteAccount: () => api.delete('/api/user/account'),
+  start2FA: (data: { method: 'email' | 'sms' }) => api.post('/api/user/security/2fa/start', data),
+  verify2FA: (data: { otp_code: string }) => api.post('/api/user/security/2fa/verify', data),
+  disable2FA: (data: { password: string }) => api.post('/api/user/security/2fa/disable', data),
 };
 
 // Stokvel API calls
@@ -73,8 +95,8 @@ export const adminAPI = {
 export const dashboardAPI = {
   getUsers: () => api.get('/api/dashboard/users'),
   manageGroups: () => api.get('/api/admin/groups'),
-  getProfile: () => api.get('/api/users/me'),
-  updateProfile: (data: any) => api.put('/api/users/me', data),
+  getProfile: () => api.get('/api/user/profile'),
+  updateProfile: (data: any) => api.put('/api/user/profile', data),
   getMyGroups: () => api.get('/api/groups/available'),
   getContributions: () => api.get('/api/dashboard/contributions')
 };

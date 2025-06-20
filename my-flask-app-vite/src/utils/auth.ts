@@ -60,26 +60,32 @@ export const signup = async (userData: {
 export const login = async (email: string, password: string) => {
   try {
     const response = await authAPI.login(email, password);
+
+    // 2FA required branch
+    if (response.data.two_factor_required) {
+      return {
+        two_factor_required: true,
+        user_id: response.data.user_id,
+        message: response.data.message || '2FA required',
+      };
+    }
+
+    // Normal login branch
     const { access_token, user } = response.data;
-    
-    // Store auth data
     localStorage.setItem('token', access_token);
     localStorage.setItem('user', JSON.stringify(user));
-    
-    // Determine redirect path based on user role
     const redirectTo = user.role === 'admin' ? '/admin-dashboard' : '/dashboard';
-    
     return {
       success: true,
       message: 'Login successful',
       redirectTo,
-      user
+      user,
     };
   } catch (error: any) {
     console.error('Login error:', error);
     return {
       success: false,
-      message: error.response?.data?.error || 'Login failed. Please check your credentials.'
+      message: error.response?.data?.error || 'Login failed. Please check your credentials.',
     };
   }
 };

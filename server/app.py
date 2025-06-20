@@ -33,6 +33,9 @@ from werkzeug.exceptions import HTTPException
 from sqlalchemy import event
 from sqlalchemy.engine import Engine
 from jwt.exceptions import ExpiredSignatureError, InvalidTokenError
+from openai import OpenAI
+import uuid
+import openai
 
 # Load environment variables from .env file
 load_dotenv()
@@ -67,14 +70,7 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 # -------------------- CORS SETUP --------------------
-CORS(app, resources={
-    r"/*": {  # Allow all routes
-        "origins": ["http://localhost:5173", "http://localhost:3000"],
-        "supports_credentials": True,
-        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization"]
-    }
-})
+CORS(app, resources={r"/api/*": {"origins": "http://localhost:5173"}}, supports_credentials=True)
 
 # -------------------- UTILITY FUNCTIONS --------------------
 def generate_otp():
@@ -100,10 +96,13 @@ class User(db.Model):
     employment_status = db.Column(db.String(100))
     is_verified = db.Column(db.Boolean, default=False)
     two_factor_enabled = db.Column(db.Boolean, default=False)
+    two_factor_method = db.Column(db.String(10), default='email')  # 'email' or 'sms'
     otps = db.relationship('OTP', backref='user', lazy=True)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     verification_code = db.Column(db.String(6), nullable=True)
     verification_code_expiry = db.Column(db.DateTime, nullable=True)
+    date_of_birth = db.Column(db.Date, nullable=True)
+    sessions = db.relationship('UserSession', backref='user', lazy=True, cascade="all, delete-orphan")
     _table_args_ = (
         db.Index('idx_user_email', 'email'),
         db.Index('idx_user_phone', 'phone'),
@@ -258,7 +257,34 @@ class UserSession(db.Model):
     last_activity = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     is_active = db.Column(db.Boolean, default=True)
 
-    user = db.relationship('User', backref=db.backref('sessions', lazy=True))
+
+#---------------------------------------------------------------------------new models-----------------------------------
+
+class Conversation(db.Model):
+    __tablename__ = 'conversations'
+
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    title = db.Column(db.String(200))
+    is_stokvel_related = db.Column(db.Boolean, default=False)
+    stokvel_id = db.Column(db.Integer, db.ForeignKey('stokvel_group.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    messages = db.relationship('Message', backref='conversation', lazy=True, cascade='all, delete-orphan')
+
+
+class Message(db.Model):
+    __tablename__ = 'messages'
+
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    conversation_id = db.Column(db.String(36), db.ForeignKey('conversations.id'), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    role = db.Column(db.String(20), nullable=False)  # 'user', 'assistant'
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    is_read = db.Column(db.Boolean, default=False)
+
+#------------------------------------------------------------------------------------------
+
 
 # -------------------- DECORATORS --------------------
 def token_required(f):
@@ -393,8 +419,16 @@ def login():
         return jsonify({'error': 'Invalid email or password'}), 401
 
     if user.two_factor_enabled:
-        # 2FA logic here
-        pass
+        otp_code = generate_otp()
+        expiry = datetime.utcnow() + timedelta(minutes=10)
+        otp = OTP(user_id=user.id, code=otp_code, expires_at=expiry)
+        db.session.add(otp)
+        db.session.commit()
+        if user.two_factor_method == 'sms':
+            send_verification_sms(user.phone, otp_code)
+        else:
+            send_verification_email(user.email, otp_code)
+        return jsonify({'message': '2FA code sent', 'user_id': user.id, 'two_factor_required': True}), 200
 
     access_token = create_access_token(identity=str(user.id))
 
@@ -440,26 +474,6 @@ def get_current_user():
         'email': user.email,
         'role': user.role,
         'profilePicture': user.profile_picture
-    })
-
-@app.route('/api/users/me', methods=['GET'])
-@jwt_required()
-def get_user_profile():
-    user_id = get_jwt_identity()
-    user = User.query.get(user_id)
-    if not user:
-        return jsonify({'error': 'User not found'}), 404
-    return jsonify({
-        'id': user.id,
-        'name': user.full_name,
-        'email': user.email,
-        'phone': user.phone,
-        'role': user.role,
-        'profile_picture': user.profile_picture,
-        'is_verified': user.is_verified,
-        'gender': user.gender,
-        'employment_status': user.employment_status,
-        'two_factor_enabled': user.two_factor_enabled
     })
 
 @app.route('/api/admin/groups', methods=['GET'])
@@ -1104,33 +1118,60 @@ def resend_verification():
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/profile', methods=['PUT'])
+@app.route('/api/user/profile', methods=['GET'])
 @jwt_required()
-def update_profile():
+def get_user_profile():
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+    return jsonify({
+        'id': user.id,
+        'name': user.full_name,
+        'email': user.email,
+        'phone': user.phone,
+        'role': user.role,
+        'profile_picture': user.profile_picture,
+        'is_verified': user.is_verified,
+        'gender': user.gender,
+        'employment_status': user.employment_status,
+        'two_factor_enabled': user.two_factor_enabled,
+        'date_of_birth': user.date_of_birth.isoformat() if user.date_of_birth else None
+    })
+
+@app.route('/api/user/profile', methods=['PUT'])
+@jwt_required()
+def update_user_profile():
     user_id = get_jwt_identity()
     user = User.query.get(user_id)
     if not user:
         return jsonify({'error': 'User not found'}), 404
 
     data = request.get_json()
-    allowed_fields = [
-        'full_name', 'phone', 'profile_picture',
-        'date_of_birth', 'gender', 'employment_status'
-    ]
-    for field in allowed_fields:
-        if field in data:
-            if field == 'date_of_birth' and data[field]:
-                setattr(user, field, datetime.strptime(data[field], "%Y-%m-%d").date())
-            else:
-                setattr(user, field, data[field])
-    try:
-        db.session.commit()
-        return jsonify({'message': 'Profile updated successfully'})
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': 'Failed to update profile', 'details': str(e)}), 500
 
-@app.route('/api/account/change-password', methods=['POST'])
+    # Update fields that are simple string assignments
+    if 'name' in data:
+        user.full_name = data['name']
+    if 'phone' in data:
+        user.phone = data['phone']
+    if 'gender' in data:
+        user.gender = data['gender']
+    if 'employment_status' in data:
+        user.employment_status = data['employment_status']
+
+    # Specifically handle date_of_birth: parse string to datetime object
+    if 'date_of_birth' in data and data['date_of_birth']:
+        try:
+            # The fromisoformat() method correctly parses 'YYYY-MM-DD'
+            user.date_of_birth = datetime.fromisoformat(data['date_of_birth'])
+        except (ValueError, TypeError):
+            # Handle cases where the date format is wrong or data is null
+            return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD.'}), 400
+
+    db.session.commit()
+    return jsonify({'message': 'Profile updated successfully'}), 200
+
+@app.route('/api/user/security/password', methods=['PUT', 'OPTIONS'])
 @jwt_required()
 def change_password():
     user_id = get_jwt_identity()
@@ -1146,133 +1187,52 @@ def change_password():
     db.session.commit()
     return jsonify({'message': 'Password changed successfully'})
 
-@app.route('/api/account/enable-2fa', methods=['POST'])
+@app.route('/api/user/security/2fa', methods=['POST', 'OPTIONS'])
 @jwt_required()
-def enable_2fa():
+def toggle_two_factor():
     user_id = get_jwt_identity()
     user = User.query.get(user_id)
     if not user:
         return jsonify({'error': 'User not found'}), 404
 
-    otp_code = generate_otp()
-    expiry = datetime.utcnow() + timedelta(minutes=10)
-    otp = OTP(user_id=user.id, code=otp_code, expires_at=expiry)
-    db.session.add(otp)
+    user.two_factor_enabled = not user.two_factor_enabled
     db.session.commit()
-    send_verification_email(user.email, otp_code)
-    return jsonify({'message': 'OTP sent to your email for 2FA activation'})
+    return jsonify({
+        "message": "Two-factor authentication updated",
+        "two_factor_enabled": user.two_factor_enabled
+    }), 200
 
-@app.route('/api/account/verify-2fa', methods=['POST'])
+@app.route('/api/user/communication', methods=['GET', 'OPTIONS'])
 @jwt_required()
-def verify_2fa():
-    user_id = get_jwt_identity()
-    user = User.query.get(user_id)
-    data = request.get_json()
-    otp_code = data.get('otp_code')
-
-    otp = OTP.query.filter_by(user_id=user.id, code=otp_code, is_used=False).order_by(OTP.created_at.desc()).first()
-    if not otp or not otp.is_valid():
-        return jsonify({'error': 'Invalid or expired OTP'}), 400
-
-    otp.is_used = True
-    user.two_factor_enabled = True
-    db.session.commit()
-    return jsonify({'message': 'Two-factor authentication enabled'})
-
-@app.route('/api/account/disable-2fa', methods=['POST'])
-@jwt_required()
-def disable_2fa():
-    user_id = get_jwt_identity()
-    user = User.query.get(user_id)
-    user.two_factor_enabled = False
-    db.session.commit()
-    return jsonify({'message': 'Two-factor authentication disabled'})
-
-@app.route('/api/account/verify-2fa-login', methods=['POST'])
-def verify_2fa_login():
-    data = request.get_json()
-    user_id = data.get('user_id')
-    otp_code = data.get('otp_code')
-    user = User.query.get(user_id)
-    otp = OTP.query.filter_by(user_id=user.id, code=otp_code, is_used=False).order_by(OTP.created_at.desc()).first()
-    if not otp or not otp.is_valid():
-        return jsonify({'error': 'Invalid or expired OTP'}), 400
-    otp.is_used = True
-    db.session.commit()
-    access_token = create_access_token(identity=str(user.id))
-    return jsonify({'message': '2FA login successful', 'access_token': access_token}), 200
-
-@app.route('/api/account', methods=['DELETE'])
-@jwt_required()
-def delete_account():
-    user_id = get_jwt_identity()
-    user = User.query.get(user_id)
-    db.session.delete(user)
-    db.session.commit()
-    return jsonify({'message': 'Account deleted successfully'})
-
-@app.route('/api/account/sessions', methods=['GET'])
-@jwt_required()
-def list_sessions():
-    user_id = get_jwt_identity()
-    sessions = UserSession.query.filter_by(user_id=user_id, is_active=True).all()
-    return jsonify([
-        {
-            "id": s.id,
-            "user_agent": s.user_agent,
-            "ip_address": s.ip_address,
-            "login_time": s.login_time.isoformat()
-        } for s in sessions
-    ])
-
-@app.route('/api/account/sessions/<int:session_id>', methods=['DELETE'])
-@jwt_required()
-def revoke_session(session_id):
-    user_id = get_jwt_identity()
-    session = UserSession.query.filter_by(id=session_id, user_id=user_id, is_active=True).first()
-    if not session:
-        return jsonify({"error": "Session not found"}), 404
-    session.is_active = False
-    db.session.commit()
-    return jsonify({"message": "Session revoked"})
-
-@app.route('/api/notification-settings', methods=['GET'])
-@jwt_required()
-def get_notification_settings():
+def get_communication_preferences():
     user_id = get_jwt_identity()
     settings = NotificationSettings.query.filter_by(user_id=user_id).first()
     if not settings:
         settings = NotificationSettings(user_id=user_id)
         db.session.add(settings)
         db.session.commit()
-        return jsonify({
+    return jsonify({
         "email_announcements": settings.email_announcements,
         "email_stokvel_updates": settings.email_stokvel_updates,
-        "email_marketplace_offers": settings.email_marketplace_offers,
-        "push_announcements": settings.push_announcements,
-        "push_stokvel_updates": settings.push_stokvel_updates,
-        "push_marketplace_offers": settings.push_marketplace_offers,
+        "push_announcements": settings.push_announcements
     })
 
-@app.route('/api/notification-settings', methods=['PUT'])
+@app.route('/api/user/communication', methods=['PUT', 'OPTIONS'])
 @jwt_required()
-def update_notification_settings():
+def update_communication_preferences():
     user_id = get_jwt_identity()
     data = request.get_json()
     settings = NotificationSettings.query.filter_by(user_id=user_id).first()
     if not settings:
         settings = NotificationSettings(user_id=user_id)
         db.session.add(settings)
-    for field in [
-        "email_announcements", "email_stokvel_updates", "email_marketplace_offers",
-        "push_announcements", "push_stokvel_updates", "push_marketplace_offers"
-    ]:
+    for field in ["email_announcements", "email_stokvel_updates", "push_announcements"]:
         if field in data:
             setattr(settings, field, data[field])
     db.session.commit()
-    return jsonify({"message": "Notification settings updated."})
+    return jsonify({"message": "Communication preferences updated successfully"}), 200
 
-@app.route('/api/privacy-settings', methods=['GET'])
+@app.route('/api/user/privacy', methods=['GET', 'OPTIONS'])
 @jwt_required()
 def get_privacy_settings():
     user_id = get_jwt_identity()
@@ -1281,54 +1241,155 @@ def get_privacy_settings():
         prefs = UserPreferences(user_id=user_id)
         db.session.add(prefs)
         db.session.commit()
-        return jsonify({
+    return jsonify({
         "data_for_personalization": prefs.data_for_personalization,
         "data_for_analytics": prefs.data_for_analytics,
         "data_for_third_parties": prefs.data_for_third_parties,
     })
 
-@app.route('/api/privacy-settings', methods=['PUT'])
+@app.route('/api/user/account', methods=['DELETE', 'OPTIONS'])
 @jwt_required()
-def update_privacy_settings():
-    user_id = get_jwt_identity()
-    data = request.get_json()
-    prefs = UserPreferences.query.filter_by(user_id=user_id).first()
-    if not prefs:
-        prefs = UserPreferences(user_id=user_id)
-        db.session.add(prefs)
-    for field in [
-        "data_for_personalization", "data_for_analytics", "data_for_third_parties"
-    ]:
-        if field in data:
-            setattr(prefs, field, data[field])
-        db.session.commit()
-    return jsonify({"message": "Privacy settings updated."})
-
-@app.route('/api/download-data', methods=['GET'])
-@jwt_required()
-def download_data():
+def delete_account():
     user_id = get_jwt_identity()
     user = User.query.get(user_id)
-    prefs = UserPreferences.query.filter_by(user_id=user_id).first()
-    # Add more data as needed
-    data = {
-        "user": {
-            "id": user.id,
-            "full_name": user.full_name,
-            "email": user.email,
-            "phone": user.phone,
-            "created_at": user.created_at.isoformat(),
-        },
-        "preferences": {
-            "language": prefs.language if prefs else None,
-            "currency": prefs.currency if prefs else None,
-            "theme": prefs.theme if prefs else None,
-            "data_for_personalization": prefs.data_for_personalization if prefs else None,
-            "data_for_analytics": prefs.data_for_analytics if prefs else None,
-            "data_for_third_parties": prefs.data_for_third_parties if prefs else None,
+    data = request.get_json() or {}
+    password = data.get('password')
+
+    if not user or not user.check_password(password):
+        return jsonify({'error': 'Incorrect password'}), 401
+
+    db.session.delete(user)
+    db.session.commit()
+    return jsonify({'message': 'Account deleted successfully'})
+
+@app.route('/api/start', methods=['POST'])
+@jwt_required()
+def start_chat():
+    user_id = get_jwt_identity()
+    data = request.get_json() or {}
+    title = data.get('title', 'New Chat')
+    is_stokvel_related = data.get('is_stokvel_related', False)
+    stokvel_id = data.get('stokvel_id')
+
+    conversation = Conversation(
+        id=str(uuid.uuid4()),
+        user_id=user_id,
+        title=title,
+        is_stokvel_related=is_stokvel_related,
+        stokvel_id=stokvel_id
+    )
+    db.session.add(conversation)
+    db.session.commit()
+
+    # Add system message
+    system_message = Message(
+        conversation_id=conversation.id,
+        role='system',
+        content='You are a helpful assistant. Answer concisely in 1-3 sentences.'
+    )
+    db.session.add(system_message)
+    db.session.commit()
+
+    return jsonify({"conversation_id": conversation.id}), 201
+
+@app.route('/api/message', methods=['POST'])
+@jwt_required()
+def send_message():
+    user_id = get_jwt_identity()
+    data = request.get_json()
+    conversation_id = data.get('conversation_id')
+    user_message = data.get('message')
+
+    conversation = Conversation.query.filter_by(id=conversation_id, user_id=user_id).first()
+    if not conversation:
+        return jsonify({"error": "Conversation not found."}), 404
+
+    # Add user message
+    user_msg = Message(
+        conversation_id=conversation_id,
+        role='user',
+        content=user_message
+    )
+    db.session.add(user_msg)
+    db.session.commit()
+
+    # Fetch all messages for OpenAI context
+    messages = [
+        {"role": m.role, "content": m.content}
+        for m in Message.query.filter_by(conversation_id=conversation_id).order_by(Message.created_at).all()
+    ]
+
+    # Call OpenRouter API
+    try:
+        completion = client.chat.completions.create(
+            extra_headers={
+                "HTTP-Referer": os.getenv('FRONTEND_URL', 'http://localhost:3000'),
+                "X-Title": "Stokvel Assistant",
+            },
+            model="meta-llama/llama-3-8b-instruct",
+            messages=messages,
+            max_tokens=150
+        )
+        ai_response = completion.choices[0].message.content
+
+        # Store AI response
+        assistant_msg = Message(
+            conversation_id=conversation_id,
+            role='assistant',
+            content=ai_response
+        )
+        db.session.add(assistant_msg)
+        db.session.commit()
+
+        return jsonify({
+            "response": ai_response,
+            "conversation_id": conversation_id
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/chat', methods=['POST'])
+def chat():
+    data = request.get_json()
+    user_message = data.get('message')
+    if not user_message:
+        return jsonify({'error': 'No message provided'}), 400
+
+    try:
+        api_key = os.getenv('OPENROUTER_API_KEY')
+        if not api_key:
+            return jsonify({'error': 'OpenRouter API key not set'}), 500
+
+        payload = {
+            "model": "meta-llama/llama-3-8b-instruct",
+            "messages": [
+                {"role": "system", "content": about_us_text},
+                {"role": "user", "content": user_message}
+            ],
+            "max_tokens": 150
         }
-    }
-    return jsonify(data)
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        response = requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            json=payload,
+            headers=headers
+        )
+        if response.status_code != 200:
+            print("OpenRouter error:", response.text)
+            return jsonify({'error': f'OpenRouter error: {response.text}'}), 500
+
+        data = response.json()
+        answer = data['choices'][0]['message']['content']
+        return jsonify({'answer': answer})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
 
 @app.errorhandler(Exception)
 def handle_error(error):
@@ -1358,3 +1419,122 @@ def checkout(dbapi_connection, connection_record, connection_proxy):
     if connection_record.info['pid'] != pid:
         connection_record.info['pid'] = pid
         connection_record.info['checked_out'] = time.time()
+
+@app.before_request
+def handle_options_requests():
+    if request.method == 'OPTIONS':
+        return '', 200
+
+@app.route('/api/user/security/2fa/start', methods=['POST'])
+@jwt_required()
+def start_2fa_setup():
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    data = request.get_json()
+    method = data.get('method', 'email')  # 'email' or 'sms'
+
+    # Generate OTP
+    otp_code = generate_otp()
+    expiry = datetime.utcnow() + timedelta(minutes=10)
+    otp = OTP(user_id=user.id, code=otp_code, expires_at=expiry)
+    db.session.add(otp)
+    db.session.commit()
+
+    # Send OTP
+    if method == 'sms':
+        send_verification_sms(user.phone, otp_code)
+    else:
+        send_verification_email(user.email, otp_code)
+
+    user.two_factor_method = method
+    db.session.commit()
+
+    return jsonify({'message': f'OTP sent via {method}.', 'method': method}), 200
+
+@app.route('/api/user/security/2fa/verify', methods=['POST'])
+@jwt_required()
+def verify_2fa_setup():
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    data = request.get_json()
+    otp_code = data.get('otp_code')
+
+    otp = OTP.query.filter_by(user_id=user.id, code=otp_code, is_used=False).order_by(OTP.created_at.desc()).first()
+    if not otp or not otp.is_valid():
+        return jsonify({'error': 'Invalid or expired OTP'}), 400
+
+    otp.is_used = True
+    user.two_factor_enabled = True
+    db.session.commit()
+    return jsonify({'message': 'Two-factor authentication enabled!'}), 200
+
+@app.route('/api/auth/verify-2fa-login', methods=['POST'])
+def verify_2fa_login():
+    data = request.get_json()
+    user_id = data.get('user_id')
+    otp_code = data.get('otp_code')
+    user = User.query.get(user_id)
+    otp = OTP.query.filter_by(user_id=user.id, code=otp_code, is_used=False).order_by(OTP.created_at.desc()).first()
+    if not otp or not otp.is_valid():
+        return jsonify({'error': 'Invalid or expired OTP'}), 400
+    otp.is_used = True
+    db.session.commit()
+    access_token = create_access_token(identity=str(user.id))
+    return jsonify({'message': '2FA login successful', 'access_token': access_token}), 200
+
+@app.route('/api/user/security/2fa/disable', methods=['POST'])
+@jwt_required()
+def disable_2fa():
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    data = request.get_json()
+    password = data.get('password')
+
+    if not user or not user.check_password(password):
+        return jsonify({'error': 'Incorrect password'}), 401
+
+    user.two_factor_enabled = False
+    db.session.commit()
+    return jsonify({'message': 'Two-factor authentication disabled!'}), 200
+
+@app.route('/api/user/session/<int:session_id>/logout', methods=['POST'])
+@jwt_required()
+def logout_session(session_id):
+    user_id = get_jwt_identity()
+    session = UserSession.query.filter_by(id=session_id, user_id=user_id, is_active=True).first()
+    if not session:
+        return jsonify({'error': 'Session not found'}), 404
+    session.is_active = False
+    db.session.commit()
+    return jsonify({'message': 'Session logged out successfully'})
+
+@app.route('/api/user/sessions', methods=['GET'])
+@jwt_required()
+def get_user_sessions():
+    user_id = get_jwt_identity()
+    sessions = UserSession.query.filter_by(user_id=user_id).order_by(UserSession.login_time.desc()).all()
+    return jsonify([
+        {
+            'id': s.id,
+            'user_agent': s.user_agent,
+            'ip_address': s.ip_address,
+            'login_time': s.login_time.isoformat(),
+            'last_activity': s.last_activity.isoformat(),
+            'is_active': s.is_active
+        }
+        for s in sessions
+    ])
+
+@app.route('/api/user/sessions/logout_all', methods=['POST'])
+@jwt_required()
+def logout_all_sessions():
+    user_id = get_jwt_identity()
+    current_user_agent = request.headers.get('User-Agent', '')
+    current_ip = request.remote_addr or ''
+    sessions = UserSession.query.filter_by(user_id=user_id, is_active=True).all()
+    for session in sessions:
+        # Keep the current session active, log out others
+        if session.user_agent != current_user_agent or session.ip_address != current_ip:
+            session.is_active = False
+    db.session.commit()
+    return jsonify({'message': 'Logged out from all other sessions.'})

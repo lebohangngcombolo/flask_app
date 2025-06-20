@@ -69,7 +69,7 @@ export const getCurrentUser = async (): Promise<User | null> => {
       return null;
     }
 
-    const response = await api.get('/api/users/me');
+    const response = await api.get('/api/user/profile');
     console.log('Current user response:', response.data);
     return response.data;
   } catch (error) {

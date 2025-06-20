@@ -3,6 +3,8 @@ import { useNavigate, Link } from 'react-router-dom';
 import { login } from '../utils/auth';
 import PageTransition from '../components/PageTransition';
 import GoogleAuthButton from '../components/GoogleAuthButton';
+import { toast } from 'react-hot-toast';
+import api from '../services/api';
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
@@ -11,6 +13,10 @@ const Login: React.FC = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showTransition, setShowTransition] = useState(false);
+  const [show2FALogin, setShow2FALogin] = useState(false);
+  const [twoFAUserId, setTwoFAUserId] = useState<string | null>(null);
+  const [otp, setOtp] = useState('');
+  const [isVerifying, setIsVerifying] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,6 +34,14 @@ const Login: React.FC = () => {
       const result = await login(email, password);
       console.log('Login result:', result);
       
+      if (result.two_factor_required) {
+        setTwoFAUserId(result.user_id);
+        setShow2FALogin(true);
+        setLoading(false);
+        toast('Enter the code sent to your email or phone.');
+        return;
+      }
+      
       if (result.success) {
         console.log('Login successful, redirecting to:', result.redirectTo);
         setLoading(false);
@@ -35,7 +49,6 @@ const Login: React.FC = () => {
       } else {
         console.error('Login failed:', result.message);
         setError(result.message);
-        setLoading(false);
       }
     } catch (err: any) {
       console.error('Login error:', err);
@@ -57,6 +70,27 @@ const Login: React.FC = () => {
     setTimeout(() => {
       navigate('/');
     }, 500);
+  };
+
+  const handleVerify2FALogin = async () => {
+    setIsVerifying(true);
+    try {
+      const response = await api.post('/api/auth/verify-2fa-login', {
+        user_id: twoFAUserId,
+        otp_code: otp,
+      });
+      // Store token and user info as you do on normal login
+      localStorage.setItem('token', response.data.access_token);
+      // Optionally fetch user info and redirect
+      toast.success('2FA login successful!');
+      setShow2FALogin(false);
+      // Redirect to dashboard or wherever
+      navigate('/dashboard');
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Invalid or expired code');
+    } finally {
+      setIsVerifying(false);
+    }
   };
 
   return (
@@ -212,6 +246,34 @@ const Login: React.FC = () => {
           </form>
         </div>
       </div>
+
+      {show2FALogin && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-sm">
+            <h2 className="text-lg font-bold mb-4">Two-Factor Authentication</h2>
+            <input
+              type="text"
+              placeholder="Enter OTP"
+              value={otp}
+              onChange={e => setOtp(e.target.value)}
+              className="w-full border rounded p-2 mb-4"
+            />
+            <button
+              onClick={handleVerify2FALogin}
+              className="w-full bg-blue-600 text-white py-2 rounded"
+              disabled={isVerifying}
+            >
+              {isVerifying ? 'Verifying...' : 'Verify & Login'}
+            </button>
+            <button
+              onClick={() => setShow2FALogin(false)}
+              className="w-full mt-2 text-gray-500"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
     </PageTransition>
   );

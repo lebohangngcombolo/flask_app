@@ -17,15 +17,17 @@ import {
   Key
 } from 'lucide-react'; // Import necessary icons
 import moment from 'moment'; // Import moment for date formatting
+import toast from 'react-hot-toast';
 // Import navigation items from the new file
 import { userNavItems, marketplaceNavItem } from '../navItems';
-import { authAPI } from '../services/api';
+import { authAPI, securityAPI, userAPI } from '../services/api';
+import api from '../services/api'; // <-- Make sure this is here
 
 // Add to your API service (api.ts)
 export const profileAPI = {
-  getUserProfile: () => api.get('/api/profile'),
-  updateUserProfile: (data: any) => api.put('/api/profile', data),
-  getActiveSessions: () => api.get('/api/profile/sessions'),
+  getUserProfile: () => api.get('/api/user/profile'),
+  updateUserProfile: (data: any) => api.put('/api/user/profile', data),
+  getActiveSessions: () => api.get('/api/user/sessions'),
 };
 
 // Mock Active Sessions data
@@ -87,9 +89,9 @@ const UserProfile: React.FC = () => {
 
     // State to manage account & security settings (placeholders)
    const [securitySettings, setSecuritySettings] = useState({
-     twoFactorEnabled: false, // Placeholder for 2FA state
-     currentPassword: '', // Added state for current password
-     newPassword: '', // Added state for new password
+     twoFactorEnabled: false,
+     currentPassword: '',
+     newPassword: '',
    });
 
     // State to manage communication settings
@@ -120,20 +122,30 @@ const UserProfile: React.FC = () => {
     const fetchUserData = async () => {
       try {
         const response = await authAPI.getCurrentUser();
-        setUserEmail(response.data.email);
-        setUserDetails(prev => ({
+        const userData = response.data;
+
+        // Set all user details from the API response
+        setUserEmail(userData.email);
+        setUserDetails({
+          name: userData.name || '',
+          phone: userData.phone || '',
+          // Format date for the input field, which expects 'YYYY-MM-DD'
+          dateOfBirth: userData.date_of_birth ? moment(userData.date_of_birth).format('YYYY-MM-DD') : '',
+          gender: userData.gender || '',
+          employmentStatus: userData.employment_status || '',
+        });
+        setSecuritySettings(prev => ({
           ...prev,
-          name: response.data.name || '',
-          // Add other fields as needed
+          twoFactorEnabled: userData.two_factor_enabled
         }));
       } catch (err) {
         console.error('Error fetching user data:', err);
-        // Handle error appropriately
+        toast.error('Could not load your profile data.');
       }
     };
 
     fetchUserData();
-  }, []);
+  }, []); // This empty dependency array means it only runs once on component mount
 
   // Handlers for card actions (placeholders)
   const handleViewDetails = () => {
@@ -191,33 +203,91 @@ const UserProfile: React.FC = () => {
     };
 
     // Placeholder for saving profile changes
-   const handleSaveDetails = () => {
-      console.log('Saving details:', userDetails);
-      alert('Save details functionality not implemented yet.');
-      // Implement saving userDetails to backend
+   const handleSaveDetails = async () => {
+     try {
+       // Prepare the data to send (match backend field names if different)
+       const payload = {
+         name: userDetails.name,
+         phone: userDetails.phone,
+         date_of_birth: userDetails.dateOfBirth,
+         gender: userDetails.gender,
+         employment_status: userDetails.employmentStatus,
+       };
+
+       // 1. Send the update to the backend
+       await userAPI.updateProfile(payload);
+       toast.success('Profile updated successfully!');
+
+       // 2. Refetch the user's data to ensure UI is in sync
+       const response = await userAPI.getProfile();
+       setUserDetails(prev => ({
+         ...prev,
+         name: response.data.name || '',
+         phone: response.data.phone || '',
+         dateOfBirth: response.data.date_of_birth ? moment(response.data.date_of_birth).format('YYYY-MM-DD') : '',
+         gender: response.data.gender || '',
+         employmentStatus: response.data.employment_status || '',
+       }));
+
+     } catch (err: any) {
+       toast.error(
+         err.response?.data?.error ||
+         err.response?.data?.message ||
+         'Failed to update profile.'
+       );
+     }
    };
 
     // Placeholder handler for changing password
-   const handleChangePassword = () => {
-     console.log('Changing password. Current:', securitySettings.currentPassword, 'New:', securitySettings.newPassword);
-     alert('Change password functionality not implemented yet.');
-     // Implement password change logic (e.g., open a modal or make API call)
-      // Clear password fields after attempt (optional)
-      setSecuritySettings(prev => ({ ...prev, currentPassword: '', newPassword: '' }));
+   const handleChangePassword = async () => {
+     try {
+       const { currentPassword, newPassword } = securitySettings;
+       if (!currentPassword || !newPassword) {
+         toast.error('Please enter both current and new password.');
+         return;
+       }
+       const response = await securityAPI.changePassword({
+         current_password: currentPassword,
+         new_password: newPassword,
+       });
+       toast.success(response.data.message || 'Password changed successfully!');
+       setSecuritySettings(prev => ({ ...prev, currentPassword: '', newPassword: '' }));
+     } catch (err: any) {
+       toast.error(
+         err.response?.data?.error ||
+         err.response?.data?.message ||
+         'Failed to change password.'
+       );
+     }
    };
 
     // Placeholder handler for toggling 2FA
-   const handleToggleTwoFactor = () => {
-     setSecuritySettings(prev => ({ ...prev, twoFactorEnabled: !prev.twoFactorEnabled }));
-     alert(`Two-Factor Authentication ${securitySettings.twoFactorEnabled ? 'disabled' : 'enabled'}. (Functionality not implemented yet)`);
-     // Implement 2FA setup/disable logic
+   const handleToggleTwoFactor = async () => {
+     try {
+       const response = await securityAPI.toggle2FA();
+       setSecuritySettings(prev => ({
+         ...prev,
+         twoFactorEnabled: response.data.two_factor_enabled
+       }));
+       toast.success(response.data.message || 'Two-Factor Authentication updated!');
+     } catch (err: any) {
+       toast.error(
+         err.response?.data?.error ||
+         err.response?.data?.message ||
+         'Failed to update Two-Factor Authentication.'
+       );
+     }
    };
 
     // Placeholder handler for logging out a specific session
-   const handleLogoutSession = (sessionId: number) => {
-     console.log('Logging out session:', sessionId);
-     alert(`Logging out session ${sessionId}. (Functionality not implemented yet)`);
-     // Implement session logout logic
+   const handleLogoutSession = async (sessionId: number) => {
+     try {
+       await api.post(`/api/user/session/${sessionId}/logout`);
+       toast.success('Session logged out!');
+       fetchSessions(); // Refresh after logout
+     } catch (err: any) {
+       toast.error(err.response?.data?.error || 'Failed to log out session');
+     }
    };
 
     // Placeholder handler for requesting data download
@@ -227,14 +297,134 @@ const UserProfile: React.FC = () => {
    };
 
     // Placeholder handler for deleting account
-   const handleDeleteAccount = () => {
-     const confirmDelete = confirm('Are you sure you want to delete your account? This action cannot be undone.');
-     if (confirmDelete) {
-       alert('Account deletion functionality not implemented yet.');
-       // Implement account deletion process
+   const [showDeleteModal, setShowDeleteModal] = useState(false);
+   const [deletePassword, setDeletePassword] = useState('');
+   const [isDeleting, setIsDeleting] = useState(false);
+
+   const handleDeleteAccount = async () => {
+     setIsDeleting(true);
+     try {
+       await api.delete('/api/user/account', {
+         data: { password: deletePassword }
+       });
+       toast.success('Account deleted successfully!');
+       localStorage.removeItem('token');
+       window.location.href = '/';
+     } catch (err: any) {
+       toast.error(err.response?.data?.error || 'Failed to delete account');
+     } finally {
+       setIsDeleting(false);
+       setShowDeleteModal(false);
+       setDeletePassword('');
      }
    };
 
+  const [show2FAModal, setShow2FAModal] = useState(false);
+  const [twoFAMethod, setTwoFAMethod] = useState<'email' | 'sms'>('email');
+  const [otp, setOtp] = useState('');
+  const [otpSentMessage, setOtpSentMessage] = useState('');
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [isResending, setIsResending] = useState(false);
+
+  const handleStart2FA = async () => {
+    try {
+      await securityAPI.start2FA({ method: twoFAMethod });
+      setShow2FAModal(true);
+      toast.success(`OTP sent via ${twoFAMethod.toUpperCase()}`);
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to send OTP');
+    }
+  };
+
+  const handleVerify2FA = async () => {
+    setIsVerifying(true);
+    try {
+      await securityAPI.verify2FA({ otp_code: otp });
+      toast.success('Two-factor authentication enabled!');
+      setSecuritySettings(prev => ({
+        ...prev,
+        twoFactorEnabled: true
+      }));
+      setShow2FAModal(false);
+      setOtp('');
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Invalid or expired OTP');
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  const handleResend2FAOtp = async () => {
+    setIsResending(true);
+    try {
+      await securityAPI.start2FA({ method: twoFAMethod });
+      toast.success(`OTP resent via ${twoFAMethod.toUpperCase()}`);
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to resend OTP');
+    } finally {
+      setIsResending(false);
+    }
+  };
+
+  const [showDisable2FAModal, setShowDisable2FAModal] = useState(false);
+  const [disable2FAPassword, setDisable2FAPassword] = useState('');
+  const [isDisabling2FA, setIsDisabling2FA] = useState(false);
+
+  const handleDisable2FA = async () => {
+    setIsDisabling2FA(true);
+    try {
+      await securityAPI.disable2FA({ password: disable2FAPassword });
+      setSecuritySettings(prev => ({
+        ...prev,
+        twoFactorEnabled: false
+      }));
+      toast.success('Two-factor authentication disabled!');
+      setShowDisable2FAModal(false);
+      setDisable2FAPassword('');
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to disable 2FA');
+    } finally {
+      setIsDisabling2FA(false);
+    }
+  };
+
+  const [sessions, setSessions] = useState([]);
+
+  const fetchSessions = async () => {
+    console.log('Fetching sessions...');
+    try {
+      const response = await api.get('/api/user/sessions');
+      setSessions(response.data);
+    } catch (err) {
+      toast.error('Failed to load sessions');
+    }
+  };
+
+  useEffect(() => {
+    fetchSessions();
+  }, []);
+
+  const handleLogoutAllSessions = async () => {
+    try {
+      await api.post('/api/user/sessions/logout_all');
+      toast.success('Logged out from all other sessions!');
+      fetchSessions(); // Refresh the session list
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to log out all sessions');
+    }
+  };
+
+  // Helper to filter unique sessions by user_agent and ip_address
+  const getUniqueSessions = (sessions) => {
+    const seen = new Set();
+    return sessions.filter(session => {
+      const key = `${session.user_agent}-${session.ip_address}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
 
   // Render content based on the active tab
   const renderContent = () => {
@@ -446,23 +636,139 @@ const UserProfile: React.FC = () => {
                  </div>
 
                  {/* Two-Factor Authentication (2FA) Section */}
-                 <div>
+                 <div className="mb-6">
                     <h3 className="text-xl font-semibold text-gray-900 mb-3 flex items-center space-x-2">
-                       <ShieldCheck className="w-6 h-6 text-gray-600" />
                        <span>Two-Factor Authentication (2FA)</span>
+                       {securitySettings.twoFactorEnabled ? (
+                         <span className="ml-2 px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-semibold">ENABLED</span>
+                       ) : (
+                         <span className="ml-2 px-2 py-1 bg-red-100 text-red-700 rounded text-xs font-semibold">DISABLED</span>
+                       )}
                     </h3>
-                    <p className="text-gray-600 mb-4">Add an extra layer of security to your account.</p>
-                    <div className="flex items-center justify-between">
-                       <span>Status: <span className="font-semibold">{securitySettings.twoFactorEnabled ? 'Enabled' : 'Disabled'}</span></span>
-                       <button
-                         onClick={handleToggleTwoFactor}
-                         className={`px-6 py-2 rounded-md font-semibold transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transform hover:scale-105 active:scale-95 ${
-                           securitySettings.twoFactorEnabled ? 'bg-red-500 text-white hover:bg-red-600' : 'bg-green-600 text-white hover:bg-green-700'
-                         }`}
-                       >
-                         {securitySettings.twoFactorEnabled ? 'Disable 2FA' : 'Enable 2FA'}
-                       </button>
+                    <p className="text-gray-600 mb-4">
+                      Add an extra layer of security to your account by enabling two-factor authentication.
+                    </p>
+                    <div className="flex gap-4">
+                      <button
+                        onClick={() => setShow2FAModal(true)}
+                        className={`px-6 py-2 rounded-md font-semibold shadow-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50
+                          ${securitySettings.twoFactorEnabled
+                            ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                            : 'bg-green-600 text-white hover:bg-green-700'}`}
+                        disabled={securitySettings.twoFactorEnabled}
+                      >
+                        Enable 2FA
+                      </button>
+                      <button
+                        onClick={() => setShowDisable2FAModal(true)}
+                        className={`px-6 py-2 rounded-md font-semibold shadow-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50
+                          ${!securitySettings.twoFactorEnabled
+                            ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                            : 'bg-red-600 text-white hover:bg-red-700'}`}
+                        disabled={!securitySettings.twoFactorEnabled}
+                      >
+                        Disable 2FA
+                      </button>
                     </div>
+                    {/* Enable 2FA Modal */}
+                    {show2FAModal && (
+                      <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50">
+                        <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-sm">
+                          <h2 className="text-lg font-bold mb-4">Enable Two-Factor Authentication</h2>
+                          {/* Method selection */}
+                          <div className="mb-4">
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Choose 2FA Method:</label>
+                            <div className="flex gap-4">
+                              <label>
+                                <input
+                                  type="radio"
+                                  name="twoFAMethod"
+                                  value="email"
+                                  checked={twoFAMethod === 'email'}
+                                  onChange={() => setTwoFAMethod('email')}
+                                  disabled={isSendingOtp}
+                                />
+                                <span className="ml-2">Email</span>
+                              </label>
+                              <label>
+                                <input
+                                  type="radio"
+                                  name="twoFAMethod"
+                                  value="sms"
+                                  checked={twoFAMethod === 'sms'}
+                                  onChange={() => setTwoFAMethod('sms')}
+                                  disabled={isSendingOtp}
+                                />
+                                <span className="ml-2">SMS</span>
+                              </label>
+                            </div>
+                          </div>
+                          {/* OTP sent message */}
+                          {otpSentMessage && (
+                            <p className="mb-4 text-green-600">{otpSentMessage}</p>
+                          )}
+                          {/* OTP input */}
+                          <input
+                            type="text"
+                            placeholder="Enter OTP"
+                            value={otp}
+                            onChange={e => setOtp(e.target.value)}
+                            className="w-full border rounded p-2 mb-4"
+                          />
+                          {/* Resend OTP */}
+                          <button
+                            onClick={() => sendOtp(twoFAMethod)}
+                            className="text-blue-600 hover:underline mb-4"
+                            disabled={isSendingOtp}
+                          >
+                            {isSendingOtp ? 'Sending...' : 'Resend OTP'}
+                          </button>
+                          {/* Submit */}
+                          <button
+                            onClick={handleVerify2FA}
+                            className="w-full bg-green-600 text-white py-2 rounded mt-2"
+                            disabled={isVerifying}
+                          >
+                            {isVerifying ? 'Verifying...' : 'Enable 2FA'}
+                          </button>
+                          <button
+                            onClick={() => setShow2FAModal(false)}
+                            className="w-full mt-2 text-gray-500"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    {/* Disable 2FA Modal */}
+                    {showDisable2FAModal && (
+                      <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50">
+                        <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-sm">
+                          <h2 className="text-lg font-bold mb-4">Disable Two-Factor Authentication</h2>
+                          <p className="mb-4 text-gray-600">For your security, please enter your password to disable 2FA.</p>
+                          <input
+                            type="password"
+                            placeholder="Enter your password"
+                            value={disable2FAPassword}
+                            onChange={e => setDisable2FAPassword(e.target.value)}
+                            className="w-full border rounded p-2 mb-4"
+                          />
+                          <button
+                            onClick={handleDisable2FA}
+                            className="w-full bg-red-600 text-white py-2 rounded"
+                            disabled={isDisabling2FA}
+                          >
+                            {isDisabling2FA ? 'Disabling...' : 'Disable 2FA'}
+                          </button>
+                          <button
+                            onClick={() => setShowDisable2FAModal(false)}
+                            className="w-full mt-2 text-gray-500"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
                  </div>
 
                  {/* Active Sessions Section */}
@@ -472,28 +778,29 @@ const UserProfile: React.FC = () => {
                        <span>Active Sessions</span>
                     </h3>
                     <p className="text-gray-600 mb-4">Review where you are currently logged in.</p>
-                    {mockSessions.length > 0 ? (
-                       <ul className="divide-y divide-gray-200">
-                          {mockSessions.map(session => (
-                             <li key={session.id} className="py-3 flex justify-between items-center">
-                                <div>
-                                   <p className="font-medium text-gray-800">{session.device} {session.current && <span className="text-blue-600">(Current Session)</span>}</p>
-                                   <p className="text-sm text-gray-600">{session.location} - {moment(session.time).format('YYYY-MM-DD HH:mm')}</p>
-                                </div>
-                                {!session.current && (
-                                   <button
-                                     onClick={() => handleLogoutSession(session.id)}
-                                     className="px-4 py-2 text-sm bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 transform hover:scale-105 active:scale-95"
-                                   >
-                                     Logout
-                                   </button>
-                                )}
-                             </li>
-                          ))}
-                       </ul>
-                    ) : (
-                       <p className="text-gray-600">No other active sessions.</p>
-                    )}
+                    {getUniqueSessions(sessions)
+                      .filter(s => s.is_active)
+                      .slice(0, 2) // Only show up to 2 unique sessions
+                      .map(session => (
+                        <div key={session.id} className="py-3 flex justify-between items-center">
+                          <div>
+                            <p className="font-medium text-gray-800">
+                              {session.user_agent || 'Unknown Device'}
+                            </p>
+                            <p className="text-sm text-gray-600">
+                              {session.ip_address || 'Unknown Location'} - {moment(session.login_time).format('YYYY-MM-DD HH:mm')}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    <div className="mt-4">
+                      <button
+                        onClick={handleLogoutAllSessions}
+                        className="px-6 py-2 bg-red-600 text-white rounded-md font-semibold shadow-md hover:bg-red-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50"
+                      >
+                        Logout All Other Sessions
+                      </button>
+                    </div>
                  </div>
 
                  {/* Account Deletion Section */}
@@ -504,7 +811,7 @@ const UserProfile: React.FC = () => {
                     </h3>
                     <p className="text-gray-600 mb-4">Permanently close your account and remove your data.</p>
                     <button
-                      onClick={handleDeleteAccount}
+                      onClick={() => setShowDeleteModal(true)}
                       className="px-6 py-2 bg-red-600 text-white rounded-md font-semibold shadow-md hover:bg-red-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 transform hover:scale-105 active:scale-95"
                     >
                       Delete Account
@@ -697,6 +1004,30 @@ const UserProfile: React.FC = () => {
     }
   };
 
+  useEffect(() => {
+    if (show2FAModal) {
+      sendOtp(twoFAMethod);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [show2FAModal, twoFAMethod]);
+
+  const sendOtp = async (method: 'email' | 'sms') => {
+    setIsSendingOtp(true);
+    setOtpSentMessage('');
+    try {
+      await securityAPI.start2FA({ method });
+      setOtpSentMessage(
+        `OTP has been sent to your ${method === 'email' ? 'email' : 'phone'}`
+      );
+      toast.success(`OTP sent via ${method.toUpperCase()}`);
+    } catch (err: any) {
+      setOtpSentMessage('Failed to send OTP. Please try again.');
+      toast.error(err.response?.data?.error || 'Failed to send OTP');
+    } finally {
+      setIsSendingOtp(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-pink-200 via-blue-100 to-yellow-100 p-6">
       <div className="container mx-auto px-4 py-6">
@@ -726,6 +1057,37 @@ const UserProfile: React.FC = () => {
         <div>
           {renderContent()}
         </div>
+
+        {showDeleteModal && (
+          <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50">
+            <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-sm">
+              <h2 className="text-lg font-bold mb-4">Delete Account</h2>
+              <p className="mb-4 text-gray-600">
+                For your security, please enter your password to confirm account deletion. This action cannot be undone.
+              </p>
+              <input
+                type="password"
+                placeholder="Enter your password"
+                value={deletePassword}
+                onChange={e => setDeletePassword(e.target.value)}
+                className="w-full border rounded p-2 mb-4"
+              />
+              <button
+                onClick={handleDeleteAccount}
+                className="w-full bg-red-600 text-white py-2 rounded"
+                disabled={isDeleting || !deletePassword}
+              >
+                {isDeleting ? 'Deleting...' : 'Yes, Delete My Account'}
+              </button>
+              <button
+                onClick={() => setShowDeleteModal(false)}
+                className="w-full mt-2 text-gray-500"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
