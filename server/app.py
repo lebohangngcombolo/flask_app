@@ -253,6 +253,7 @@ class UserSession(db.Model):
 
     user = db.relationship('User', backref=db.backref('sessions', lazy=True))
 
+#------------------------------- Front End KYC --------------------------------
 class KYCVerification(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
@@ -1376,6 +1377,7 @@ def handle_error(error):
         return jsonify({"error": "Invalid token"}), 401
     return jsonify({"error": "An unexpected error occurred"}), 500
 
+#------------------------------- Front End KYC --------------------------------
 # To store uploaded KYC docs
 KYC_UPLOAD_FOLDER = os.path.join(os.getcwd(), 'uploads', 'kyc_docs')
 os.makedirs(KYC_UPLOAD_FOLDER, exist_ok=True)
