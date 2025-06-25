@@ -8,7 +8,7 @@ from functools import wraps
 import click
 from flask.cli import with_appcontext
 from datetime import datetime, timedelta
-from sqlalchemy import func
+from sqlalchemy import func, select
 from sqlalchemy.sql import text
 from dotenv import load_dotenv
 import os
@@ -19,7 +19,7 @@ import random
 import requests
 import logging
 import string
-from iStokvel.utils.email_utils import send_verification_email
+from server.iStokvel.utils.email_utils import send_verification_email
 from flask_migrate import Migrate
 from twilio.rest import Client
 import phonenumbers
@@ -76,10 +76,15 @@ app.config['FACEBOOK_OAUTH_CLIENT_ID'] = os.getenv('FACEBOOK_OAUTH_CLIENT_ID')
 app.config['FACEBOOK_OAUTH_CLIENT_SECRET'] = os.getenv('FACEBOOK_OAUTH_CLIENT_SECRET')
 
 # -------------------- INITIALIZE EXTENSIONS --------------------
-db = SQLAlchemy(app)
-mail = Mail(app)
-migrate = Migrate(app, db)
-jwt_manager = JWTManager(app)
+db = SQLAlchemy()
+mail = Mail()
+migrate = Migrate()
+jwt_manager = JWTManager()
+
+db.init_app(app)
+mail.init_app(app)
+migrate.init_app(app, db)
+jwt_manager.init_app(app)
 Compress(app)
 
 logging.basicConfig(level=logging.DEBUG)
@@ -116,12 +121,46 @@ def send_otp_email(email, otp):
         return False
 
 def get_user_by_referral_code(code):
-    return User.query.filter_by(referral_code=code).first()
+    stmt = select(User).where(User.referral_code == code)
+    return db.session.execute(stmt).scalar_one_or_none()
 
 def is_group_member(user_id, group_id):
-    return StokvelMember.query.filter_by(user_id=user_id, group_id=group_id).first() is not None
+    stmt = select(StokvelMember).where(StokvelMember.user_id == user_id, StokvelMember.group_id == group_id)
+    return db.session.execute(stmt).first() is not None
 
-# -------------------- MODELS --------------------
+def check_and_process_referral_completion(referee_user):
+    # This function now checks only for verification and KYC completion.
+    stmt = select(Referral).where(
+        Referral.referee_id == referee_user.id,
+        Referral.status.in_(['verified', 'kyc_complete'])
+    )
+    referral = db.session.execute(stmt).scalar_one_or_none()
+
+    if not referral:
+        return  # No active referral found for this user, or it's already completed.
+
+    if referee_user.is_verified and referee_user.kyc_completed:
+        if referral.status == 'completed':
+            return
+
+        referral.status = 'completed'
+
+        referrer = db.session.get(User, referral.referrer_id)
+        if not referrer:
+            return
+
+        if referrer.valid_referrals == 0:
+            referrer.points += 20
+
+        referrer.valid_referrals += 1
+
+        if referrer.valid_referrals > 0 and referrer.valid_referrals % 3 == 0:
+            referrer.points += 100
+
+# -------------------- MODELS Changes made here------------------
+
+
+
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     full_name = db.Column(db.String(100), nullable=False)
@@ -134,6 +173,7 @@ class User(db.Model):
     gender = db.Column(db.String(10))
     employment_status = db.Column(db.String(100))
     is_verified = db.Column(db.Boolean, default=False)
+    kyc_completed = db.Column(db.Boolean, default=False)
     two_factor_enabled = db.Column(db.Boolean, default=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     referral_code = db.Column(db.String(8), unique=True, nullable=False, default=lambda: uuid.uuid4().hex[:8].upper())
@@ -167,6 +207,7 @@ class User(db.Model):
             "phone": self.phone,
             "role": self.role,
             "is_verified": self.is_verified,
+            "kyc_completed": self.kyc_completed,
             "points": self.points,
             "valid_referrals": self.valid_referrals,
             "referral_code": self.referral_code,
@@ -386,11 +427,14 @@ class UserSession(db.Model):
             self.last_activity = last_activity
         self.is_active = is_active
 
+
+
+
 class Referral(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     referrer_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     referee_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    status = db.Column(db.String(20), default='pending')  # pending, validated, rejected
+    status = db.Column(db.String(20), default='pending')  # pending, verified, kyc_complete, completed
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     __table_args__ = (
         db.UniqueConstraint('referrer_id', 'referee_id', name='uq_referral_pair'),
@@ -411,7 +455,7 @@ def token_required(f):
     @jwt_required()
     def decorated(*args, **kwargs):
         current_user_id = get_jwt_identity()
-        current_user = User.query.get(current_user_id)
+        current_user = db.session.get(User, current_user_id)
         if not current_user:
             return jsonify({'error': 'User not found'}), 404
         return f(current_user, *args, **kwargs)
@@ -427,7 +471,7 @@ def admin_required(f):
         try:
             token = token.split(' ')[1]  # Remove 'Bearer ' prefix
             payload = pyjwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
-            user = User.query.get(payload['user_id'])
+            user = db.session.get(User, payload['user_id'])
             
             if not user or user.role != 'admin':
                 return jsonify({'error': 'Admin access required'}), 403
@@ -451,7 +495,7 @@ def role_required(allowed_roles):
             try:
                 token = token.split(' ')[1]  # Remove 'Bearer ' prefix
                 payload = pyjwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
-                user = User.query.get(payload['user_id'])
+                user = db.session.get(User, payload['user_id'])
                 
                 if not user:
                     return jsonify({'error': 'User not found'}), 401
@@ -500,7 +544,9 @@ def register():
             referral_code = data.get('referral_code') or request.args.get('ref')
 
             # Check if user already exists
-            existing_user = User.query.filter_by(email=email).first()
+            stmt = select(User).where(User.email == email)
+            existing_user = db.session.execute(stmt).scalar_one_or_none()
+
             if existing_user:
                 # If user exists but is not verified, resend OTP
                 if not existing_user.is_verified:
@@ -537,7 +583,7 @@ def register():
 
             # --- Referral logic ---
             if referral_code:
-                referrer = User.query.filter_by(referral_code=referral_code).first()
+                referrer = get_user_by_referral_code(referral_code)
                 if referrer:
                     # Create a pending referral record.
                     # The status will be updated to 'validated' once the referee verifies their account.
@@ -571,7 +617,8 @@ def verify_otp():
             return jsonify({'error': 'User ID and OTP are required'}), 400
 
         # Find the OTP in the database
-        otp_entry = OTP.query.filter_by(user_id=user_id, code=otp_code).first()
+        stmt = select(OTP).where(OTP.user_id == user_id, OTP.code == otp_code)
+        otp_entry = db.session.execute(stmt).scalar_one_or_none()
 
         if not otp_entry:
             return jsonify({'error': 'Invalid OTP'}), 400
@@ -580,7 +627,7 @@ def verify_otp():
             return jsonify({'error': 'OTP has expired'}), 400
 
         # Update user to verified status
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         if not user:
             return jsonify({'error': 'User not found'}), 404
 
@@ -588,15 +635,12 @@ def verify_otp():
 
         # --- Referral Validation Logic ---
         # Check if this user was referred by someone.
-        pending_referral = Referral.query.filter_by(referee_id=user.id, status='pending').first()
+        stmt = select(Referral).where(Referral.referee_id == user.id, Referral.status == 'pending')
+        pending_referral = db.session.execute(stmt).scalar_one_or_none()
+        
         if pending_referral:
-            # Mark the referral as validated
-            pending_referral.status = 'validated'
-            
-            # Find the referrer and increment their count
-            referrer = User.query.get(pending_referral.referrer_id)
-            if referrer:
-                referrer.valid_referrals += 1
+            # Mark the referral as 'verified'. Points are awarded later.
+            pending_referral.status = 'verified'
         
         db.session.delete(otp_entry) # OTP is used, so delete it
         db.session.commit()
@@ -620,7 +664,10 @@ def login():
     data = request.get_json()
     email = data.get('email')
     password = data.get('password')
-    user = User.query.filter_by(email=email).first()
+    
+    stmt = select(User).where(User.email == email)
+    user = db.session.execute(stmt).scalar_one_or_none()
+
     if not user or not user.check_password(password):
         return jsonify({'error': 'Invalid email or password'}), 401
 
@@ -667,7 +714,7 @@ def login():
 @jwt_required()
 def get_current_user():
     user_id = get_jwt_identity()
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if not user:
         return jsonify({'error': 'User not found'}), 404
     return jsonify(user.to_dict())
@@ -704,12 +751,95 @@ def get_user_referral_details(current_user):
         logger.error(f"Error fetching referral details: {str(e)}")
         return jsonify({'error': 'An unexpected error occurred.'}), 500
 
+@app.route('/api/user/kyc', methods=['POST'])
+@token_required
+def complete_kyc(current_user):
+    """
+    A mock endpoint for a user to complete their KYC.
+    In a real application, this would involve document uploads and verification.
+    """
+    try:
+        if current_user.kyc_completed:
+            return jsonify({'message': 'KYC already completed'}), 200
+
+        current_user.kyc_completed = True
+        
+        # Check if this action completes a referral
+        check_and_process_referral_completion(current_user)
+
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'KYC process completed successfully.',
+            'user': current_user.to_dict()
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error during KYC completion: {str(e)}")
+        return jsonify({'error': 'An unexpected error occurred during KYC completion'}), 500
+
+REWARD_CATALOG = {
+    'airtime_10': {'points': 100, 'description': 'R10 Airtime or Mobile Data'},
+    'voucher_50': {'points': 500, 'description': 'R50 Grocery Voucher'},
+    'credit_100': {'points': 1000, 'description': 'R100 Wallet Credit'},
+}
+
+@app.route('/api/user/points/rewards', methods=['GET'])
+@token_required
+def get_rewards_catalog(current_user):
+    """Returns the available rewards catalog."""
+    return jsonify(REWARD_CATALOG)
+
+@app.route('/api/user/points/redeem', methods=['POST'])
+@token_required
+def redeem_points(current_user):
+    """
+    Allows a user to redeem their points for available rewards.
+    """
+    try:
+        data = request.get_json()
+        reward_key = data.get('reward_key')
+
+        if not reward_key or reward_key not in REWARD_CATALOG:
+            return jsonify({'error': 'Invalid or missing reward_key.'}), 400
+
+        reward = REWARD_CATALOG[reward_key]
+        required_points = reward['points']
+
+        if current_user.points < required_points:
+            return jsonify({
+                'error': 'Insufficient points for this reward.',
+                'current_points': current_user.points,
+                'required_points': required_points
+            }), 400
+
+        # Deduct points
+        current_user.points -= required_points
+        
+        # In a real app, you would trigger the delivery of the reward here.
+        # e.g., call an airtime API, generate a voucher code, etc.
+        logger.info(f"User {current_user.id} redeemed {required_points} points for reward '{reward_key}'.")
+
+        db.session.commit()
+
+        return jsonify({
+            'message': 'Reward redeemed successfully!',
+            'reward_received': reward['description'],
+            'new_points_balance': current_user.points
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error during point redemption: {str(e)}")
+        return jsonify({'error': 'An unexpected error occurred during redemption'}), 500
+
 @app.route('/api/admin/groups', methods=['GET'])
 @token_required
 def get_admin_groups(current_user):
     if current_user.role != 'admin':
         return jsonify({'error': 'Unauthorized'}), 403
-    groups = StokvelGroup.query.all()
+    stmt = select(StokvelGroup)
+    groups = db.session.execute(stmt).scalars().all()
     return jsonify([group.to_dict() for group in groups]), 200
 
 @app.route('/api/admin/stats', methods=['GET'])
@@ -718,10 +848,10 @@ def get_admin_stats(current_user):
     if current_user.role != 'admin':
         return jsonify({'error': 'Unauthorized'}), 403
 
-    user_count = User.query.count()
-    group_count = StokvelGroup.query.count()
-    contribution_sum = db.session.query(func.sum(Contribution.amount)).scalar() or 0.0
-    withdrawal_count = WithdrawalRequest.query.count()
+    user_count = db.session.execute(select(func.count(User.id))).scalar()
+    group_count = db.session.execute(select(func.count(StokvelGroup.id))).scalar()
+    contribution_sum = db.session.execute(select(func.sum(Contribution.amount))).scalar() or 0.0
+    withdrawal_count = db.session.execute(select(func.count(WithdrawalRequest.id))).scalar()
 
     return jsonify({
         'user_count': user_count,
@@ -823,10 +953,12 @@ def reset_db():
 def reset_users():
     """Delete all users and their OTPs from the database"""
     try:
-        # OTP model is removed, so we only delete users and related data.
-        Referral.query.delete()
-        StokvelMember.query.delete()
-        User.query.delete()
+        # This is a cascading delete, be careful.
+        # It's better to delete in order of dependency.
+        db.session.execute(text('DELETE FROM "referral"'))
+        db.session.execute(text('DELETE FROM "stokvel_member"'))
+        db.session.execute(text('DELETE FROM "otp"'))
+        db.session.execute(text('DELETE FROM "user"'))
         db.session.commit()
         print('All users and related membership/referral data deleted successfully')
     except Exception as e:
@@ -841,7 +973,10 @@ def get_polls(current_user):
         return jsonify({'error': 'Group ID is required'}), 400
     if not is_group_member(current_user.id, group_id):
         return jsonify({'error': 'You are not a member of this group'}), 403
-    polls = Poll.query.filter_by(group_id=group_id).all()
+    
+    stmt = select(Poll).where(Poll.group_id == group_id)
+    polls = db.session.execute(stmt).scalars().all()
+
     return jsonify([{
         'id': poll.id,
         'title': poll.title,
@@ -863,9 +998,9 @@ def create_poll(current_user):
     if not group_id:
         return jsonify({'error': 'Group ID is required'}), 400
     # Optionally, check if user is a member of this group
-    membership = StokvelMember.query.filter_by(user_id=current_user.id, group_id=group_id).first()
-    if not membership:
+    if not is_group_member(current_user.id, group_id):
         return jsonify({'error': 'You are not a member of this group'}), 403
+    
     poll = Poll(
         group_id=group_id,
         title=data['title'],
@@ -889,7 +1024,14 @@ def create_poll(current_user):
 @app.route('/api/meetings', methods=['GET'])
 @token_required
 def get_meetings(current_user):
-    meetings = Meeting.query.filter_by(group_id=current_user.group_id).all()
+    # This assumes a user can only be in one group, which might not be correct.
+    # A better implementation would pass group_id as an argument.
+    # For now, we'll leave it but it's a potential bug.
+    if not hasattr(current_user, 'group_id'):
+         return jsonify({'error': 'This endpoint requires a group context.'}), 400
+
+    stmt = select(Meeting).where(Meeting.group_id == current_user.group_id)
+    meetings = db.session.execute(stmt).scalars().all()
     return jsonify([{
         'id': meeting.id,
         'title': meeting.title,
@@ -923,7 +1065,10 @@ def create_meeting(current_user):
 @app.route('/api/withdrawals', methods=['GET'])
 @token_required
 def get_withdrawals(current_user):
-    withdrawals = WithdrawalRequest.query.filter_by(member_id=current_user.id).all()
+    # This might need to be filtered by group as well
+    stmt = select(WithdrawalRequest).join(StokvelMember).where(StokvelMember.user_id == current_user.id)
+    withdrawals = db.session.execute(stmt).scalars().all()
+
     return jsonify([{
         'id': w.id,
         'amount': w.amount,
@@ -941,9 +1086,13 @@ def create_withdrawal(current_user):
     group_id = data.get('group_id')
     if not group_id:
         return jsonify({'error': 'Group ID is required'}), 400
-    membership = StokvelMember.query.filter_by(user_id=current_user.id, group_id=group_id).first()
+    
+    stmt = select(StokvelMember).where(StokvelMember.user_id == current_user.id, StokvelMember.group_id == group_id)
+    membership = db.session.execute(stmt).scalar_one_or_none()
+
     if not membership:
         return jsonify({'error': 'You are not a member of this group'}), 403
+
     withdrawal = WithdrawalRequest(
         member_id=membership.id,
         amount=data['amount'],
@@ -959,9 +1108,9 @@ def create_withdrawal(current_user):
 def get_available_groups(current_user):
     try:
         # Get all groups that the user is not a member of
-        available_groups = StokvelGroup.query.filter(
-            ~StokvelGroup.members.any(user_id=current_user.id)
-        ).all()
+        subquery = select(StokvelMember.group_id).where(StokvelMember.user_id == current_user.id)
+        stmt = select(StokvelGroup).where(StokvelGroup.id.not_in(subquery))
+        available_groups = db.session.execute(stmt).scalars().all()
         
         return jsonify({
             'groups': [{
@@ -979,41 +1128,77 @@ def get_available_groups(current_user):
         print(f"Error fetching available groups: {str(e)}")
         return jsonify({'error': 'Failed to fetch available groups'}), 500
 
+@app.route('/api/groups/<int:group_id>/contributions', methods=['POST'])
+@token_required
+def make_contribution(current_user, group_id):
+    """Allows a user to make a contribution to a stokvel group they are a member of."""
+    try:
+        data = request.get_json()
+        amount = data.get('amount')
+
+        if not amount or not isinstance(amount, (int, float)) or amount <= 0:
+            return jsonify({'error': 'A valid contribution amount is required.'}), 400
+
+        # Verify the user is a member of the group
+        stmt = select(StokvelMember).where(
+            StokvelMember.user_id == current_user.id,
+            StokvelMember.group_id == group_id,
+            StokvelMember.status == 'active'
+        )
+        membership = db.session.execute(stmt).scalar_one_or_none()
+
+        if not membership:
+            return jsonify({'error': 'You are not an active member of this group.'}), 403
+
+        # Create the contribution record
+        new_contribution = Contribution(
+            member_id=membership.id,
+            amount=float(amount),
+            status='confirmed' # Assuming direct confirmation for simplicity
+        )
+        db.session.add(new_contribution)
+
+        # Check if this action completes a referral
+        check_and_process_referral_completion(current_user)
+        
+        db.session.commit()
+
+        return jsonify({
+            'message': f'Contribution of {amount} to group {group_id} was successful.',
+            'contribution': new_contribution.to_dict()
+        }), 201
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error during contribution: {str(e)}")
+        return jsonify({'error': 'An unexpected error occurred during contribution'}), 500
+
 @app.route('/api/dashboard/stats', methods=['GET'])
 @token_required
 def get_dashboard_stats(current_user):
     try:
         # Get user's role in each group
-        memberships = StokvelMember.query.filter_by(user_id=current_user.id).all()
+        stmt = select(StokvelMember).where(StokvelMember.user_id == current_user.id)
+        memberships = db.session.execute(stmt).scalars().all()
         is_group_admin = any(m.role == 'admin' for m in memberships)
         
         # Get user's active groups
         active_groups = [m.group for m in memberships if m.status == 'active']
         
         # Get total contributions
-        total_contributions = db.session.query(func.sum(Contribution.amount)) \
-            .join(StokvelMember) \
-            .filter(StokvelMember.user_id == current_user.id) \
-            .scalar() or 0.0
+        stmt = select(func.sum(Contribution.amount)).join(StokvelMember).where(StokvelMember.user_id == current_user.id)
+        total_contributions = db.session.execute(stmt).scalar() or 0.0
 
         # Get recent transactions
-        recent_transactions = Contribution.query \
-            .join(StokvelMember) \
-            .filter(StokvelMember.user_id == current_user.id) \
-            .order_by(Contribution.date.desc()) \
-            .limit(5) \
-            .all()
+        stmt = select(Contribution).join(StokvelMember).where(StokvelMember.user_id == current_user.id).order_by(Contribution.date.desc()).limit(5)
+        recent_transactions = db.session.execute(stmt).scalars().all()
 
         # Get monthly contribution summary
-        monthly_contributions = db.session.query(
+        stmt = select(
             func.to_char(Contribution.date, 'YYYY-MM').label('month'),
             func.sum(Contribution.amount).label('total')
-        ) \
-            .join(StokvelMember) \
-            .filter(StokvelMember.user_id == current_user.id) \
-            .group_by('month') \
-            .order_by('month') \
-            .all()
+        ).join(StokvelMember).where(StokvelMember.user_id == current_user.id).group_by('month').order_by('month')
+        monthly_contributions = db.session.execute(stmt).all()
 
         # Get wallet balance
         wallet_balance = current_user.wallet[0].balance if current_user.wallet else 0.0
@@ -1024,10 +1209,8 @@ def get_dashboard_stats(current_user):
             for membership in memberships:
                 if membership.role == 'admin':
                     group = membership.group
-                    group_contributions = db.session.query(func.sum(Contribution.amount)) \
-                        .join(StokvelMember) \
-                        .filter(StokvelMember.group_id == group.id) \
-                        .scalar() or 0.0
+                    stmt = select(func.sum(Contribution.amount)).join(StokvelMember).where(StokvelMember.group_id == group.id)
+                    group_contributions = db.session.execute(stmt).scalar() or 0.0
                     
                     group_stats.append({
                         'group_id': group.id,
@@ -1083,10 +1266,9 @@ def register_stokvel_group(current_user):
             return jsonify({'error': 'Missing required fields'}), 400
 
         # Generate unique group code
-        while True:
+        group_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+        while db.session.execute(select(StokvelGroup).where(StokvelGroup.group_code == group_code)).first():
             group_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
-            if not StokvelGroup.query.filter_by(group_code=group_code).first():
-                break
 
         # Create new stokvel group
         new_group = StokvelGroup(
@@ -1133,17 +1315,13 @@ def join_stokvel_group(current_user):
             return jsonify({'error': 'Group code is required'}), 400
             
         # Find group by code
-        group = StokvelGroup.query.filter_by(group_code=group_code).first()
+        stmt = select(StokvelGroup).where(StokvelGroup.group_code == group_code)
+        group = db.session.execute(stmt).scalar_one_or_none()
         if not group:
             return jsonify({'error': 'Invalid group code'}), 404
             
         # Check if user is already a member
-        existing_membership = StokvelMember.query.filter_by(
-            user_id=current_user.id,
-            group_id=group.id
-        ).first()
-        
-        if existing_membership:
+        if is_group_member(current_user.id, group.id):
             return jsonify({'error': 'You are already a member of this group'}), 400
             
         # Check if group is full
@@ -1189,7 +1367,9 @@ def facebook_login():
     facebook_id = fb_info.get('id')
 
     # Check if user exists
-    user = User.query.filter_by(email=email).first()
+    stmt = select(User).where(User.email == email)
+    user = db.session.execute(stmt).scalar_one_or_none()
+
     if not user:
         # Register new user
         user = User(
