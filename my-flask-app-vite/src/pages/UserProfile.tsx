@@ -57,16 +57,16 @@ const InfoCard: React.FC<InfoCardProps> = ({ icon: Icon, title, description, onC
   return (
     <button
       onClick={onClick}
-      className="bg-white shadow rounded-lg p-6 flex flex-col justify-between text-left w-full transition duration-200 ease-in-out transform hover:scale-105 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
+      className="bg-white dark:bg-dark-card shadow rounded-lg p-6 flex flex-col justify-between text-left w-full transition duration-200 ease-in-out transform hover:scale-105 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
     >
       <div className="flex-shrink-0 mb-4">
-        <Icon className="w-8 h-8 text-blue-600" />
+        <Icon className="w-8 h-8 text-blue-600 dark:text-blue-400" />
       </div>
       <div className="flex-grow mb-4">
-        <h3 className="text-lg font-semibold text-gray-900 mb-1">{title}</h3>
-        <p className="text-sm text-gray-600">{description}</p>
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-dark-text mb-1">{title}</h3>
+        <p className="text-sm text-gray-600 dark:text-gray-400">{description}</p>
       </div>
-      <span className="self-start flex items-center text-sm font-medium text-blue-600 group-hover:text-blue-800">
+      <span className="self-start flex items-center text-sm font-medium text-blue-600 dark:text-blue-400 group-hover:text-blue-800 dark:group-hover:text-blue-300">
         View
         <ChevronRight className="w-4 h-4 ml-1 transition-transform duration-200 group-hover:translate-x-1" />
       </span>
@@ -1074,23 +1074,28 @@ const UserProfile: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-pink-200 via-blue-100 to-yellow-100 p-6">
-      <div className="container mx-auto px-4 py-6">
-        <h1 className="text-3xl font-bold text-gray-900 mb-6">My Account</h1>
+    <div className="min-h-screen bg-gray-100 dark:bg-dark-background">
+      <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-dark-text">User Profile</h1>
+          <p className="mt-1 text-lg text-gray-600 dark:text-gray-400">
+            Manage your account details, security, and preferences.
+          </p>
+        </div>
 
-        {/* Internal Horizontal Navigation - Dark background */}
-        <div className="mb-6 bg-gray-800 rounded-t-lg">
-          <nav className="flex space-x-0">
+        {/* Horizontal Navigation */}
+        <div className="border-b border-gray-200 dark:border-dark-border mb-8">
+          <nav className="-mb-px flex space-x-8" aria-label="Tabs">
             {userProfileTabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`py-3 px-6 text-sm transition-colors duration-200 ${
+                className={`${
                   activeTab === tab.id
-                    ? 'bg-gray-700 font-bold text-white rounded-tl-lg'
-                    : 'bg-gray-800 font-normal text-white hover:bg-gray-700'
-                }`}
-                style={{ borderBottom: activeTab === tab.id ? '2px solid transparent' : 'none' }}
+                    ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                    : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-700'
+                } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm focus:outline-none`}
               >
                 {tab.label}
               </button>
@@ -1098,41 +1103,10 @@ const UserProfile: React.FC = () => {
           </nav>
         </div>
 
-        {/* Content Area */}
+        {/* Dynamic Content Area */}
         <div>
           {renderContent()}
         </div>
-
-        {showDeleteModal && (
-          <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50">
-            <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-sm">
-              <h2 className="text-lg font-bold mb-4">Delete Account</h2>
-              <p className="mb-4 text-gray-600">
-                For your security, please enter your password to confirm account deletion. This action cannot be undone.
-              </p>
-              <input
-                type="password"
-                placeholder="Enter your password"
-                value={deletePassword}
-                onChange={e => setDeletePassword(e.target.value)}
-                className="w-full border rounded p-2 mb-4"
-              />
-              <button
-                onClick={handleDeleteAccount}
-                className="w-full bg-red-600 text-white py-2 rounded"
-                disabled={isDeleting || !deletePassword}
-              >
-                {isDeleting ? 'Deleting...' : 'Yes, Delete My Account'}
-              </button>
-              <button
-                onClick={() => setShowDeleteModal(false)}
-                className="w-full mt-2 text-gray-500"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

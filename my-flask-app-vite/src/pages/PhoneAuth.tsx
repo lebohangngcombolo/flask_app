@@ -3,6 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { sendSmsVerificationCode, verifyPhoneCode, resendSmsVerificationCode, login } from '../utils/auth';
 import { toast } from 'react-toastify';
 
+const Spinner = ({ className = "h-5 w-5" }) => (
+  <svg className={`animate-spin ${className}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+  </svg>
+);
+
 const PhoneAuth: React.FC = () => {
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
@@ -25,18 +32,16 @@ const PhoneAuth: React.FC = () => {
 
   const handlePhoneSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Submitting phone:", phone);
-    setStep('verify');
-    setCodeSent(true);
-    sendSmsVerificationCode(phone)
-      .then(result => {
-        if (!result.success) {
-          toast.error(result.message || 'Failed to send verification code.');
-        }
-      })
-      .catch(() => {
-        toast.error('Failed to send verification code.');
-      });
+    setIsLoading(true);
+    const result = await sendSmsVerificationCode(phone);
+    setIsLoading(false);
+    if (result.success) {
+      setStep('verify');
+      setCodeSent(true);
+      toast.success('Verification code sent!');
+    } else {
+      toast.error(result.message || 'Failed to send verification code.');
+    }
   };
 
   const handleOtpChange = (index: number, value: string) => {
@@ -70,13 +75,22 @@ const PhoneAuth: React.FC = () => {
     setVerifying(true);
     const result = await verifyPhoneCode(phone, verificationCode);
     if (result.success) {
-      toast.success('Phone verified! Redirecting to login...');
-      setOtp(['', '', '', '', '', '']);
-      setOtpError('');
-      setTimeout(() => {
-        setVerifying(false);
-        navigate('/login');
-      }, 2000);
+      // Store token and user info if present
+      if (result.access_token && result.user) {
+        localStorage.setItem('token', result.access_token);
+        localStorage.setItem('user', JSON.stringify(result.user));
+        toast.success('Login successful! Redirecting...');
+        setTimeout(() => {
+          setVerifying(false);
+          navigate('/dashboard');
+        }, 1000);
+      } else {
+        toast.success('Phone verified! Please login.');
+        setTimeout(() => {
+          setVerifying(false);
+          navigate('/login');
+        }, 1000);
+      }
     } else {
       setOtpError(result.message);
       setVerifying(false);
@@ -117,8 +131,34 @@ const PhoneAuth: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-blue-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="relative w-full max-w-md bg-white/80 backdrop-blur-lg rounded-2xl shadow-xl p-8 animate-fade-in">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-blue-50 py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
+      {/* Animated Coins Background */}
+      <div className="absolute inset-0 overflow-hidden z-0">
+        {[...Array(20)].map((_, index) => (
+          <div
+            key={index}
+            className="absolute animate-float"
+            style={{
+              left: `${Math.random() * 100}%`,
+              top: `${Math.random() * 100}%`,
+              animationDelay: `${Math.random() * 5}s`,
+              animationDuration: `${5 + Math.random() * 5}s`,
+            }}
+          >
+            <div className="w-8 h-8 bg-blue-500 rounded-full opacity-20 transform rotate-45" />
+          </div>
+        ))}
+      </div>
+      {/* Animated Savings Jar */}
+      <div className="absolute top-10 right-10 w-32 h-40 animate-bounce-slow z-0">
+        <div className="relative w-full h-full">
+          <div className="absolute bottom-0 w-full h-3/4 bg-blue-100 rounded-b-3xl border-2 border-blue-300">
+            <div className="absolute inset-0 bg-blue-200 opacity-50 rounded-b-3xl animate-fill" />
+          </div>
+          <div className="absolute top-0 w-full h-1/4 bg-blue-200 rounded-t-3xl border-2 border-blue-300" />
+        </div>
+      </div>
+      <div className="relative w-full max-w-md bg-white/80 backdrop-blur-lg rounded-2xl shadow-xl p-8 animate-fade-in z-10">
         <button
           onClick={() => navigate('/signup')}
           className="absolute top-4 left-4 text-gray-600 hover:text-blue-600 transition-colors duration-200"
@@ -147,9 +187,17 @@ const PhoneAuth: React.FC = () => {
             />
             <button
               type="submit"
-              className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 text-sm"
+              className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 text-sm flex items-center justify-center"
+              disabled={isLoading}
             >
-              Send Verification Code
+              {isLoading ? (
+                <>
+                  <Spinner className="h-5 w-5 mr-2 text-white" />
+                  Sending...
+                </>
+              ) : (
+                'Send Verification Code'
+              )}
             </button>
           </form>
         ) : (
@@ -183,7 +231,27 @@ const PhoneAuth: React.FC = () => {
                       if (prevInput) (prevInput as HTMLInputElement).focus();
                     }
                   }}
+                  onPaste={e => {
+                    e.preventDefault();
+                    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+                    if (pasted.length > 0) {
+                      const newOtp = [...otp];
+                      for (let i = 0; i < pasted.length; i++) {
+                        newOtp[i] = pasted[i];
+                      }
+                      setOtp(newOtp);
+                      // Optionally, auto-submit if all 6 digits are pasted
+                      if (pasted.length === 6) {
+                        setTimeout(() => {
+                          handleVerifyOtp(new Event('submit') as any, pasted);
+                        }, 100);
+                      }
+                    }
+                  }}
                   className="w-12 h-12 text-center text-xl font-semibold border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  autoComplete="one-time-code"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
                 />
               ))}
             </div>
@@ -192,19 +260,23 @@ const PhoneAuth: React.FC = () => {
               Didn't receive the code?{' '}
               <button
                 type="button"
-                className="text-blue-600 hover:text-blue-700 font-medium"
+                className="text-blue-600 hover:text-blue-700 font-medium flex items-center justify-center"
                 onClick={handleResendCode}
                 disabled={isLoading}
               >
-                Resend
+                {isLoading ? (
+                  <>
+                    <Spinner className="h-4 w-4 mr-1 text-blue-600" />
+                    Sending...
+                  </>
+                ) : (
+                  'Resend'
+                )}
               </button>
             </div>
             {verifying ? (
               <div className="flex flex-col items-center justify-center">
-                <svg className="animate-spin h-10 w-10 text-blue-600 mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
+                <Spinner className="h-10 w-10 text-blue-600 mb-2" />
                 <span className="text-blue-600">Verifying...</span>
               </div>
             ) : (

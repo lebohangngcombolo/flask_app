@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import AdminSidebar from '../components/AdminSidebar';
 import AdminNavbar from '../components/AdminNavbar';
@@ -31,80 +31,27 @@ import {
   Tooltip,
   ResponsiveContainer
 } from 'recharts';
-import { adminAPI } from '../services/api';
+import { adminAPI, dashboardAPI } from '../services/api';
+import { newsAPI } from '../services/api';
 import CreateStokvelGroup from '../components/CreateStokvelGroup';
 import { toast } from 'react-toastify';
 
-const adminNavItems = [
-  { label: 'Dashboard', icon: <BarChart2 />, path: '/admin/dashboard' },
-  { label: 'Manage Users', icon: <Users />, path: '/admin/users' },
-  { label: 'Manage Groups', icon: <Folder />, path: '/admin/groups' },
-  { label: 'Contribution Analytics', icon: <BarChart2 />, path: '/admin/analytics' },
-  { label: 'KYC Approvals', icon: <ShieldCheck />, path: '/admin/kyc' },
-  { label: 'Reports', icon: <FileText />, path: '/admin/reports' },
-  { label: 'Notifications', icon: <Bell />, path: '/admin/notifications' },
-  { label: 'Settings', icon: <ShieldCheck />, path: '/admin/settings' },
-  { label: 'Admin Team', icon: <UserCheck />, path: '/admin/team' },
-];
-
-const adminCards = [
-  { label: 'Users', icon: <Users size={32} />, path: '/admin/users' },
-  { label: 'Groups', icon: <Folder size={32} />, path: '/admin/groups' },
-  { label: 'Analytics', icon: <BarChart2 size={32} />, path: '/admin/analytics' },
-  { label: 'Withdrawals', icon: <Briefcase size={32} />, path: '/admin/withdrawals' },
-  { label: 'Reports', icon: <FileText size={32} />, path: '/admin/reports' },
-  { label: 'Notifications', icon: <Bell size={32} />, path: '/admin/notifications' },
-  { label: 'Team Roles', icon: <UserCheck size={32} />, path: '/admin/team' },
-];
-
 const AdminDashboard: React.FC = () => {
-  const [stats, setStats] = useState<any>(null);
-  const [groups, setGroups] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [showCreateGroup, setShowCreateGroup] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [statsResponse, groupsResponse] = await Promise.all([
-          adminAPI.getStats(),
-          adminAPI.getGroups()
-        ]);
-        setStats(statsResponse.data);
-        setGroups(groupsResponse.data);
-      } catch (error) {
-        console.error('Error fetching dashboard data:', error);
-        setError('Failed to load dashboard data. Please try again later.');
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
-  }, []);
-
-  const handleCreateGroup = async (data: any) => {
-    try {
-      await adminAPI.createGroup(data);
-      toast.success('Group created successfully!');
-      setShowCreateGroup(false);
-      // Optionally, refresh group list here
-    } catch (error) {
-      toast.error('Failed to create group');
-    }
+  const handleCreateGroup = (data: any) => {
+    toast.success('Group created (mock)!');
+    setShowCreateGroup(false);
   };
 
-  if (loading) return <div>Loading...</div>;
-
   return (
-    <div className="flex min-h-screen bg-gray-50">
-      {/* Use AdminSidebar component */}
-      <AdminSidebar />
-
-      {/* Main Content */}
-      <div className="flex-1 ml-64"> {/* Add margin-left to account for fixed sidebar */}
-        <AdminNavbar />
-        <main className="p-10 pt-20"> {/* Add padding-top to account for fixed navbar */}
+    <div className="flex h-screen bg-gray-50 flex-col">
+      <AdminNavbar onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} />
+      <div className="flex flex-1 overflow-hidden">
+        <AdminSidebar sidebarOpen={sidebarOpen} />
+        <main className="flex-1 p-10 overflow-y-auto">
+          {/* Welcome & Stats */}
           <div className="flex justify-between items-center mb-8">
             <div>
               <h1 className="text-3xl font-bold">Welcome, Admin</h1>
@@ -118,40 +65,37 @@ const AdminDashboard: React.FC = () => {
             </div>
           </div>
 
-          {/* Cards Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 mb-10">
-            {adminCards.map((card) => (
-              <a
-                key={card.label}
-                href={card.path}
-                className="flex flex-col items-center justify-center bg-white rounded-lg shadow p-6 hover:shadow-lg transition"
-              >
-                {card.icon}
-                <span className="mt-3 font-semibold text-gray-800">{card.label}</span>
-              </a>
-            ))}
-          </div>
-
-          {/* Contributions & Usage Overview */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-lg font-semibold mb-4">Contributions & Usage Overview</h2>
-            {/* Replace this with your actual chart component */}
-            <div className="h-32 flex items-end gap-2">
-              <div className="w-8 h-16 bg-blue-200 rounded"></div>
-              <div className="w-8 h-24 bg-blue-400 rounded"></div>
-              <div className="w-8 h-20 bg-blue-300 rounded"></div>
-              <div className="w-8 h-28 bg-blue-500 rounded"></div>
-              <div className="w-8 h-12 bg-blue-200 rounded"></div>
+          {/* Stats Overview */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div className="bg-white p-6 rounded-lg shadow-md">
+              <p className="text-sm text-gray-600">Total Wallet Balance</p>
+              <h3 className="text-2xl font-bold text-gray-900">--</h3>
+            </div>
+            <div className="bg-white p-6 rounded-lg shadow-md">
+              <p className="text-sm text-gray-600">Active Groups</p>
+              <h3 className="text-2xl font-bold text-gray-900">--</h3>
+            </div>
+            <div className="bg-white p-6 rounded-lg shadow-md">
+              <p className="text-sm text-gray-600">Total Contributions</p>
+              <h3 className="text-2xl font-bold text-gray-900">--</h3>
             </div>
           </div>
 
-          <div className="flex justify-end">
-            <button
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg mb-6"
-              onClick={() => setShowCreateGroup(true)}
-            >
-              + Create Group
-            </button>
+          {/* Groups Management */}
+          <div className="bg-white rounded-lg shadow p-6 mb-8">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-semibold text-gray-900">All Groups</h2>
+              <button
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg"
+                onClick={() => setShowCreateGroup(true)}
+              >
+                + Create Group
+              </button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* No groups to display */}
+              <div className="text-gray-400 col-span-3 text-center py-8">No groups available.</div>
+            </div>
           </div>
           {showCreateGroup && (
             <CreateStokvelGroup
@@ -159,6 +103,48 @@ const AdminDashboard: React.FC = () => {
               onCancel={() => setShowCreateGroup(false)}
             />
           )}
+
+          {/* Users Management */}
+          <div className="bg-white rounded-lg shadow p-6 mb-8">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">All Users</h2>
+            <div className="overflow-x-auto">
+              <table className="min-w-full">
+                <thead>
+                  <tr>
+                    <th className="px-4 py-2 text-left">Name</th>
+                    <th className="px-4 py-2 text-left">Email</th>
+                    <th className="px-4 py-2 text-left">Role</th>
+                    <th className="px-4 py-2 text-left">Status</th>
+                    <th className="px-4 py-2 text-left">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {/* No users to display */}
+                  <tr>
+                    <td colSpan={5} className="text-gray-400 text-center py-8">No users available.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Pending Withdrawals */}
+          <div className="bg-white rounded-lg shadow p-6 mb-8">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Pending Withdrawals</h2>
+            <ul>
+              {/* No withdrawals to display */}
+              <li className="text-gray-400 text-center py-8">No pending withdrawals.</li>
+            </ul>
+          </div>
+
+          {/* Announcements Management */}
+          <div className="bg-white rounded-lg shadow p-6 mb-8">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Announcements</h2>
+            <ul>
+              {/* No announcements to display */}
+              <li className="text-gray-400 text-center py-8">No announcements available.</li>
+            </ul>
+          </div>
         </main>
       </div>
     </div>

@@ -1,73 +1,70 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Menu, X } from 'lucide-react';
 import {
   LayoutDashboard,
   Users,
-  CreditCard,
-  Calendar,
-  MessageSquare,
-  Settings,
+  Folder,
+  BarChart2,
+  ShieldCheck,
   FileText,
-  BarChart2
+  Bell,
+  Settings,
+  UserCheck
 } from 'lucide-react';
 
 interface NavItem {
   name: string;
   path: string;
   icon: React.ComponentType;
+  tooltip: string;
 }
 
 const navItems: NavItem[] = [
-  { name: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard },
-  { name: 'Manage Stokvels', path: '/admin/stokvels', icon: Users },
-  { name: 'Members', path: '/admin/members', icon: Users },
-  { name: 'Contributions', path: '/admin/contributions', icon: CreditCard },
-  { name: 'Reports', path: '/admin/reports', icon: FileText },
-  { name: 'Calendar', path: '/admin/calendar', icon: Calendar },
-  { name: 'Messages', path: '/admin/messages', icon: MessageSquare },
-  { name: 'Settings', path: '/admin/settings', icon: Settings }
+  { name: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard, tooltip: 'Overview and platform stats' },
+  { name: 'Manage Users', path: '/admin/users', icon: Users, tooltip: 'View, edit, and manage all users' },
+  { name: 'Manage Groups', path: '/admin/groups', icon: Folder, tooltip: 'Create, edit, and manage all stokvel groups' },
+  { name: 'Contribution Analytics', path: '/admin/analytics', icon: BarChart2, tooltip: 'View and analyze contributions' },
+  { name: 'KYC Approvals', path: '/admin/kyc', icon: ShieldCheck, tooltip: 'Approve or reject KYC submissions' },
+  { name: 'Reports', path: '/admin/reports', icon: FileText, tooltip: 'View and download platform reports' },
+  { name: 'Notifications', path: '/admin/notifications', icon: Bell, tooltip: 'Send and manage notifications' },
+  { name: 'Settings', path: '/admin/settings', icon: Settings, tooltip: 'Platform and admin settings' },
+  { name: 'Admin Team', path: '/admin/team', icon: UserCheck, tooltip: 'Manage admin team and roles' }
 ];
 
-const AdminSidebar: React.FC = () => {
+interface AdminSidebarProps {
+  sidebarOpen: boolean;
+}
+
+const AdminSidebar: React.FC<AdminSidebarProps> = ({ sidebarOpen }) => {
   const location = useLocation();
-  const [isOpen, setIsOpen] = useState(true);
 
   return (
-    <div className={`fixed left-0 top-0 h-full bg-white border-r border-gray-200 pt-16 transition-all duration-300 ease-in-out ${
-      isOpen ? 'w-64' : 'w-16'
-    }`}>
-      {/* Hamburger Menu Button */}
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="absolute top-4 left-4 p-2 rounded-lg hover:bg-gray-100"
-      >
-        {isOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-      </button>
-
-      <div className="px-4 py-6">
-        <nav className="space-y-1">
-          {navItems.map((item) => {
-            const isActive = location.pathname === item.path;
-            return (
-              <Link
-                key={item.path}
-                to={item.path}
-                className={`flex items-center px-4 py-3 text-sm font-medium rounded-lg ${
-                  isActive
-                    ? 'bg-indigo-50 text-indigo-600'
-                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                }`}
-                title={!isOpen ? item.name : undefined}
-              >
-                <item.icon className="h-5 w-5" />
-                {isOpen && <span className="ml-3">{item.name}</span>}
-              </Link>
-            );
-          })}
-        </nav>
-      </div>
-    </div>
+    <aside
+      className={`bg-white border-r flex flex-col justify-between transition-all duration-300 ease-in-out ${
+        sidebarOpen ? 'w-64' : 'w-0 border-none'
+      } overflow-hidden`}
+    >
+      <nav className="flex-1 mt-4 px-2 space-y-1">
+        {navItems.map((item) => {
+          const isActive = location.pathname.startsWith(item.path);
+          return (
+            <Link
+              key={item.path}
+              to={item.path}
+              title={item.tooltip}
+              className={`flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 ${
+                isActive
+                  ? 'bg-blue-50 text-blue-600'
+                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+              }`}
+            >
+              <item.icon className="mr-3 flex-shrink-0" />
+              <span>{item.name}</span>
+            </Link>
+          );
+        })}
+      </nav>
+    </aside>
   );
 };
 

@@ -46,6 +46,21 @@ interface KYCStatus {
   submitted_at?: string;
 }
 
+const provinces = ["Eastern Cape", "Free State", "Gauteng", "KwaZulu-Natal", "Limpopo", "Mpumalanga", "North West", "Northern Cape", "Western Cape"];
+const employmentTypes = ["Full-time", "Part-time", "Self-employed", "Contract", "Internship", "Unemployed", "Student"];
+const bankNames = ["Absa", "African Bank", "Capitec", "Discovery Bank", "FNB", "Nedbank", "Standard Bank", "TymeBank"];
+const accountTypes = ["Cheque / Current", "Savings", "Credit", "Transmission"];
+const bankBranchCodes: { [key: string]: string } = {
+  "Absa": "632005",
+  "African Bank": "430000",
+  "Capitec": "470010",
+  "Discovery Bank": "679000",
+  "FNB": "250655",
+  "Nedbank": "198765",
+  "Standard Bank": "051001",
+  "TymeBank": "678910",
+};
+
 const KYC = () => {
   const [activeTab, setActiveTab] = useState('personal');
   const [formData, setFormData] = useState<KYCFormData>({
@@ -132,12 +147,13 @@ const KYC = () => {
             accountType: data.account_type || '',
             branchCode: data.branch_code || '',
           },
+          documents: prev.documents, // Keep documents state separate
         }));
 
         // Show message that existing documents exist
         const hasExistingDocs = data.id_document_path || data.proof_of_address_path || data.proof_of_income_path || data.bank_statement_path;
         if (hasExistingDocs) {
-          toast.info('Existing documents found in your previous submission. You can upload new documents to replace them.');
+          toast.info('Existing documents found. You can upload new documents to replace them.');
         }
       } else {
         setKycStatus({ status: 'draft' });
@@ -261,55 +277,20 @@ const KYC = () => {
       return;
     }
 
-    // Check if required documents are uploaded
-    const requiredDocuments = ['idDocument', 'proofOfAddress'];
-    const missingDocuments = requiredDocuments.filter(doc => !uploadedDocuments[doc]);
-    
-    if (missingDocuments.length > 0) {
-      const missingNames = missingDocuments.map(doc => 
-        doc.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())
-      );
-      setModalMessage(`Please upload the following required documents: ${missingNames.join(', ')}`);
+    if (!formData.documents.proofOfAddress) {
+      setModalMessage('Proof of Address is required.');
       setShowErrorModal(true);
       return;
     }
 
     setIsSubmitting(true);
-    const dataToSend = new FormData();
-
-    // Add all form data
-    Object.entries(formData).forEach(([section, values]) => {
-      if (section !== 'documents') {
-        Object.entries(values).forEach(([key, value]) => { 
-          dataToSend.append(`${section}.${key}`, value as string); 
-        });
-      } else {
-        Object.entries(values).forEach(([key, value]) => { 
-          if (value) { 
-            dataToSend.append(`documents.${key}`, value as File); 
-          } 
-        });
-      }
-    });
-
     try {
-      const response = await api.post('/api/kyc/submit', dataToSend, { 
-        headers: { 'Content-Type': 'multipart/form-data' } 
-      });
-      
-      // Show success modal
-      setModalMessage(response.data.message || 'KYC submitted successfully! Your application is now pending review.');
+      await api.post('/api/kyc/submit');
+      setModalMessage('Your KYC information has been submitted successfully for verification!');
       setShowSuccessModal(true);
-      
-      // Update status
-      setKycStatus(prev => ({ ...prev, status: 'pending' }));
-      
-      // ✅ Only clear documents section, keep all other form data
-      clearDocumentsOnly();
-      
+      setKycStatus({ status: 'pending' });
     } catch (error: any) {
-      console.error('Error submitting KYC:', error);
-      const errorMessage = error.response?.data?.error || 'An error occurred during submission. Please try again.';
+      const errorMessage = error.response?.data?.error || 'An unexpected error occurred during submission.';
       setModalMessage(errorMessage);
       setShowErrorModal(true);
     } finally {
@@ -317,22 +298,33 @@ const KYC = () => {
     }
   };
 
+  const handleBankChange = (bankName: string) => {
+    setFormData(prev => ({
+      ...prev,
+      bank: {
+        ...prev.bank,
+        bankName,
+        branchCode: bankBranchCodes[bankName] || "",
+      }
+    }));
+  };
+
   // --- Modal Components ---
   const SuccessModal = () => (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+      <div className="bg-white dark:bg-dark-card rounded-lg p-6 max-w-md w-full mx-4">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-green-800">Success!</h3>
+          <h3 className="text-lg font-semibold text-green-800 dark:text-green-300">Success!</h3>
           <button 
             onClick={() => setShowSuccessModal(false)}
-            className="text-gray-400 hover:text-gray-600"
+            className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
         <div className="flex items-center mb-4">
           <CheckCircle className="h-8 w-8 text-green-500 mr-3" />
-          <p className="text-gray-700">{modalMessage}</p>
+          <p className="text-gray-700 dark:text-dark-text">{modalMessage}</p>
         </div>
         <button 
           onClick={() => setShowSuccessModal(false)}
@@ -346,19 +338,19 @@ const KYC = () => {
 
   const ErrorModal = () => (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+      <div className="bg-white dark:bg-dark-card rounded-lg p-6 max-w-md w-full mx-4">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-red-800">Error</h3>
+          <h3 className="text-lg font-semibold text-red-800 dark:text-red-300">Error</h3>
           <button 
             onClick={() => setShowErrorModal(false)}
-            className="text-gray-400 hover:text-gray-600"
+            className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
         <div className="flex items-center mb-4">
           <XCircle className="h-8 w-8 text-red-500 mr-3" />
-          <p className="text-gray-700">{modalMessage}</p>
+          <p className="text-gray-700 dark:text-dark-text">{modalMessage}</p>
         </div>
         <button 
           onClick={() => setShowErrorModal(false)}
@@ -372,9 +364,9 @@ const KYC = () => {
 
   // --- Render Functions ---
   const renderTabs = () => (
-    <div className="flex border-b mb-6">
+    <div className="flex border-b dark:border-dark-border mb-6">
       {['personal', 'address', 'income', 'bank', 'documents'].map(tab => (
-        <button key={tab} className={`capitalize py-2 px-4 text-sm font-medium ${activeTab === tab ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-500 hover:text-gray-700'}`} onClick={() => setActiveTab(tab)}>
+        <button key={tab} className={`capitalize py-2 px-4 text-sm font-medium ${activeTab === tab ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'}`} onClick={() => setActiveTab(tab)}>
           {tab}
         </button>
       ))}
@@ -383,54 +375,137 @@ const KYC = () => {
 
   const renderPersonalDetails = () => (
     <div className="space-y-4">
-        <h3 className="text-lg font-semibold text-gray-800">Personal Information</h3>
-        <div><label className="block text-sm font-medium text-gray-700">Full Name</label><input type="text" value={formData.personal.fullName} onChange={e => handleInputChange('personal', 'fullName', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm" /></div>
-        <div><label className="block text-sm font-medium text-gray-700">Date of Birth</label><input type="date" value={formData.personal.dateOfBirth} onChange={e => handleInputChange('personal', 'dateOfBirth', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm" /></div>
-        <div><label className="block text-sm font-medium text-gray-700">ID Number</label><input type="text" value={formData.personal.idNumber} onChange={e => handleInputChange('personal', 'idNumber', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm" /></div>
-        <div><label className="block text-sm font-medium text-gray-700">Phone</label><input type="text" value={formData.personal.phone} onChange={e => handleInputChange('personal', 'phone', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm" /></div>
-        <div><label className="block text-sm font-medium text-gray-700">Email</label><input type="email" value={formData.personal.email} onChange={e => handleInputChange('personal', 'email', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm" /></div>
-        <div><label className="block text-sm font-medium text-gray-700">Employment Status</label><select value={formData.personal.employmentStatus} onChange={e => handleInputChange('personal', 'employmentStatus', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"><option value="">Select...</option><option value="employed">Employed</option><option value="unemployed">Unemployed</option><option value="student">Student</option></select></div>
-        <div><label className="block text-sm font-medium text-gray-700">Employer Name</label><input type="text" value={formData.personal.employerName} onChange={e => handleInputChange('personal', 'employerName', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm" /></div>
-        <button onClick={() => handleSaveAndContinue('address')} className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700">Save & Continue</button>
+        <h3 className="text-lg font-semibold text-gray-800 dark:text-dark-text">Personal Information</h3>
+        <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Full Name</label><input type="text" value={formData.personal.fullName} onChange={e => handleInputChange('personal', 'fullName', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" /></div>
+        <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Date of Birth</label><input type="date" value={formData.personal.dateOfBirth} onChange={e => handleInputChange('personal', 'dateOfBirth', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" /></div>
+        <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300">ID Number</label><input type="text" value={formData.personal.idNumber} onChange={e => handleInputChange('personal', 'idNumber', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" /></div>
+        <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Phone</label><input type="text" value={formData.personal.phone} onChange={e => handleInputChange('personal', 'phone', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" /></div>
+        <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Email</label><input type="email" value={formData.personal.email} onChange={e => handleInputChange('personal', 'email', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" /></div>
+        <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Employment Status</label><select value={formData.personal.employmentStatus} onChange={e => handleInputChange('personal', 'employmentStatus', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm"><option value="">Select...</option><option value="employed">Employed</option><option value="unemployed">Unemployed</option><option value="student">Student</option></select></div>
+        <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Employer Name</label><input type="text" value={formData.personal.employerName} onChange={e => handleInputChange('personal', 'employerName', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" /></div>
+        <div className="flex justify-end mt-6">
+          <button
+            onClick={() => handleSaveAndContinue('address')}
+            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Save & Continue
+          </button>
+        </div>
     </div>
   );
 
   const renderAddress = () => (
-    <div className="space-y-4">
-        <h3 className="text-lg font-semibold text-gray-800">Address Information</h3>
-        <div><label className="block text-sm font-medium text-gray-700">Street Address</label><input type="text" value={formData.address.streetAddress} onChange={e => handleInputChange('address', 'streetAddress', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm" /></div>
-        <div><label className="block text-sm font-medium text-gray-700">City</label><input type="text" value={formData.address.city} onChange={e => handleInputChange('address', 'city', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm" /></div>
-        <div><label className="block text-sm font-medium text-gray-700">Province</label><input type="text" value={formData.address.province} onChange={e => handleInputChange('address', 'province', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm" /></div>
-        <div><label className="block text-sm font-medium text-gray-700">Postal Code</label><input type="text" value={formData.address.postalCode} onChange={e => handleInputChange('address', 'postalCode', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm" /></div>
-        <button onClick={() => handleSaveAndContinue('income')} className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700">Save & Continue</button>
+    <div>
+      <h3 className="text-xl font-semibold mb-4 text-gray-800 dark:text-dark-text">Residential Address</h3>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Street Address</label><input type="text" value={formData.address.streetAddress} onChange={e => handleInputChange('address', 'streetAddress', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" /></div>
+        <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300">City</label><input type="text" value={formData.address.city} onChange={e => handleInputChange('address', 'city', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" /></div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Province</label>
+          <select value={formData.address.province} onChange={e => handleInputChange('address', 'province', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm">
+            <option value="">Select Province...</option>
+            {provinces.map(province => <option key={province} value={province}>{province}</option>)}
+          </select>
+        </div>
+        <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Postal Code</label><input type="text" value={formData.address.postalCode} onChange={e => handleInputChange('address', 'postalCode', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" /></div>
+        <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Country</label><input type="text" value={formData.address.country} readOnly className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 shadow-sm" /></div>
+      </div>
+      <div className="flex justify-between mt-6">
+        <button onClick={() => setActiveTab('personal')} className="px-6 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600">
+          Back
+        </button>
+        <button onClick={() => handleSaveAndContinue('income')} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+          Save & Continue
+        </button>
+      </div>
     </div>
   );
 
   const renderIncome = () => (
-    <div className="space-y-4">
-        <h3 className="text-lg font-semibold text-gray-800">Income Information</h3>
-        <div><label className="block text-sm font-medium text-gray-700">Monthly Income</label><input type="number" value={formData.income.monthlyIncome} onChange={e => handleInputChange('income', 'monthlyIncome', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm" /></div>
-        <div><label className="block text-sm font-medium text-gray-700">Income Source</label><input type="text" value={formData.income.incomeSource} onChange={e => handleInputChange('income', 'incomeSource', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm" /></div>
-        <div><label className="block text-sm font-medium text-gray-700">Employment Type</label><input type="text" value={formData.income.employmentType} onChange={e => handleInputChange('income', 'employmentType', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm" /></div>
-        <button onClick={() => handleSaveAndContinue('bank')} className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700">Save & Continue</button>
+    <div>
+      <h3 className="text-xl font-semibold mb-4 text-gray-800 dark:text-dark-text">Income Information</h3>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Estimated Monthly Income (ZAR)</label><input type="number" value={formData.income.monthlyIncome} onChange={e => handleInputChange('income', 'monthlyIncome', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" /></div>
+      <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Source of Income</label><input type="text" value={formData.income.incomeSource} onChange={e => handleInputChange('income', 'incomeSource', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" /></div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Employment Type</label>
+        <select value={formData.income.employmentType} onChange={e => handleInputChange('income', 'employmentType', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm">
+            <option value="">Select Employment Type...</option>
+            {employmentTypes.map(type => <option key={type} value={type}>{type}</option>)}
+        </select>
+        </div>
+      </div>
+      <div className="flex justify-between mt-6">
+        <button onClick={() => setActiveTab('address')} className="px-6 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600">
+          Back
+        </button>
+        <button onClick={() => handleSaveAndContinue('bank')} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+          Save & Continue
+        </button>
+      </div>
     </div>
   );
 
   const renderBankDetails = () => (
-    <div className="space-y-4">
-        <h3 className="text-lg font-semibold text-gray-800">Bank Information</h3>
-        <div><label className="block text-sm font-medium text-gray-700">Bank Name</label><input type="text" value={formData.bank.bankName} onChange={e => handleInputChange('bank', 'bankName', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm" /></div>
-        <div><label className="block text-sm font-medium text-gray-700">Account Number</label><input type="text" value={formData.bank.accountNumber} onChange={e => handleInputChange('bank', 'accountNumber', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm" /></div>
-        <div><label className="block text-sm font-medium text-gray-700">Account Type</label><input type="text" value={formData.bank.accountType} onChange={e => handleInputChange('bank', 'accountType', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm" /></div>
-        <div><label className="block text-sm font-medium text-gray-700">Branch Code</label><input type="text" value={formData.bank.branchCode} onChange={e => handleInputChange('bank', 'branchCode', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm" /></div>
-        <button onClick={() => handleSaveAndContinue('documents')} className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700">Save & Continue</button>
+    <div>
+      <h3 className="text-xl font-semibold mb-4 text-gray-800 dark:text-dark-text">Bank Details</h3>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Bank Name</label>
+          <select
+            value={formData.bank.bankName}
+            onChange={e => handleBankChange(e.target.value)}
+            className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm"
+          >
+            <option value="">Select Bank...</option>
+            {bankNames.map(bank => <option key={bank} value={bank}>{bank}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Account Number</label>
+          <input
+            type="text"
+            value={formData.bank.accountNumber}
+            onChange={e => handleInputChange('bank', 'accountNumber', e.target.value)}
+            className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Account Type</label>
+          <select
+            value={formData.bank.accountType}
+            onChange={e => handleInputChange('bank', 'accountType', e.target.value)}
+            className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm"
+          >
+            <option value="">Select Account Type...</option>
+            {accountTypes.map(type => <option key={type} value={type}>{type}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Branch Code</label>
+          <input
+            type="text"
+            value={formData.bank.branchCode}
+            onChange={e => handleInputChange('bank', 'branchCode', e.target.value)}
+            className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm"
+          />
+        </div>
+      </div>
+      <div className="flex justify-between mt-6">
+        <button onClick={() => setActiveTab('income')} className="px-6 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600">
+          Back
+        </button>
+        <button onClick={() => handleSaveAndContinue('documents')} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+          Save & Continue
+        </button>
+      </div>
     </div>
   );
 
   const renderDocuments = () => (
     <div className="space-y-6">
-      <h3 className="text-lg font-semibold text-gray-800">Upload Documents</h3>
-      <p className="text-sm text-gray-600 mb-4">
+      <h3 className="text-lg font-semibold text-gray-800 dark:text-dark-text">Upload Documents</h3>
+      <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
         Please upload the required documents to complete your verification process. 
         <span className="text-red-600 font-medium">* Required documents must be uploaded before submission.</span>
       </p>
@@ -438,13 +513,13 @@ const KYC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* ID Document */}
         <div>
-          <label className="block text-sm font-medium text-gray-700">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
             ID Document <span className="text-red-600">*</span>
           </label>
-          <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md hover:border-blue-400 transition-colors">
+          <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 dark:border-gray-600 border-dashed rounded-md hover:border-blue-400 dark:hover:border-blue-500 transition-colors">
             <div className="space-y-1 text-center">
               <FileUp className="mx-auto h-12 w-12 text-gray-400" />
-              <label htmlFor="idDocument" className="relative cursor-pointer bg-white rounded-md font-medium text-indigo-600 hover:text-indigo-500">
+              <label htmlFor="idDocument" className="relative cursor-pointer bg-white dark:bg-gray-700 rounded-md font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300">
                 <input 
                   id="idDocument" 
                   type="file" 
@@ -454,28 +529,28 @@ const KYC = () => {
                 />
                 <span>Upload a file</span>
               </label>
-              <p className="text-xs text-gray-500">PDF, JPG, PNG, DOC up to 10MB</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">PDF, JPG, PNG, DOC up to 10MB</p>
               
               {/* Upload Status */}
               {uploadingDocuments.idDocument && (
                 <div className="mt-2">
                   <div className="flex items-center justify-center">
                     <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-blue-500 mr-2"></div>
-                    <p className="text-xs text-blue-600">Uploading...</p>
+                    <p className="text-xs text-blue-600 dark:text-blue-400">Uploading...</p>
                   </div>
                 </div>
               )}
               
               {formData.documents.idDocument && (
                 <div className="mt-2">
-                  <p className="text-xs text-green-600 font-medium">{formData.documents.idDocument.name}</p>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-green-600 dark:text-green-400 font-medium">{formData.documents.idDocument.name}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
                     {(formData.documents.idDocument.size / 1024 / 1024).toFixed(2)} MB
                   </p>
                   {uploadedDocuments.idDocument && (
                     <div className="flex items-center justify-center mt-1">
                       <CheckCircle className="h-3 w-3 text-green-500 mr-1" />
-                      <p className="text-xs text-green-600">Uploaded</p>
+                      <p className="text-xs text-green-600 dark:text-green-400">Uploaded</p>
                     </div>
                   )}
                 </div>
@@ -486,13 +561,13 @@ const KYC = () => {
 
         {/* Proof of Address */}
         <div>
-          <label className="block text-sm font-medium text-gray-700">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
             Proof of Address <span className="text-red-600">*</span>
           </label>
-          <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md hover:border-blue-400 transition-colors">
+          <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 dark:border-gray-600 border-dashed rounded-md hover:border-blue-400 dark:hover:border-blue-500 transition-colors">
             <div className="space-y-1 text-center">
               <FileUp className="mx-auto h-12 w-12 text-gray-400" />
-              <label htmlFor="proofOfAddress" className="relative cursor-pointer bg-white rounded-md font-medium text-indigo-600 hover:text-indigo-500">
+              <label htmlFor="proofOfAddress" className="relative cursor-pointer bg-white dark:bg-gray-700 rounded-md font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300">
                 <input 
                   id="proofOfAddress" 
                   type="file" 
@@ -502,28 +577,28 @@ const KYC = () => {
                 />
                 <span>Upload a file</span>
               </label>
-              <p className="text-xs text-gray-500">PDF, JPG, PNG, DOC up to 10MB</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">PDF, JPG, PNG, DOC up to 10MB</p>
               
               {/* Upload Status */}
               {uploadingDocuments.proofOfAddress && (
                 <div className="mt-2">
                   <div className="flex items-center justify-center">
                     <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-blue-500 mr-2"></div>
-                    <p className="text-xs text-blue-600">Uploading...</p>
+                    <p className="text-xs text-blue-600 dark:text-blue-400">Uploading...</p>
                   </div>
                 </div>
               )}
               
               {formData.documents.proofOfAddress && (
                 <div className="mt-2">
-                  <p className="text-xs text-green-600 font-medium">{formData.documents.proofOfAddress.name}</p>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-green-600 dark:text-green-400 font-medium">{formData.documents.proofOfAddress.name}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
                     {(formData.documents.proofOfAddress.size / 1024 / 1024).toFixed(2)} MB
                   </p>
                   {uploadedDocuments.proofOfAddress && (
                     <div className="flex items-center justify-center mt-1">
                       <CheckCircle className="h-3 w-3 text-green-500 mr-1" />
-                      <p className="text-xs text-green-600">Uploaded</p>
+                      <p className="text-xs text-green-600 dark:text-green-400">Uploaded</p>
                     </div>
                   )}
                 </div>
@@ -534,11 +609,11 @@ const KYC = () => {
 
         {/* Proof of Income */}
         <div>
-          <label className="block text-sm font-medium text-gray-700">Proof of Income</label>
-          <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md hover:border-blue-400 transition-colors">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Proof of Income</label>
+          <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 dark:border-gray-600 border-dashed rounded-md hover:border-blue-400 dark:hover:border-blue-500 transition-colors">
             <div className="space-y-1 text-center">
               <FileUp className="mx-auto h-12 w-12 text-gray-400" />
-              <label htmlFor="proofOfIncome" className="relative cursor-pointer bg-white rounded-md font-medium text-indigo-600 hover:text-indigo-500">
+              <label htmlFor="proofOfIncome" className="relative cursor-pointer bg-white dark:bg-gray-700 rounded-md font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300">
                 <input 
                   id="proofOfIncome" 
                   type="file" 
@@ -548,28 +623,28 @@ const KYC = () => {
                 />
                 <span>Upload a file</span>
               </label>
-              <p className="text-xs text-gray-500">PDF, JPG, PNG, DOC up to 10MB</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">PDF, JPG, PNG, DOC up to 10MB</p>
               
               {/* Upload Status */}
               {uploadingDocuments.proofOfIncome && (
                 <div className="mt-2">
                   <div className="flex items-center justify-center">
                     <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-blue-500 mr-2"></div>
-                    <p className="text-xs text-blue-600">Uploading...</p>
+                    <p className="text-xs text-blue-600 dark:text-blue-400">Uploading...</p>
                   </div>
                 </div>
               )}
               
               {formData.documents.proofOfIncome && (
                 <div className="mt-2">
-                  <p className="text-xs text-green-600 font-medium">{formData.documents.proofOfIncome.name}</p>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-green-600 dark:text-green-400 font-medium">{formData.documents.proofOfIncome.name}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
                     {(formData.documents.proofOfIncome.size / 1024 / 1024).toFixed(2)} MB
                   </p>
                   {uploadedDocuments.proofOfIncome && (
                     <div className="flex items-center justify-center mt-1">
                       <CheckCircle className="h-3 w-3 text-green-500 mr-1" />
-                      <p className="text-xs text-green-600">Uploaded</p>
+                      <p className="text-xs text-green-600 dark:text-green-400">Uploaded</p>
                     </div>
                   )}
                 </div>
@@ -580,11 +655,11 @@ const KYC = () => {
 
         {/* Bank Statement */}
         <div>
-          <label className="block text-sm font-medium text-gray-700">Bank Statement</label>
-          <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md hover:border-blue-400 transition-colors">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Bank Statement</label>
+          <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 dark:border-gray-600 border-dashed rounded-md hover:border-blue-400 dark:hover:border-blue-500 transition-colors">
             <div className="space-y-1 text-center">
               <FileUp className="mx-auto h-12 w-12 text-gray-400" />
-              <label htmlFor="bankStatement" className="relative cursor-pointer bg-white rounded-md font-medium text-indigo-600 hover:text-indigo-500">
+              <label htmlFor="bankStatement" className="relative cursor-pointer bg-white dark:bg-gray-700 rounded-md font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300">
                 <input 
                   id="bankStatement" 
                   type="file" 
@@ -594,28 +669,28 @@ const KYC = () => {
                 />
                 <span>Upload a file</span>
               </label>
-              <p className="text-xs text-gray-500">PDF, JPG, PNG, DOC up to 10MB</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">PDF, JPG, PNG, DOC up to 10MB</p>
               
               {/* Upload Status */}
               {uploadingDocuments.bankStatement && (
                 <div className="mt-2">
                   <div className="flex items-center justify-center">
                     <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-blue-500 mr-2"></div>
-                    <p className="text-xs text-blue-600">Uploading...</p>
+                    <p className="text-xs text-blue-600 dark:text-blue-400">Uploading...</p>
                   </div>
                 </div>
               )}
               
               {formData.documents.bankStatement && (
                 <div className="mt-2">
-                  <p className="text-xs text-green-600 font-medium">{formData.documents.bankStatement.name}</p>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-green-600 dark:text-green-400 font-medium">{formData.documents.bankStatement.name}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
                     {(formData.documents.bankStatement.size / 1024 / 1024).toFixed(2)} MB
                   </p>
                   {uploadedDocuments.bankStatement && (
                     <div className="flex items-center justify-center mt-1">
                       <CheckCircle className="h-3 w-3 text-green-500 mr-1" />
-                      <p className="text-xs text-green-600">Uploaded</p>
+                      <p className="text-xs text-green-600 dark:text-green-400">Uploaded</p>
                     </div>
                   )}
                 </div>
@@ -626,30 +701,30 @@ const KYC = () => {
       </div>
 
       {/* Upload Summary */}
-      <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-        <h4 className="text-sm font-medium text-gray-700 mb-2">Upload Summary</h4>
+      <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+        <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Upload Summary</h4>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
           <div className="flex items-center">
-            <span className={`w-2 h-2 rounded-full mr-2 ${uploadedDocuments.idDocument ? 'bg-green-500' : 'bg-gray-300'}`}></span>
-            <span className={uploadedDocuments.idDocument ? 'text-green-600 font-medium' : 'text-gray-500'}>
+            <span className={`w-2 h-2 rounded-full mr-2 ${uploadedDocuments.idDocument ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}`}></span>
+            <span className={uploadedDocuments.idDocument ? 'text-green-600 dark:text-green-400 font-medium' : 'text-gray-500 dark:text-gray-400'}>
               ID Document {uploadedDocuments.idDocument ? '✓' : ''}
             </span>
           </div>
           <div className="flex items-center">
-            <span className={`w-2 h-2 rounded-full mr-2 ${uploadedDocuments.proofOfAddress ? 'bg-green-500' : 'bg-gray-300'}`}></span>
-            <span className={uploadedDocuments.proofOfAddress ? 'text-green-600 font-medium' : 'text-gray-500'}>
+            <span className={`w-2 h-2 rounded-full mr-2 ${uploadedDocuments.proofOfAddress ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}`}></span>
+            <span className={uploadedDocuments.proofOfAddress ? 'text-green-600 dark:text-green-400 font-medium' : 'text-gray-500 dark:text-gray-400'}>
               Proof of Address {uploadedDocuments.proofOfAddress ? '✓' : ''}
             </span>
           </div>
           <div className="flex items-center">
-            <span className={`w-2 h-2 rounded-full mr-2 ${uploadedDocuments.proofOfIncome ? 'bg-green-500' : 'bg-gray-300'}`}></span>
-            <span className={uploadedDocuments.proofOfIncome ? 'text-green-600 font-medium' : 'text-gray-500'}>
+            <span className={`w-2 h-2 rounded-full mr-2 ${uploadedDocuments.proofOfIncome ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}`}></span>
+            <span className={uploadedDocuments.proofOfIncome ? 'text-green-600 dark:text-green-400 font-medium' : 'text-gray-500 dark:text-gray-400'}>
               Proof of Income {uploadedDocuments.proofOfIncome ? '✓' : ''}
             </span>
           </div>
           <div className="flex items-center">
-            <span className={`w-2 h-2 rounded-full mr-2 ${uploadedDocuments.bankStatement ? 'bg-green-500' : 'bg-gray-300'}`}></span>
-            <span className={uploadedDocuments.bankStatement ? 'text-green-600 font-medium' : 'text-gray-500'}>
+            <span className={`w-2 h-2 rounded-full mr-2 ${uploadedDocuments.bankStatement ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}`}></span>
+            <span className={uploadedDocuments.bankStatement ? 'text-green-600 dark:text-green-400 font-medium' : 'text-gray-500 dark:text-gray-400'}>
               Bank Statement {uploadedDocuments.bankStatement ? '✓' : ''}
             </span>
           </div>
@@ -693,7 +768,7 @@ const KYC = () => {
     const { status, rejection_reason, submitted_at } = kycStatus;
     
     const submittedAtJsx = submitted_at && (
-      <p className="text-xs text-gray-500 mt-2">
+      <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
         Submitted on: {new Date(submitted_at).toLocaleString()}
       </p>
     );
@@ -701,9 +776,9 @@ const KYC = () => {
     switch (status) {
       case 'draft':
         return (
-          <div className="mb-6 border-l-4 p-4 rounded-md bg-gray-50 border-gray-400 text-gray-700">
+          <div className="mb-6 border-l-4 p-4 rounded-md bg-gray-50 dark:bg-gray-800/50 border-gray-400 dark:border-gray-600 text-gray-700 dark:text-gray-300">
             <div className="flex items-center">
-              <FileText className="h-8 w-8 mr-4 text-gray-500" />
+              <FileText className="h-8 w-8 mr-4 text-gray-500 dark:text-gray-400" />
               <div>
                 <h3 className="text-lg font-bold">Draft Status</h3>
                 <p className="mt-1 text-sm">Complete your KYC information and submit for verification.</p>
@@ -713,9 +788,9 @@ const KYC = () => {
         );
       case 'pending':
         return (
-          <div className="mb-6 border-l-4 p-4 rounded-md bg-blue-50 border-blue-500 text-blue-800">
+          <div className="mb-6 border-l-4 p-4 rounded-md bg-blue-50 dark:bg-blue-900/50 border-blue-500 text-blue-800 dark:text-blue-200">
             <div className="flex items-center">
-              <Clock className="h-8 w-8 mr-4 text-blue-500" />
+              <Clock className="h-8 w-8 mr-4 text-blue-500 dark:text-blue-400" />
               <div>
                 <h3 className="text-lg font-bold">Verification Pending</h3>
                 <p className="mt-1 text-sm">Your documents are under review. You will be notified once the review is complete.</p>
@@ -726,9 +801,9 @@ const KYC = () => {
         );
       case 'approved':
         return (
-          <div className="mb-6 border-l-4 p-4 rounded-md bg-green-50 border-green-500 text-green-800">
+          <div className="mb-6 border-l-4 p-4 rounded-md bg-green-50 dark:bg-green-900/50 border-green-500 text-green-800 dark:text-green-200">
             <div className="flex items-center">
-              <CheckCircle className="h-8 w-8 mr-4 text-green-500" />
+              <CheckCircle className="h-8 w-8 mr-4 text-green-500 dark:text-green-400" />
               <div>
                 <h3 className="text-lg font-bold">Verification Approved</h3>
                 <p className="mt-1 text-sm">Congratulations! Your account is successfully verified.</p>
@@ -739,9 +814,9 @@ const KYC = () => {
         );
       case 'rejected':
         return (
-          <div className="mb-6 border-l-4 p-4 rounded-md bg-red-50 border-red-500 text-red-800">
+          <div className="mb-6 border-l-4 p-4 rounded-md bg-red-50 dark:bg-red-900/50 border-red-500 text-red-800 dark:text-red-200">
             <div className="flex items-center">
-              <XCircle className="h-8 w-8 mr-4 text-red-500" />
+              <XCircle className="h-8 w-8 mr-4 text-red-500 dark:text-red-400" />
               <div>
                 <h3 className="text-lg font-bold">Verification Rejected</h3>
                 <p className="mt-1 text-sm">Reason: {rejection_reason || 'Contact support for more information.'}</p>
@@ -759,7 +834,7 @@ const KYC = () => {
 
   if (isLoading) {
     return (
-      <div className="bg-white p-6 rounded-lg shadow-md">
+      <div className="bg-white dark:bg-dark-card p-6 rounded-lg shadow-md">
         <div className="flex justify-center items-center h-32">
           <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
         </div>
@@ -768,8 +843,8 @@ const KYC = () => {
   }
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow-md">
-      <h2 className="text-2xl font-bold mb-4">KYC Verification</h2>
+    <div className="bg-white dark:bg-dark-card p-6 rounded-lg shadow-md">
+      <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-dark-text">KYC Verification</h2>
       
       {renderStatusCard()}
 

@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, Response, make_response, send_file
+from flask import Flask, request, jsonify, Response, make_response, send_file, Blueprint, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -70,7 +70,9 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 # -------------------- CORS SETUP --------------------
+CORS(app, origins="http://localhost:5173", supports_credentials=True)
 CORS(app, resources={r"/api/*": {"origins": "http://localhost:5173"}}, supports_credentials=True)
+CORS(app, resources={r"/admin/*": {"origins": "http://localhost:5173"}}, supports_credentials=True)
 
 # -------------------- UTILITY FUNCTIONS --------------------
 def generate_otp():
@@ -79,8 +81,36 @@ def generate_otp():
 
 def send_verification_sms(phone_number, otp_code):
     """Send verification SMS with OTP"""
-    # Implement SMS sending logic here
-    pass
+    account_sid = os.getenv('TWILIO_ACCOUNT_SID')
+    auth_token = os.getenv('TWILIO_AUTH_TOKEN')
+    from_number = os.getenv('TWILIO_PHONE_NUMBER')
+    if not all([account_sid, auth_token, from_number]):
+        print("Twilio credentials are not set in environment variables.")
+        return False, "Twilio credentials missing"
+    try:
+        client = Client(account_sid, auth_token)
+        message = client.messages.create(
+            body=f"Your iStokvel verification code is: {otp_code}",
+            from_=from_number,
+            to=phone_number
+        )
+        print(f"Sent SMS to {phone_number}: {message.sid}")
+        return True, "SMS sent"
+    except Exception as e:
+        print(f"Failed to send SMS: {e}")
+        return False, str(e)
+
+def generate_group_code(length=6):
+    """Generate a random alphanumeric group code."""
+    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=length))
+
+def normalize_phone(phone):
+    # Remove spaces, dashes, etc.
+    phone = phone.replace(' ', '').replace('-', '')
+    # Convert +27... to 0... for lookup if your DB uses 0...
+    if phone.startswith('+27'):
+        phone = '0' + phone[3:]
+    return phone
 
 # -------------------- MODELS --------------------
 class User(db.Model):
@@ -125,13 +155,18 @@ class User(db.Model):
 class StokvelGroup(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
+    category = db.Column(db.String(50), nullable=False)
+    tier = db.Column(db.String(20), nullable=False)
+    amount = db.Column(db.Float, nullable=False)
+    contribution_amount = db.Column(db.Float, nullable=False)  # <-- ADD THIS LINE
+    rules = db.Column(db.String(255))
+    benefits = db.Column(db.ARRAY(db.String))
     description = db.Column(db.Text)
-    contribution_amount = db.Column(db.Float, nullable=False)
-    frequency = db.Column(db.String(50), nullable=False)  # weekly, monthly, etc.
+    frequency = db.Column(db.String(50), nullable=False)
     max_members = db.Column(db.Integer)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    group_code = db.Column(db.String(10), unique=True)  # Add this for group joining
-    admin_id = db.Column(db.Integer, db.ForeignKey('user.id'))  # Group admin
+    group_code = db.Column(db.String(10), unique=True)
+    admin_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     members = db.relationship('StokvelMember', backref='group', lazy=True)
 
     def to_dict(self):
@@ -139,7 +174,7 @@ class StokvelGroup(db.Model):
             'id': self.id,
             'name': self.name,
             'description': self.description,
-            'contribution_amount': float(self.contribution_amount),
+            'contribution_amount': float(self.amount),
             'frequency': self.frequency,
             'max_members': self.max_members,
             'member_count': len(self.members),
@@ -237,6 +272,18 @@ class UserPreferences(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     user = db.relationship('User', backref='preferences')
 
+class Notification(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    type = db.Column(db.String(50), default='general')  # kyc_required, approved, rejected, etc.
+    data = db.Column(db.JSON)  # Additional data like group_id, join_request_id
+    is_read = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    user = db.relationship('User', backref='notifications')
+
 class OTP(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
@@ -327,6 +374,11 @@ def token_required(f):
         current_user = User.query.get(current_user_id)
         if not current_user:
             return jsonify({'error': 'User not found'}), 404
+        
+        # SECURITY FIX: Check if user is verified
+        if not current_user.is_verified:
+            return jsonify({'error': 'Please verify your email address to access this feature'}), 403
+            
         return f(current_user, *args, **kwargs)
     return decorated
 
@@ -342,7 +394,14 @@ def admin_required(f):
             payload = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
             user = User.query.get(payload['user_id'])
             
-            if not user or user.role != 'admin':
+            if not user:
+                return jsonify({'error': 'User not found'}), 401
+            
+            # SECURITY FIX: Check if user is verified
+            if not user.is_verified:
+                return jsonify({'error': 'Please verify your email address to access this feature'}), 403
+            
+            if user.role != 'admin':
                 return jsonify({'error': 'Admin access required'}), 403
                 
             return f(*args, **kwargs)
@@ -368,6 +427,10 @@ def role_required(allowed_roles):
                 
                 if not user:
                     return jsonify({'error': 'User not found'}), 401
+                
+                # SECURITY FIX: Check if user is verified
+                if not user.is_verified:
+                    return jsonify({'error': 'Please verify your email address to access this feature'}), 403
                 
                 if user.role not in allowed_roles:
                     return jsonify({'error': 'Insufficient permissions'}), 403
@@ -417,22 +480,42 @@ def register():
         db.session.add(user)
         db.session.commit()
 
-        # Generate and send verification code
+        # Generate and send verification code with better error handling
         try:
             verification_code = user.generate_verification()
+            print(f"Generated verification code: {verification_code} for user: {email}")
+            
             success, message = send_verification_email(user.email, verification_code)
+            print(f"Email sending result - Success: {success}, Message: {message}")
+            
             if not success:
                 print(f"Warning: Failed to send verification email: {message}")
+                # Still return success but with a warning
+                return jsonify({
+                    'message': 'Account created successfully, but verification email failed to send. Please try resending.',
+                    'email': user.email,
+                    'user_id': user.id,
+                    'email_sent': False
+                }), 201
+            else:
+                return jsonify({
+                    'message': 'Registration successful. Please check your email for verification code.',
+                    'email': user.email,
+                    'user_id': user.id,
+                    'email_sent': True
+                }), 201
+                
         except Exception as email_e:
             print(f"Warning: Exception during verification email sending: {str(email_e)}")
             import traceback
             traceback.print_exc()
-
-        return jsonify({
-            'message': 'Registration successful. Please check your email for verification code.',
-            'email': user.email,
-            'user_id': user.id
-        }), 201
+            # Still return success but with a warning
+            return jsonify({
+                'message': 'Account created successfully, but verification email failed to send. Please try resending.',
+                'email': user.email,
+                'user_id': user.id,
+                'email_sent': False
+            }), 201
 
     except Exception as e:
         db.session.rollback()
@@ -449,6 +532,10 @@ def login():
     user = User.query.filter_by(email=email).first()
     if not user or not user.check_password(password):
         return jsonify({'error': 'Invalid email or password'}), 401
+
+    # SECURITY FIX: Check if user is verified before allowing login
+    if not user.is_verified:
+        return jsonify({'error': 'Please verify your email address before logging in'}), 401
 
     if user.two_factor_enabled:
         otp_code = generate_otp()
@@ -494,29 +581,43 @@ def login():
     }), 200
 
 @app.route('/api/auth/me', methods=['GET'])
-@jwt_required()
-def get_current_user():
-    user_id = get_jwt_identity()
-    user = User.query.get(user_id)
-    if not user:
-        return jsonify({'error': 'User not found'}), 404
+@token_required
+def get_current_user(current_user):
     return jsonify({
-        'id': user.id,
-        'name': user.full_name,
-        'email': user.email,
-        'role': user.role,
-        'profilePicture': user.profile_picture
+        'id': current_user.id,
+        'name': current_user.full_name,
+        'email': current_user.email,
+        'role': current_user.role,
+        'profilePicture': current_user.profile_picture
     })
 
 @app.route('/api/admin/groups', methods=['GET'])
 @token_required
-def get_admin_groups():
-    # Your implementation here
-    pass
+def get_admin_groups(current_user):
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    groups = StokvelGroup.query.all()
+    groups_data = []
+    for group in groups:
+        groups_data.append({
+            'id': group.id,
+            'name': group.name,
+            'description': group.description,
+            'tier': group.tier,
+            'contribution_amount': float(group.amount),
+            'frequency': group.frequency,
+            'max_members': group.max_members,
+            'is_active': getattr(group, 'is_active', True),
+            'created_at': group.created_at.isoformat() if group.created_at else None,
+            'member_count': len(group.members) if hasattr(group, 'members') else 0,
+            'group_code': group.group_code  # <-- ADD THIS LINE
+        })
+    return jsonify(groups_data), 200
 
 @app.route('/api/admin/stats', methods=['GET'])
 @token_required
-def get_admin_stats():
+def get_admin_stats(current_user):
     # Your implementation here
     pass
 
@@ -528,39 +629,45 @@ def create_stokvel_group(current_user):
     
     try:
         data = request.get_json()
-        
-        # Validate required fields
         required_fields = ['name', 'description', 'contribution_amount', 'frequency', 'max_members']
         if not all(field in data for field in required_fields):
             return jsonify({'error': 'Missing required fields'}), 400
-        
-        # Create new stokvel group
+
+        # Generate a unique group code if not provided
+        group_code = data.get('group_code')
+        if not group_code:
+            # Ensure uniqueness
+            while True:
+                group_code = generate_group_code()
+                if not StokvelGroup.query.filter_by(group_code=group_code).first():
+                    break
+
         new_group = StokvelGroup(
             name=data['name'],
             description=data['description'],
             contribution_amount=float(data['contribution_amount']),
             frequency=data['frequency'],
             max_members=int(data['max_members']),
+            tier=data['tier'],
+            group_code=group_code,  # <-- Set the generated code
             admin_id=current_user.id
         )
         
         db.session.add(new_group)
-        try:
-            db.session.commit()
-            return jsonify({
-                'id': new_group.id,
-                'name': new_group.name,
-                'description': new_group.description,
-                'contribution_amount': new_group.contribution_amount,
-                'frequency': new_group.frequency,
-                'max_members': new_group.max_members,
-                'member_count': 0,
-                'created_at': new_group.created_at.isoformat()
-            }), 201
-        except SQLAlchemyError as e:
-            db.session.rollback()
-            return jsonify({'error': 'Database error occurred'}), 500
-        
+        db.session.commit()
+        return jsonify({
+            'id': new_group.id,
+            'name': new_group.name,
+            'description': new_group.description,
+            'contribution_amount': new_group.amount,
+            'frequency': new_group.frequency,
+            'max_members': new_group.max_members,
+            'tier': new_group.tier,
+            'group_code': new_group.group_code,  # <-- Return the code
+            'member_count': 0,
+            'created_at': new_group.created_at.isoformat()
+        }), 201
+
     except Exception as e:
         print(f"Error creating stokvel group: {str(e)}")
         db.session.rollback()
@@ -575,35 +682,94 @@ def init_db():
 @app.cli.command('create-admin')
 @with_appcontext
 def create_admin():
+    """Creates a new admin user."""
+    email = click.prompt('Enter admin email', type=str)
+    password = click.prompt('Enter admin password', type=str, hide_input=True, confirmation_prompt=True)
+    full_name = click.prompt('Enter admin full name', type=str, default='Admin User')
+    phone = click.prompt('Enter admin phone number', type=str)
+
+    if User.query.filter_by(email=email).first():
+        click.echo(click.style(f"Error: Email '{email}' already exists.", fg='red'))
+        return
+        
+    if User.query.filter_by(phone=phone).first():
+        click.echo(click.style(f"Error: Phone number '{phone}' already exists.", fg='red'))
+        return
+
     admin = User(
-        full_name='Admin User',
-        email='admin@example.com',
-        phone='1234567890',
-        role='admin'
+        email=email,
+        full_name=full_name,
+        phone=phone,
+        role='admin',
+        is_verified=True # Admins should be verified by default
     )
-    admin.set_password('admin123')
+    admin.set_password(password)
     db.session.add(admin)
     db.session.commit()
-    click.echo('Created admin user.')
+    click.echo(click.style(f"Admin user '{full_name}' created successfully with email '{email}'.", fg='green'))
 
 @app.cli.command('reset-db')
 @with_appcontext
 def reset_db():
     db.drop_all()
     db.create_all()
-    click.echo('Database reset complete.')
+    click.echo(click.style('Database has been reset.', fg='green'))
 
 @app.cli.command('reset-users')
 @with_appcontext
 def reset_users():
-    """Delete all users and their OTPs from the database"""
+    """Delete all users and their related data from the database"""
     try:
-        # Delete all OTPs first
+        # Delete in order of dependencies (child tables first)
+        
+        # Delete messages (depends on conversations)
+        Message.query.delete()
+        
+        # Delete conversations (depends on users and stokvel_groups)
+        Conversation.query.delete()
+        
+        # Delete withdrawal requests (depends on stokvel_members)
+        WithdrawalRequest.query.delete()
+        
+        # Delete contributions (depends on stokvel_members)
+        Contribution.query.delete()
+        
+        # Delete stokvel members (depends on users and stokvel_groups)
+        StokvelMember.query.delete()
+        
+        # Delete polls and poll options (depends on stokvel_groups)
+        PollOption.query.delete()
+        Poll.query.delete()
+        
+        # Delete meetings (depends on stokvel_groups)
+        Meeting.query.delete()
+        
+        # Delete stokvel groups (depends on users via admin_id)
+        StokvelGroup.query.delete()
+        
+        # Delete KYC verifications (depends on users)
+        KYCVerification.query.delete()
+        
+        # Delete user sessions (depends on users)
+        UserSession.query.delete()
+        
+        # Delete OTPs (depends on users)
         OTP.query.delete()
-        # Then delete all users
+        
+        # Delete wallets (depends on users)
+        Wallet.query.delete()
+        
+        # Delete notification settings (depends on users)
+        NotificationSettings.query.delete()
+        
+        # Delete user preferences (depends on users)
+        UserPreferences.query.delete()
+        
+        # Finally delete all users
         User.query.delete()
+        
         db.session.commit()
-        print('All users and OTPs deleted successfully')
+        print('All users and related data deleted successfully')
     except Exception as e:
         db.session.rollback()
         print(f'Error: {str(e)}')
@@ -706,29 +872,21 @@ def create_withdrawal(current_user):
     return jsonify({'message': 'Withdrawal request created successfully', 'withdrawal_id': withdrawal.id})
 
 @app.route('/api/groups/available', methods=['GET'])
-@token_required
-def get_available_groups(current_user):
-    try:
-        # Get all groups that the user is not a member of
-        available_groups = StokvelGroup.query.filter(
-            ~StokvelGroup.members.any(user_id=current_user.id)
-        ).all()
-        
-        return jsonify({
-            'groups': [{
-                'id': group.id,
-                'name': group.name,
-                'description': group.description,
-                'contributionAmount': float(group.contribution_amount),
-                'contributionFrequency': group.frequency,
-                'memberCount': len(group.members),
-                'maxMembers': group.max_members,
-                'status': 'active'
-            } for group in available_groups]
-        })
-    except Exception as e:
-        print(f"Error fetching available groups: {str(e)}")
-        return jsonify({'error': 'Failed to fetch available groups'}), 500
+def get_available_groups():
+    groups = StokvelGroup.query.all()
+    return jsonify([{
+        'id': g.id,
+        'name': g.name,
+        'category': g.category,  # <-- ADD THIS LINE
+        'tier': g.tier,
+        'amount': g.amount,
+        'rules': g.rules,
+        'benefits': g.benefits,
+        'description': g.description,
+        'frequency': g.frequency,
+        'max_members': g.max_members,
+        # ... any other fields you want to expose ...
+    } for g in groups])
 
 @app.route('/api/dashboard/stats', methods=['GET'])
 @token_required
@@ -813,7 +971,7 @@ def get_dashboard_stats(current_user):
                 'id': g.id,
                 'name': g.name,
                 'role': next(m.role for m in memberships if m.group_id == g.id),
-                'contribution_amount': float(g.contribution_amount),
+                'contribution_amount': float(g.amount),
                 'frequency': g.frequency
             } for g in active_groups]
         })
@@ -835,7 +993,7 @@ def register_stokvel_group(current_user):
 
         # Generate unique group code
         while True:
-            group_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+            group_code = generate_group_code()
             if not StokvelGroup.query.filter_by(group_code=group_code).first():
                 break
 
@@ -846,8 +1004,9 @@ def register_stokvel_group(current_user):
             contribution_amount=float(data['contribution_amount']),
             frequency=data['frequency'],
             max_members=int(data['max_members']),
-            admin_id=current_user.id,
-            group_code=group_code
+            tier=data['tier'],
+            group_code=group_code,
+            admin_id=current_user.id
         )
         
         db.session.add(new_group)
@@ -931,45 +1090,40 @@ def validate_phone(phone):
 
 @app.route('/api/auth/verify', methods=['POST'])
 def verify_otp():
-    try:
-        data = request.get_json()
-        user_id = data.get('user_id')
-        otp_code = data.get('otp_code')
+    data = request.get_json()
+    phone = data.get('phone')
+    otp_code = data.get('otp_code')
 
-        if not user_id or not otp_code:
-            return jsonify({'error': 'User ID and OTP code are required'}), 400
+    if not phone or not otp_code:
+        return jsonify({'success': False, 'message': 'Phone and OTP code are required'}), 400
 
-        user = User.query.get(user_id)
-        if not user:
-            return jsonify({'error': 'User not found'}), 404
+    user = User.query.filter_by(phone=phone).first()
+    if not user:
+        return jsonify({'success': False, 'message': 'User not found'}), 404
 
-        otp = OTP.query.filter_by(
-            user_id=user_id,
-            code=otp_code,
-            is_used=False
-        ).order_by(OTP.created_at.desc()).first()
+    otp = OTP.query.filter_by(user_id=user.id, code=otp_code, is_used=False).order_by(OTP.created_at.desc()).first()
+    if not otp or not otp.is_valid():
+        return jsonify({'success': False, 'message': 'Invalid or expired OTP'}), 400
 
-        if not otp or not otp.is_valid():
-            return jsonify({'error': 'Invalid or expired OTP'}), 400
+    otp.is_used = True
+    db.session.commit()
 
-        # Mark OTP as used and verify user
-        otp.is_used = True
-        user.is_verified = True
-        db.session.commit()
-
-        return jsonify({
-            'message': 'Account verified successfully',
-            'user': {
-                'id': user.id,
-                'full_name': user.full_name,
-                'email': user.email,
-                'role': user.role
-            }
-        }), 200
-
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 400
+    # Create JWT token and return user info
+    access_token = create_access_token(identity=str(user.id))
+    user_data = {
+        "id": user.id,
+        "full_name": user.full_name,
+        "email": user.email,
+        "phone": user.phone,
+        "role": user.role,
+        "is_verified": user.is_verified
+    }
+    return jsonify({
+        'success': True,
+        'message': 'Phone verified successfully',
+        'access_token': access_token,
+        'user': user_data
+    })
 
 @app.route('/api/delete-all-users', methods=['GET'])
 def delete_all_users():
@@ -995,19 +1149,31 @@ def test_users():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/test-email')
+@app.route('/api/test-email', methods=['POST'])
 def test_email():
+    """Test endpoint to verify email configuration"""
     try:
-        msg = Message(
-            'Test Email from iStokvel',
-            sender=app.config['MAIL_USERNAME'],
-            recipients=[app.config['MAIL_USERNAME']]  # Sends to your own email
-        )
-        msg.body = 'This is a test email from your Flask app. If you receive this, your email configuration is working!'
-        mail.send(msg)
-        return jsonify({'message': 'Test email sent successfully!'}), 200
+        data = request.get_json()
+        test_email = data.get('email')
+        
+        if not test_email:
+            return jsonify({'error': 'Email is required'}), 400
+        
+        # Check configuration
+        if not check_email_config():
+            return jsonify({'error': 'Email configuration is incomplete'}), 500
+        
+        # Send test email
+        test_code = '123456'
+        success, message = send_verification_email(test_email, test_code)
+        
+        if success:
+            return jsonify({'message': 'Test email sent successfully', 'details': message}), 200
+        else:
+            return jsonify({'error': f'Failed to send test email: {message}'}), 500
+            
     except Exception as e:
-        return jsonify({'error': f'Failed to send email: {str(e)}'}), 500
+        return jsonify({'error': f'Test email failed: {str(e)}'}), 500
 
 # After your app configuration
 try:
@@ -1127,6 +1293,9 @@ def resend_verification():
         data = request.get_json()
         email = data.get('email')
         
+        if not email:
+            return jsonify({'error': 'Email is required'}), 400
+        
         user = User.query.filter_by(email=email).first()
         if not user:
             return jsonify({'error': 'User not found'}), 404
@@ -1136,11 +1305,14 @@ def resend_verification():
         
         # Generate and send new verification code
         verification_code = user.generate_verification()
+        print(f"Resending verification code: {verification_code} for user: {email}")
+        
         success, message = send_verification_email(user.email, verification_code)
+        print(f"Resend email result - Success: {success}, Message: {message}")
         
         if not success:
             db.session.rollback()
-            return jsonify({'error': 'Failed to send verification email: ' + message}), 500
+            return jsonify({'error': f'Failed to send verification email: {message}'}), 500
         
         db.session.commit()
 
@@ -1148,54 +1320,48 @@ def resend_verification():
         
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        print(f"Error during resend: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Failed to resend verification code: {str(e)}'}), 500
 
 @app.route('/api/user/profile', methods=['GET'])
-@jwt_required()
-def get_user_profile():
-    user_id = get_jwt_identity()
-    user = User.query.get(user_id)
-    if not user:
-        return jsonify({'error': 'User not found'}), 404
+@token_required
+def get_user_profile(current_user):
     return jsonify({
-        'id': user.id,
-        'name': user.full_name,
-        'email': user.email,
-        'phone': user.phone,
-        'role': user.role,
-        'profile_picture': user.profile_picture,
-        'is_verified': user.is_verified,
-        'gender': user.gender,
-        'employment_status': user.employment_status,
-        'two_factor_enabled': user.two_factor_enabled,
-        'date_of_birth': user.date_of_birth.isoformat() if user.date_of_birth else None
+        'id': current_user.id,
+        'name': current_user.full_name,
+        'email': current_user.email,
+        'phone': current_user.phone,
+        'role': current_user.role,
+        'profile_picture': current_user.profile_picture,
+        'is_verified': current_user.is_verified,
+        'gender': current_user.gender,
+        'employment_status': current_user.employment_status,
+        'two_factor_enabled': current_user.two_factor_enabled,
+        'date_of_birth': current_user.date_of_birth.isoformat() if current_user.date_of_birth else None
     })
 
 @app.route('/api/user/profile', methods=['PUT'])
-@jwt_required()
-def update_user_profile():
-    user_id = get_jwt_identity()
-    user = User.query.get(user_id)
-    if not user:
-        return jsonify({'error': 'User not found'}), 404
-
+@token_required
+def update_user_profile(current_user):
     data = request.get_json()
 
     # Update fields that are simple string assignments
     if 'name' in data:
-        user.full_name = data['name']
+        current_user.full_name = data['name']
     if 'phone' in data:
-        user.phone = data['phone']
+        current_user.phone = data['phone']
     if 'gender' in data:
-        user.gender = data['gender']
+        current_user.gender = data['gender']
     if 'employment_status' in data:
-        user.employment_status = data['employment_status']
+        current_user.employment_status = data['employment_status']
 
     # Specifically handle date_of_birth: parse string to datetime object
     if 'date_of_birth' in data and data['date_of_birth']:
         try:
             # The fromisoformat() method correctly parses 'YYYY-MM-DD'
-            user.date_of_birth = datetime.fromisoformat(data['date_of_birth'])
+            current_user.date_of_birth = datetime.fromisoformat(data['date_of_birth'])
         except (ValueError, TypeError):
             # Handle cases where the date format is wrong or data is null
             return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD.'}), 400
@@ -1204,43 +1370,35 @@ def update_user_profile():
     return jsonify({'message': 'Profile updated successfully'}), 200
 
 @app.route('/api/user/security/password', methods=['PUT', 'OPTIONS'])
-@jwt_required()
-def change_password():
-    user_id = get_jwt_identity()
-    user = User.query.get(user_id)
+@token_required
+def change_password(current_user):
     data = request.get_json()
     current_password = data.get('current_password')
     new_password = data.get('new_password')
 
-    if not user or not user.check_password(current_password):
+    if not current_user or not current_user.check_password(current_password):
         return jsonify({'error': 'Current password is incorrect'}), 400
 
-    user.set_password(new_password)
+    current_user.set_password(new_password)
     db.session.commit()
     return jsonify({'message': 'Password changed successfully'})
 
 @app.route('/api/user/security/2fa', methods=['POST', 'OPTIONS'])
-@jwt_required()
-def toggle_two_factor():
-    user_id = get_jwt_identity()
-    user = User.query.get(user_id)
-    if not user:
-        return jsonify({'error': 'User not found'}), 404
-
-    user.two_factor_enabled = not user.two_factor_enabled
+@token_required
+def toggle_two_factor(current_user):
+    current_user.two_factor_enabled = not current_user.two_factor_enabled
     db.session.commit()
     return jsonify({
         "message": "Two-factor authentication updated",
-        "two_factor_enabled": user.two_factor_enabled
+        "two_factor_enabled": current_user.two_factor_enabled
     }), 200
 
 @app.route('/api/user/communication', methods=['GET', 'OPTIONS'])
-@jwt_required()
-def get_communication_preferences():
-    user_id = get_jwt_identity()
-    settings = NotificationSettings.query.filter_by(user_id=user_id).first()
+@token_required
+def get_communication_preferences(current_user):
+    settings = NotificationSettings.query.filter_by(user_id=current_user.id).first()
     if not settings:
-        settings = NotificationSettings(user_id=user_id)
+        settings = NotificationSettings(user_id=current_user.id)
         db.session.add(settings)
         db.session.commit()
     return jsonify({
@@ -1250,13 +1408,12 @@ def get_communication_preferences():
     })
 
 @app.route('/api/user/communication', methods=['PUT', 'OPTIONS'])
-@jwt_required()
-def update_communication_preferences():
-    user_id = get_jwt_identity()
+@token_required
+def update_communication_preferences(current_user):
     data = request.get_json()
-    settings = NotificationSettings.query.filter_by(user_id=user_id).first()
+    settings = NotificationSettings.query.filter_by(user_id=current_user.id).first()
     if not settings:
-        settings = NotificationSettings(user_id=user_id)
+        settings = NotificationSettings(user_id=current_user.id)
         db.session.add(settings)
     for field in ["email_announcements", "email_stokvel_updates", "push_announcements"]:
         if field in data:
@@ -1265,12 +1422,11 @@ def update_communication_preferences():
     return jsonify({"message": "Communication preferences updated successfully"}), 200
 
 @app.route('/api/user/privacy', methods=['GET', 'OPTIONS'])
-@jwt_required()
-def get_privacy_settings():
-    user_id = get_jwt_identity()
-    prefs = UserPreferences.query.filter_by(user_id=user_id).first()
+@token_required
+def get_privacy_settings(current_user):
+    prefs = UserPreferences.query.filter_by(user_id=current_user.id).first()
     if not prefs:
-        prefs = UserPreferences(user_id=user_id)
+        prefs = UserPreferences(user_id=current_user.id)
         db.session.add(prefs)
         db.session.commit()
     return jsonify({
@@ -1280,24 +1436,21 @@ def get_privacy_settings():
     })
 
 @app.route('/api/user/account', methods=['DELETE', 'OPTIONS'])
-@jwt_required()
-def delete_account():
-    user_id = get_jwt_identity()
-    user = User.query.get(user_id)
+@token_required
+def delete_account(current_user):
     data = request.get_json() or {}
     password = data.get('password')
 
-    if not user or not user.check_password(password):
+    if not current_user or not current_user.check_password(password):
         return jsonify({'error': 'Incorrect password'}), 401
 
-    db.session.delete(user)
+    db.session.delete(current_user)
     db.session.commit()
     return jsonify({'message': 'Account deleted successfully'})
 
 @app.route('/api/start', methods=['POST'])
-@jwt_required()
-def start_chat():
-    user_id = get_jwt_identity()
+@token_required
+def start_chat(current_user):
     data = request.get_json() or {}
     title = data.get('title', 'New Chat')
     is_stokvel_related = data.get('is_stokvel_related', False)
@@ -1305,7 +1458,7 @@ def start_chat():
 
     conversation = Conversation(
         id=str(uuid.uuid4()),
-        user_id=user_id,
+        user_id=current_user.id,
         title=title,
         is_stokvel_related=is_stokvel_related,
         stokvel_id=stokvel_id
@@ -1325,14 +1478,13 @@ def start_chat():
     return jsonify({"conversation_id": conversation.id}), 201
 
 @app.route('/api/message', methods=['POST'])
-@jwt_required()
-def send_message():
-    user_id = get_jwt_identity()
+@token_required
+def send_message(current_user):
     data = request.get_json()
     conversation_id = data.get('conversation_id')
     user_message = data.get('message')
 
-    conversation = Conversation.query.filter_by(id=conversation_id, user_id=user_id).first()
+    conversation = Conversation.query.filter_by(id=conversation_id, user_id=current_user.id).first()
     if not conversation:
         return jsonify({"error": "Conversation not found."}), 404
 
@@ -1445,45 +1597,41 @@ def handle_options_requests():
         return '', 200
 
 @app.route('/api/user/security/2fa/start', methods=['POST'])
-@jwt_required()
-def start_2fa_setup():
-    user_id = get_jwt_identity()
-    user = User.query.get(user_id)
+@token_required
+def start_2fa_setup(current_user):
     data = request.get_json()
     method = data.get('method', 'email')  # 'email' or 'sms'
 
     # Generate OTP
     otp_code = generate_otp()
     expiry = datetime.utcnow() + timedelta(minutes=10)
-    otp = OTP(user_id=user.id, code=otp_code, expires_at=expiry)
+    otp = OTP(user_id=current_user.id, code=otp_code, expires_at=expiry)
     db.session.add(otp)
     db.session.commit()
 
     # Send OTP
     if method == 'sms':
-        send_verification_sms(user.phone, otp_code)
+        send_verification_sms(current_user.phone, otp_code)
     else:
-        send_verification_email(user.email, otp_code)
+        send_verification_email(current_user.email, otp_code)
 
-    user.two_factor_method = method
+    current_user.two_factor_method = method
     db.session.commit()
 
     return jsonify({'message': f'OTP sent via {method}.', 'method': method}), 200
 
 @app.route('/api/user/security/2fa/verify', methods=['POST'])
-@jwt_required()
-def verify_2fa_setup():
-    user_id = get_jwt_identity()
-    user = User.query.get(user_id)
+@token_required
+def verify_2fa_setup(current_user):
     data = request.get_json()
     otp_code = data.get('otp_code')
 
-    otp = OTP.query.filter_by(user_id=user.id, code=otp_code, is_used=False).order_by(OTP.created_at.desc()).first()
+    otp = OTP.query.filter_by(user_id=current_user.id, code=otp_code, is_used=False).order_by(OTP.created_at.desc()).first()
     if not otp or not otp.is_valid():
         return jsonify({'error': 'Invalid or expired OTP'}), 400
 
     otp.is_used = True
-    user.two_factor_enabled = True
+    current_user.two_factor_enabled = True
     db.session.commit()
     return jsonify({'message': 'Two-factor authentication enabled!'}), 200
 
@@ -1502,25 +1650,22 @@ def verify_2fa_login():
     return jsonify({'message': '2FA login successful', 'access_token': access_token}), 200
 
 @app.route('/api/user/security/2fa/disable', methods=['POST'])
-@jwt_required()
-def disable_2fa():
-    user_id = get_jwt_identity()
-    user = User.query.get(user_id)
+@token_required
+def disable_2fa(current_user):
     data = request.get_json()
     password = data.get('password')
 
-    if not user or not user.check_password(password):
+    if not current_user or not current_user.check_password(password):
         return jsonify({'error': 'Incorrect password'}), 401
 
-    user.two_factor_enabled = False
+    current_user.two_factor_enabled = False
     db.session.commit()
     return jsonify({'message': 'Two-factor authentication disabled!'}), 200
 
 @app.route('/api/user/session/<int:session_id>/logout', methods=['POST'])
-@jwt_required()
-def logout_session(session_id):
-    user_id = get_jwt_identity()
-    session = UserSession.query.filter_by(id=session_id, user_id=user_id, is_active=True).first()
+@token_required
+def logout_session(current_user, session_id):
+    session = UserSession.query.filter_by(id=session_id, user_id=current_user.id, is_active=True).first()
     if not session:
         return jsonify({'error': 'Session not found'}), 404
     session.is_active = False
@@ -1528,10 +1673,9 @@ def logout_session(session_id):
     return jsonify({'message': 'Session logged out successfully'})
 
 @app.route('/api/user/sessions', methods=['GET'])
-@jwt_required()
-def get_user_sessions():
-    user_id = get_jwt_identity()
-    sessions = UserSession.query.filter_by(user_id=user_id).order_by(UserSession.login_time.desc()).all()
+@token_required
+def get_user_sessions(current_user):
+    sessions = UserSession.query.filter_by(user_id=current_user.id).order_by(UserSession.login_time.desc()).all()
     return jsonify([
         {
             'id': s.id,
@@ -1545,12 +1689,11 @@ def get_user_sessions():
     ])
 
 @app.route('/api/user/sessions/logout_all', methods=['POST'])
-@jwt_required()
-def logout_all_sessions():
-    user_id = get_jwt_identity()
+@token_required
+def logout_all_sessions(current_user):
     current_user_agent = request.headers.get('User-Agent', '')
     current_ip = request.remote_addr or ''
-    sessions = UserSession.query.filter_by(user_id=user_id, is_active=True).all()
+    sessions = UserSession.query.filter_by(user_id=current_user.id, is_active=True).all()
     for session in sessions:
         # Keep the current session active, log out others
         if session.user_agent != current_user_agent or session.ip_address != current_ip:
@@ -1558,33 +1701,18 @@ def logout_all_sessions():
     db.session.commit()
     return jsonify({'message': 'Logged out from all other sessions.'})
 
-    # -------------------- MAIN --------------------
-if __name__ == '__main__':
-    app.run(port=5001, debug=True)
-
-@event.listens_for(Engine, "connect")
-def connect(dbapi_connection, connection_record):
-    connection_record.info['pid'] = os.getpid()
-
-@event.listens_for(Engine, "checkout")
-def checkout(dbapi_connection, connection_record, connection_proxy):
-    pid = os.getpid()
-    if connection_record.info['pid'] != pid:
-        connection_record.info['pid'] = pid
-        connection_record.info['checked_out'] = time.time()
+  
 
 KYC_UPLOAD_FOLDER = os.path.join(os.getcwd(), 'uploads', 'kyc_docs')
 os.makedirs(KYC_UPLOAD_FOLDER, exist_ok=True)
 
 @app.route('/api/kyc/update', methods=['PATCH'])
-@jwt_required()
-def update_kyc():
-    user_id = get_jwt_identity()
-    
+@token_required
+def update_kyc(current_user):
     # Find existing KYC record or create a new one in 'draft' state
-    kyc = KYCVerification.query.filter_by(user_id=user_id).first()
+    kyc = KYCVerification.query.filter_by(user_id=current_user.id).first()
     if not kyc:
-        kyc = KYCVerification(user_id=user_id, status='draft')
+        kyc = KYCVerification(user_id=current_user.id, status='draft')
         db.session.add(kyc)
 
     # Handle file uploads
@@ -1609,7 +1737,7 @@ def update_kyc():
                 if file_size > 10 * 1024 * 1024:  # 10MB
                     raise ValueError('File size must be less than 10MB.')
                 
-                filename = secure_filename(f"{user_id}_{field_name}_{file.filename}")
+                filename = secure_filename(f"{current_user.id}_{field_name}_{file.filename}")
                 file_path = os.path.join(KYC_UPLOAD_FOLDER, filename)
                 file.save(file_path)
                 return file_path
@@ -1661,15 +1789,10 @@ def update_kyc():
         return jsonify({'error': 'An error occurred while saving KYC data.'}), 500
 
 @app.route('/api/kyc/submit', methods=['POST'])
-@jwt_required()
-def submit_kyc():
-    user_id = get_jwt_identity()
-    user = User.query.get(user_id)
-    if not user:
-        return jsonify({'error': 'User not found'}), 404
-
+@token_required
+def submit_kyc(current_user):
     # The final submission now assumes a draft KYC record exists
-    kyc = KYCVerification.query.filter_by(user_id=user_id).first()
+    kyc = KYCVerification.query.filter_by(user_id=current_user.id).first()
     if not kyc:
         return jsonify({'error': 'Please save your details before submitting.'}), 400
 
@@ -1678,7 +1801,7 @@ def submit_kyc():
     def save_file(field):
         file = files.get(field)
         if file:
-            filename = secure_filename(f"{user_id}_{field}_{file.filename}")
+            filename = secure_file(f"{current_user.id}_{field}_{file.filename}")
             file_path = os.path.join(KYC_UPLOAD_FOLDER, filename)
             file.save(file_path)
             return file_path
@@ -1697,10 +1820,9 @@ def submit_kyc():
     return jsonify({'message': 'KYC submitted successfully for review', 'kyc_id': kyc.id}), 201
 
 @app.route('/api/kyc/status', methods=['GET'])
-@jwt_required()
-def get_kyc_status():
-    user_id = get_jwt_identity()
-    kyc = KYCVerification.query.filter_by(user_id=user_id).order_by(KYCVerification.created_at.desc()).first()
+@token_required
+def get_kyc_status(current_user):
+    kyc = KYCVerification.query.filter_by(user_id=current_user.id).order_by(KYCVerification.created_at.desc()).first()
     if not kyc:
         return jsonify({'status': 'not_submitted', 'message': 'No KYC submission found.'}), 200
 
@@ -1789,6 +1911,18 @@ def approve_kyc(submission_id):
             user.is_verified = True
         
         db.session.commit()
+
+        # On approval
+        notification = Notification(
+            user_id=kyc.user_id,
+            title="KYC Approved",
+            message="Your KYC verification has been approved! You can now join groups.",
+            type="kyc_approved",
+            data={}
+        )
+        db.session.add(notification)
+        db.session.commit()
+
         return jsonify({'message': 'KYC submission approved successfully'}), 200
     except Exception as e:
         db.session.rollback()
@@ -1810,24 +1944,33 @@ def reject_kyc(submission_id):
         kyc.rejection_reason = rejection_reason
         
         db.session.commit()
+
+        # On rejection
+        notification = Notification(
+            user_id=kyc.user_id,
+            title="KYC Rejected",
+            message=f"Your KYC verification was rejected. Reason: {kyc.rejection_reason}",
+            type="kyc_rejected",
+            data={}
+        )
+        db.session.add(notification)
+        db.session.commit()
+
         return jsonify({'message': 'KYC submission rejected successfully'}), 200
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/kyc/document/<path:filename>', methods=['GET'])
-@jwt_required()
-def download_kyc_document(filename):
+@token_required
+def download_kyc_document(current_user, filename):
     """Download a KYC document (only accessible by the document owner or admin)"""
     try:
-        user_id = get_jwt_identity()
-        user = User.query.get(user_id)
-        
         # Check if user is admin or the document belongs to them
-        if user.role != 'admin':
+        if current_user.role != 'admin':
             # Extract user_id from filename (format: user_id_fieldname_originalname)
             filename_parts = filename.split('_')
-            if len(filename_parts) < 2 or filename_parts[0] != str(user_id):
+            if len(filename_parts) < 2 or filename_parts[0] != str(current_user.id):
                 return jsonify({'error': 'Access denied'}), 403
         
         file_path = os.path.join(KYC_UPLOAD_FOLDER, filename)
@@ -1841,18 +1984,343 @@ def download_kyc_document(filename):
 @app.route('/api/admin/kyc/stats', methods=['GET'])
 @role_required(['admin'])
 def get_kyc_stats():
-    """Get KYC statistics for admin dashboard"""
     try:
-        total_submissions = KYCVerification.query.count()
-        pending_submissions = KYCVerification.query.filter_by(status='pending').count()
-        approved_submissions = KYCVerification.query.filter_by(status='approved').count()
-        rejected_submissions = KYCVerification.query.filter_by(status='rejected').count()
+        pending_count = KYCVerification.query.filter_by(status='pending').count()
+        approved_count = KYCVerification.query.filter_by(status='approved').count()
+        rejected_count = KYCVerification.query.filter_by(status='rejected').count()
         
         return jsonify({
-            'total_submissions': total_submissions,
-            'pending_submissions': pending_submissions,
-            'approved_submissions': approved_submissions,
-            'rejected_submissions': rejected_submissions
+            'pending': pending_count,
+            'approved': approved_count,
+            'rejected': rejected_count
         }), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+def check_email_config():
+    """Check if email configuration is properly set up"""
+    required_vars = ['SENDGRID_API_KEY', 'SENDGRID_FROM_EMAIL']
+    missing_vars = []
+    
+    for var in required_vars:
+        if not os.getenv(var):
+            missing_vars.append(var)
+    
+    if missing_vars:
+        print(f"WARNING: Missing email configuration variables: {missing_vars}")
+        print("Email functionality will not work properly!")
+        return False
+    
+    print("Email configuration check passed!")
+    return True
+
+# Call this when the app starts
+check_email_config()
+
+bp = Blueprint('admin', __name__)
+
+@bp.route('/stokvels', methods=['GET'])
+def list_all_stokvels():
+    # your code here
+    pass
+
+@app.route('/api/admin/groups/<int:group_id>', methods=['PUT'])
+@token_required
+def update_group(current_user, group_id):
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    group = StokvelGroup.query.get_or_404(group_id)
+    data = request.get_json()
+    group.name = data.get('name', group.name)
+    group.description = data.get('description', group.description)
+    group.contribution_amount = float(data.get('contribution_amount', group.amount))
+    group.frequency = data.get('frequency', group.frequency)
+    group.max_members = int(data.get('max_members', group.max_members))
+    group.tier = data.get('tier', group.tier)  # Add this if you have a tier field
+
+    db.session.commit()
+    return jsonify({'message': 'Group updated successfully'}), 200
+
+@app.route('/api/admin/groups/<int:group_id>', methods=['DELETE'])
+@token_required
+def delete_group(current_user, group_id):
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    group = StokvelGroup.query.get_or_404(group_id)
+    db.session.delete(group)
+    db.session.commit()
+    return jsonify({'message': 'Group deleted successfully'}), 200
+
+@app.route('/api/groups/join', methods=['POST'])
+@jwt_required()
+def join_group():
+    data = request.get_json()
+    user_id = get_jwt_identity()
+    tier_id = data.get('tierId')
+
+    # Check for existing pending request
+    existing = GroupJoinRequest.query.filter_by(user_id=user_id, tier_id=tier_id, status='pending').first()
+    if existing:
+        return jsonify({'error': 'You already have a pending request for this tier.'}), 400
+
+    join_request = GroupJoinRequest(user_id=user_id, tier_id=tier_id)
+    db.session.add(join_request)
+    db.session.commit()
+    return jsonify({"message": "Join request submitted!"}), 200
+
+class GroupJoinRequest(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    tier_id = db.Column(db.Integer, nullable=False)  # or group_id if you use groups
+    status = db.Column(db.String(20), default='pending')  # pending, approved, rejected
+    reason = db.Column(db.String(255))  # Reason for rejection
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship('User', backref='join_requests')
+
+@app.route('/api/admin/join-requests', methods=['GET'])
+@jwt_required()
+def list_join_requests():
+    # Optionally check admin role here
+    requests = GroupJoinRequest.query.order_by(GroupJoinRequest.created_at.desc()).all()
+    result = []
+    for req in requests:
+        result.append({
+            'id': req.id,
+            'user_id': req.user_id,
+            'tier_id': req.tier_id,
+            'status': req.status,
+            'reason': req.reason,
+            'created_at': req.created_at.isoformat(),
+            'user': {
+                'id': req.user.id,
+                'name': req.user.full_name,
+                'email': req.user.email,
+            }
+        })
+    return jsonify(result)
+
+@app.route('/api/admin/join-requests/<int:request_id>/approve', methods=['POST'])
+@jwt_required()
+def approve_join_request(request_id):
+    req = GroupJoinRequest.query.get_or_404(request_id)
+    user = User.query.get(req.user_id)
+    kyc = KYCVerification.query.filter_by(user_id=user.id).order_by(KYCVerification.created_at.desc()).first()
+    
+    if not kyc or kyc.status != 'approved':
+        # Send notification to user to complete KYC
+        notification = Notification(
+            user_id=user.id,
+            title="KYC Required for Group Approval",
+            message="Your join request is pending. Please complete your KYC verification to be approved for the group.",
+            type="kyc_required",
+            data={
+                "join_request_id": req.id,
+                "group_id": req.tier_id,
+                "action_required": "complete_kyc",
+                "kyc_url": "/dashboard/kyc"  # <-- Add this line
+            }
+        )
+        db.session.add(notification)
+        db.session.commit()
+        
+        return jsonify({
+            'error': 'User must complete and have KYC approved before approval.',
+            'message': 'Notification sent to user to complete KYC',
+            'user_email': user.email
+        }), 400
+    
+    req.status = 'approved'
+    db.session.commit()
+    return jsonify({'message': 'Request approved'})
+
+@app.route('/api/admin/join-requests/<int:request_id>/reject', methods=['POST'])
+@jwt_required()
+def reject_join_request(request_id):
+    data = request.get_json()
+    reason = data.get('reason', '')
+    req = GroupJoinRequest.query.get_or_404(request_id)
+    req.status = 'rejected'
+    req.reason = reason
+    db.session.commit()
+    return jsonify({'message': 'Request rejected'})
+
+@app.route('/api/user/join-requests', methods=['GET'])
+@jwt_required()
+def get_user_join_requests():
+    user_id = get_jwt_identity()
+    requests = GroupJoinRequest.query.filter_by(user_id=user_id).all()
+    result = []
+    for req in requests:
+        group = StokvelGroup.query.get(req.tier_id)
+        result.append({
+            'tier_id': req.tier_id,
+            'status': req.status,
+            'reason': req.reason,
+            'group_name': group.name if group else None,
+            'tier': group.tier if group else None,
+            'amount': group.amount if group else None,
+            'created_at': req.created_at.isoformat() if req.created_at else None
+        })
+    return jsonify(result)
+
+
+
+@app.route('/api/user/notifications', methods=['GET'])
+@jwt_required()
+def get_user_notifications():
+    user_id = get_jwt_identity()
+    notifications = Notification.query.filter_by(user_id=user_id).order_by(Notification.created_at.desc()).all()
+    
+    return jsonify([{
+        'id': n.id,
+        'title': n.title,
+        'message': n.message,
+        'type': n.type,
+        'data': n.data,
+        'is_read': n.is_read,
+        'created_at': n.created_at.isoformat()
+    } for n in notifications])
+
+@app.route('/api/user/notifications/<int:notification_id>/read', methods=['POST'])
+@jwt_required()
+def mark_notification_read(notification_id):
+    user_id = get_jwt_identity()
+    notification = Notification.query.filter_by(id=notification_id, user_id=user_id).first()
+    
+    if notification:
+        notification.is_read = True
+        db.session.commit()
+    
+    return jsonify({'message': 'Notification marked as read'})
+
+@app.route('/api/admin/notifications', methods=['GET'])
+@jwt_required()
+def get_admin_notifications():
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    
+    if not user or user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    # Get notifications for admin users
+    notifications = Notification.query.filter_by(user_id=user_id).order_by(Notification.created_at.desc()).all()
+    
+    return jsonify([{
+        'id': n.id,
+        'title': n.title,
+        'message': n.message,
+        'type': n.type,
+        'data': n.data,
+        'is_read': n.is_read,
+        'created_at': n.created_at.isoformat()
+    } for n in notifications])
+
+@app.route('/api/admin/notifications/<int:notification_id>/read', methods=['POST'])
+@jwt_required()
+def mark_admin_notification_read(notification_id):
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    
+    if not user or user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    notification = Notification.query.filter_by(id=notification_id, user_id=user_id).first()
+    
+    if notification:
+        notification.is_read = True
+        db.session.commit()
+    
+    return jsonify({'message': 'Notification marked as read'})
+
+
+  # -------------------- MAIN --------------------
+if __name__ == '__main__':
+    app.run(port=5001, debug=True)
+
+@event.listens_for(Engine, "connect")
+def connect(dbapi_connection, connection_record):
+    connection_record.info['pid'] = os.getpid()
+
+@event.listens_for(Engine, "checkout")
+def checkout(dbapi_connection, connection_record, connection_proxy):
+    pid = os.getpid()
+    if connection_record.info['pid'] != pid:
+        connection_record.info['pid'] = pid
+        connection_record.info['checked_out'] = time.time()
+
+@app.route('/api/auth/send-otp', methods=['POST'])
+def send_otp():
+    data = request.get_json()
+    phone = data.get('phone')
+    if not phone:
+        return jsonify({'success': False, 'message': 'Phone number is required'}), 400
+
+    normalized_phone = normalize_phone(phone)
+    user = User.query.filter_by(phone=normalized_phone).first()
+    if not user:
+        return jsonify({'success': False, 'message': 'User with this phone does not exist'}), 404
+
+    otp_code = generate_otp()
+    expiry = datetime.utcnow() + timedelta(minutes=10)
+    otp = OTP(user_id=user.id, code=otp_code, expires_at=expiry)
+    db.session.add(otp)
+    db.session.commit()
+
+    success, message = send_verification_sms(normalized_phone, otp_code)
+    if not success:
+        return jsonify({'success': False, 'message': f'Failed to send SMS: {message}'}), 500
+
+    return jsonify({'success': True, 'message': 'OTP sent successfully'})
+
+@app.route('/api/auth/resend-sms', methods=['POST'])
+def resend_sms():
+    data = request.get_json()
+    phone = data.get('phone')
+    if not phone:
+        return jsonify({'success': False, 'message': 'Phone number is required'}), 400
+
+    normalized_phone = normalize_phone(phone)
+    user = User.query.filter_by(phone=normalized_phone).first()
+    if not user:
+        return jsonify({'success': False, 'message': 'User with this phone does not exist'}), 404
+
+    otp_code = generate_otp()
+    expiry = datetime.utcnow() + timedelta(minutes=10)
+    otp = OTP(user_id=user.id, code=otp_code, expires_at=expiry)
+    db.session.add(otp)
+    db.session.commit()
+
+    success, message = send_verification_sms(normalized_phone, otp_code)
+    if not success:
+        return jsonify({'success': False, 'message': f'Failed to send SMS: {message}'}), 500
+
+    return jsonify({'success': True, 'message': 'OTP resent successfully'})
+
+UPLOAD_FOLDER = os.path.join(os.getcwd(), 'uploads', 'profile_pics')
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+@app.route('/api/user/profile-picture', methods=['POST'])
+@token_required
+def upload_profile_picture(current_user):
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file part'}), 400
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No selected file'}), 400
+    if file:
+        filename = secure_filename(f"{current_user.id}_{file.filename}")
+        file_path = os.path.join(UPLOAD_FOLDER, filename)
+        file.save(file_path)
+        # Save the relative path or URL in the database
+        current_user.profile_picture = f"/uploads/profile_pics/{filename}"
+        db.session.commit()
+        return jsonify({'profile_picture': current_user.profile_picture}), 200
+
+@app.route('/uploads/profile_pics/<filename>')
+def serve_profile_picture(filename):
+    return send_from_directory(UPLOAD_FOLDER, filename)
+
+

@@ -99,23 +99,23 @@ interface OfferCardProps {
 
 const OfferCard: React.FC<OfferCardProps> = ({ offer, navigate }) => {
   return (
-    <div className="bg-white p-4 rounded-lg shadow-md border border-gray-200 flex flex-col justify-between">
+    <div className="bg-white dark:bg-dark-card p-4 rounded-lg shadow-md border border-gray-200 dark:border-dark-border flex flex-col justify-between">
       <div>
-        <h3 className="text-lg font-semibold text-gray-900 mb-2">{offer.title}</h3>
-         {offer.provider && <p className="text-sm text-gray-600 mb-1">{offer.provider}</p>}
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-dark-text mb-2">{offer.title}</h3>
+         {offer.provider && <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">{offer.provider}</p>}
          {offer.verified && (
-           <span className="inline-flex items-center rounded-md bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-600/20 mb-2">
+           <span className="inline-flex items-center rounded-md bg-green-50 dark:bg-green-900/50 px-2 py-1 text-xs font-medium text-green-700 dark:text-green-300 ring-1 ring-inset ring-green-600/20 mb-2">
              <ShieldCheck className="-ml-0.5 mr-1.5 h-3 w-3" />
              Verified
            </span>
          )}
-        <p className="text-gray-700 text-sm whitespace-pre-line">{offer.description}</p> {/* Use whitespace-pre-line for \n */}
+        <p className="text-gray-700 dark:text-gray-300 text-sm whitespace-pre-line">{offer.description}</p> {/* Use whitespace-pre-line for \n */}
       </div>
       <div className="mt-4">
         {offer.tags && (
           <div className="flex space-x-2 mb-3">
             {offer.tags.map(tag => (
-              <span key={tag} className="inline-block bg-gray-100 rounded-full px-3 py-1 text-xs font-semibold text-gray-700">
+              <span key={tag} className="inline-block bg-gray-100 dark:bg-gray-700 rounded-full px-3 py-1 text-xs font-semibold text-gray-700 dark:text-gray-300">
                 {tag}
               </span>
             ))}
@@ -180,25 +180,25 @@ const Marketplace: React.FC = () => {
     fetchOffers();
   }, []);
 
-  if (loading) return <div>Loading...</div>;
+  if (loading) return <div className="p-6 text-center text-gray-500 dark:text-gray-400">Loading Marketplace...</div>;
 
   return (
     <div className="flex-1 p-4">
       <div className="flex justify-center mb-6">
-        <h1 className="text-2xl md:text-3xl font-bold text-gray-900">iStokvel Deals</h1>
+        <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-dark-text">iStokvel Deals</h1>
       </div>
 
-      <div className="border-b border-gray-200 mb-6">
+      <div className="border-b border-gray-200 dark:border-dark-border mb-6">
         <nav className="flex justify-center space-x-8" aria-label="Tabs">
           <button
             onClick={() => setActiveTab('marketplace')}
             aria-label="Switch to marketplace tab"
             role="tab"
             aria-selected={activeTab === 'marketplace'}
-            className={`whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm ${
+            className={`whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm transition-colors ${
               activeTab === 'marketplace'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
             }`}
           >
             <Archive className="inline-block w-4 h-4 mr-2" />
@@ -209,10 +209,10 @@ const Marketplace: React.FC = () => {
             aria-label="Switch to my offers tab"
             role="tab"
             aria-selected={activeTab === 'my-offers'}
-            className={`whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm ${
+            className={`whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm transition-colors ${
               activeTab === 'my-offers'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
             }`}
           >
              <Heart className="inline-block w-4 h-4 mr-2" />
@@ -220,10 +220,10 @@ const Marketplace: React.FC = () => {
           </button>
            <button
             onClick={() => setActiveTab('track-orders')}
-            className={`whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm ${
+            className={`whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm transition-colors ${
               activeTab === 'track-orders'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
             }`}
           >
              <Package className="inline-block w-4 h-4 mr-2" />
@@ -231,10 +231,10 @@ const Marketplace: React.FC = () => {
           </button>
            <button
             onClick={() => setActiveTab('partner-portal')}
-            className={`whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm ${
+            className={`whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm transition-colors ${
               activeTab === 'partner-portal'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
             }`}
           >
              <Users className="inline-block w-4 h-4 mr-2" />
@@ -247,17 +247,17 @@ const Marketplace: React.FC = () => {
         <div className="w-full max-w-3xl flex items-center space-x-4">
           <button
             onClick={() => {/* handle search */}}
-            className="flex-1 flex items-center justify-center space-x-2 px-4 py-3 bg-white border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors duration-200"
+            className="flex-1 flex items-center justify-center space-x-2 px-4 py-3 bg-white dark:bg-dark-card border border-gray-200 dark:border-dark-border rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-200"
           >
-            <Search className="w-5 h-5" />
-            <span>Search deals...</span>
+            <Search className="h-5 w-5" />
+            <span>Search Offers</span>
           </button>
 
           <button
             onClick={() => {/* handle filter */}}
-            className="flex items-center space-x-2 px-4 py-3 bg-white border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors duration-200"
+            className="flex items-center justify-center space-x-2 px-4 py-3 bg-white dark:bg-dark-card border border-gray-200 dark:border-dark-border rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-200"
           >
-            <Filter className="w-5 h-5" />
+            <Filter className="h-5 w-5" />
             <span>Filter</span>
           </button>
         </div>
