@@ -132,30 +132,58 @@ def check_and_process_referral_completion(referee_user):
     # This function now checks only for verification and KYC completion.
     stmt = select(Referral).where(
         Referral.referee_id == referee_user.id,
-        Referral.status.in_(['verified', 'kyc_complete'])
+        Referral.status == 'verified'
     )
     referral = db.session.execute(stmt).scalar_one_or_none()
 
     if not referral:
-        return  # No active referral found for this user, or it's already completed.
+        return  # No active referral found for this user.
 
-    if referee_user.is_verified and referee_user.kyc_completed:
-        if referral.status == 'completed':
-            return
+    # Ensure the check only proceeds if the referee has completed both steps
+    if not (referee_user.is_verified and referee_user.kyc_completed):
+        return
 
-        referral.status = 'completed'
+    # Avoid processing the same referral twice
+    if referral.status == 'completed':
+        return
 
-        referrer = db.session.get(User, referral.referrer_id)
-        if not referrer:
-            return
+    referral.status = 'completed'
 
-        if referrer.valid_referrals == 0:
-            referrer.points += 20
+    referrer = db.session.get(User, referral.referrer_id)
+    if not referrer:
+        return
 
-        referrer.valid_referrals += 1
+    # --- New Points Logic based on your table ---
+    # Increment the count of successful referrals for the referrer first
+    referrer.valid_referrals += 1
 
+    # Case 1: The very first successful referral
+    if referrer.valid_referrals == 1:
+        # Award the one-time 20-point "unlock bonus"
+        referrer.points += 20
+        # Create a notification for unlocking the bonus
+        unlock_notification = Notification(
+            user_id=referrer.id,
+            title="Referral Bonus Unlocked!",
+            message="Congratulations! Your first successful referral earned you a 20 point unlock bonus. You now get points for every new referral."
+        )
+        db.session.add(unlock_notification)
+    else:
+        # Case 2: All subsequent referrals (2nd, 3rd, 4th, etc.)
+        # Award the base 30 points for every successful referral after the first
+        referrer.points += 30
+        
+        # Additionally, check for a milestone bonus
         if referrer.valid_referrals > 0 and referrer.valid_referrals % 3 == 0:
+            # Award a 100-point bonus on every 3rd referral (3rd, 6th, 9th, etc.)
             referrer.points += 100
+            # Create a notification for the milestone
+            milestone_notification = Notification(
+                user_id=referrer.id,
+                title="🎉 Milestone Reached! 🎉",
+                message=f"Amazing! You've reached {referrer.valid_referrals} successful referrals and earned a 100 point bonus!"
+            )
+            db.session.add(milestone_notification)
 
 # -------------------- MODELS Changes made here------------------
 
@@ -379,6 +407,30 @@ class Wallet(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     user = db.relationship('User', backref='wallet')
+
+class Notification(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    title = db.Column(db.String(100), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    is_read = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    user = db.relationship('User', backref=db.backref('notifications', lazy='dynamic'))
+
+    def __init__(self, user_id, title, message, **kwargs):
+        self.user_id = user_id
+        self.title = title
+        self.message = message
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'title': self.title,
+            'message': self.message,
+            'is_read': self.is_read,
+            'created_at': self.created_at.isoformat()
+        }
 
 class NotificationSettings(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -641,6 +693,10 @@ def verify_otp():
         if pending_referral:
             # Mark the referral as 'verified'. Points are awarded later.
             pending_referral.status = 'verified'
+        
+        # CRITICAL FIX: Check for referral completion right after verification.
+        # This ensures points are awarded even if KYC was done before verification.
+        check_and_process_referral_completion(user)
         
         db.session.delete(otp_entry) # OTP is used, so delete it
         db.session.commit()
@@ -1446,6 +1502,56 @@ facebook_bp = make_facebook_blueprint(
     redirect_to='facebook_login'
 )
 app.register_blueprint(facebook_bp, url_prefix="/login")
+
+# --- NOTIFICATION ROUTES ---
+
+@app.route('/api/user/notifications', methods=['GET'])
+@token_required
+def get_notifications(current_user):
+    """Fetches all notifications for the current user, ordered by most recent."""
+    try:
+        # The backref is 'notifications' with lazy='dynamic', so it's a query object
+        notifications_query = current_user.notifications.order_by(Notification.created_at.desc())
+        notifications = notifications_query.all()
+        
+        return jsonify({
+            'notifications': [n.to_dict() for n in notifications],
+            'unread_count': notifications_query.filter_by(is_read=False).count()
+        }), 200
+    except Exception as e:
+        logger.error(f"Error fetching notifications for user {current_user.id}: {str(e)}")
+        return jsonify({'error': 'An unexpected error occurred while fetching notifications.'}), 500
+
+@app.route('/api/user/notifications/mark-as-read', methods=['POST'])
+@token_required
+def mark_notifications_as_read(current_user):
+    """
+    Marks notifications as read.
+    - If a list of IDs is provided in `notification_ids`, it marks those as read.
+    - If the list is empty or not provided, it marks ALL unread notifications as read.
+    """
+    try:
+        data = request.get_json() or {}
+        notification_ids = data.get('notification_ids')
+
+        query = Notification.query.filter_by(user_id=current_user.id, is_read=False)
+
+        if notification_ids and isinstance(notification_ids, list):
+            # Only mark specific notifications if a non-empty list is provided
+            if len(notification_ids) > 0:
+                query = query.filter(Notification.id.in_(notification_ids))
+        
+        # If no list is provided, the query marks all unread notifications.
+        updated_count = query.update({'is_read': True}, synchronize_session=False)
+        db.session.commit()
+        
+        return jsonify({
+            'message': f'{updated_count} notification(s) marked as read.',
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error marking notifications as read for user {current_user.id}: {str(e)}")
+        return jsonify({'error': 'An unexpected error occurred.'}), 500
 
 if __name__ == '__main__':
     app.run(port=5001, debug=True)
