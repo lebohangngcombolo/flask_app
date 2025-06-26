@@ -32,10 +32,11 @@ from werkzeug.utils import secure_filename
 from werkzeug.exceptions import HTTPException
 from sqlalchemy import event
 from sqlalchemy.engine import Engine
-from jwt.exceptions import ExpiredSignatureError, InvalidTokenError
+from jwt import ExpiredSignatureError, InvalidTokenError
 from openai import OpenAI
 import uuid
 import openai
+import jwt as pyjwt
 
 # Load environment variables from .env file
 load_dotenv()
@@ -365,6 +366,28 @@ class KYCVerification(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+class Card(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    cardholder = db.Column(db.String(100), nullable=False)
+    card_number_last4 = db.Column(db.String(4), nullable=False)  # Only store last 4 digits!
+    expiry = db.Column(db.String(5), nullable=False)  # MM/YY
+    is_primary = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationship
+    user = db.relationship('User', backref=db.backref('cards', lazy=True))
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'cardholder': self.cardholder,
+            'card_number': f"**** **** **** {self.card_number_last4}",
+            'expiry': self.expiry,
+            'is_primary': self.is_primary,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
 # -------------------- DECORATORS --------------------
 def token_required(f):
     @wraps(f)
@@ -385,62 +408,114 @@ def token_required(f):
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        token = request.headers.get('Authorization')
-        if not token:
-            return jsonify({'error': 'No token provided'}), 401
-        
         try:
-            token = token.split(' ')[1]  # Remove 'Bearer ' prefix
-            payload = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
-            user = User.query.get(payload['user_id'])
-            
+            token = request.headers.get('Authorization')
+            print("DEBUG: Authorization header:", token)
+            if not token:
+                print("DEBUG: No token provided")
+                return jsonify({'error': 'No token provided'}), 401
+
+            try:
+                token = token.split(' ')[1]  # Remove 'Bearer ' prefix
+                print("DEBUG: Token after split:", token)
+            except Exception as e:
+                print("DEBUG: Error splitting token:", repr(e))
+                return jsonify({'error': 'Malformed token'}), 401
+
+            try:
+                payload = pyjwt.decode(token, app.config['JWT_SECRET_KEY'], algorithms=['HS256'])
+                print("DEBUG: Decoded JWT payload:", payload)
+            except ExpiredSignatureError:
+                print("DEBUG: Token has expired")
+                return jsonify({'error': 'Token has expired'}), 401
+            except InvalidTokenError:
+                print("DEBUG: Invalid token")
+                return jsonify({'error': 'Invalid token'}), 401
+            except Exception as e:
+                print("DEBUG: Error decoding token:", repr(e))
+                return jsonify({'error': 'Token decode error'}), 401
+
+            user_id = payload.get('user_id') or payload.get('sub')
+            print("DEBUG: User ID from payload:", user_id)
+            user = User.query.get(user_id)
+            print("DEBUG: User from DB:", user)
+
             if not user:
+                print("DEBUG: User not found in DB")
                 return jsonify({'error': 'User not found'}), 401
-            
-            # SECURITY FIX: Check if user is verified
+
+            print(f"DEBUG: User role: {user.role}, is_verified: {user.is_verified}")
+
             if not user.is_verified:
+                print("DEBUG: User not verified")
                 return jsonify({'error': 'Please verify your email address to access this feature'}), 403
-            
+
             if user.role != 'admin':
+                print("DEBUG: User is not admin")
                 return jsonify({'error': 'Admin access required'}), 403
-                
+
+            print("DEBUG: Admin access granted")
             return f(*args, **kwargs)
-        except jwt.ExpiredSignatureError:
-            return jsonify({'error': 'Token has expired'}), 401
-        except jwt.InvalidTokenError:
-            return jsonify({'error': 'Invalid token'}), 401
-            
+        except Exception as e:
+            print("DEBUG: Unhandled exception in admin_required:", repr(e))
+            return jsonify({'error': 'Unknown error'}), 401
     return decorated_function
 
 def role_required(allowed_roles):
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
-            token = request.headers.get('Authorization')
-            if not token:
-                return jsonify({'error': 'No token provided'}), 401
-            
             try:
-                token = token.split(' ')[1]  # Remove 'Bearer ' prefix
-                payload = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
-                user = User.query.get(payload['user_id'])
-                
+                token = request.headers.get('Authorization')
+                print("DEBUG: Authorization header:", token)
+                if not token:
+                    print("DEBUG: No token provided")
+                    return jsonify({'error': 'No token provided'}), 401
+
+                try:
+                    token = token.split(' ')[1]
+                    print("DEBUG: Token after split:", token)
+                except Exception as e:
+                    print("DEBUG: Error splitting token:", repr(e))
+                    return jsonify({'error': 'Malformed token'}), 401
+
+                try:
+                    payload = pyjwt.decode(token, app.config['JWT_SECRET_KEY'], algorithms=['HS256'])
+                    print("DEBUG: Decoded JWT payload:", payload)
+                except ExpiredSignatureError:
+                    print("DEBUG: Token has expired")
+                    return jsonify({'error': 'Token has expired'}), 401
+                except InvalidTokenError:
+                    print("DEBUG: Invalid token")
+                    return jsonify({'error': 'Invalid token'}), 401
+                except Exception as e:
+                    print("DEBUG: Error decoding token:", repr(e))
+                    return jsonify({'error': 'Token decode error'}), 401
+
+                user_id = payload.get('user_id') or payload.get('sub')
+                print("DEBUG: User ID from payload:", user_id)
+                user = User.query.get(user_id)
+                print("DEBUG: User from DB:", user)
+
                 if not user:
+                    print("DEBUG: User not found in DB")
                     return jsonify({'error': 'User not found'}), 401
-                
-                # SECURITY FIX: Check if user is verified
+
+                print(f"DEBUG: User role: {user.role}, is_verified: {user.is_verified}")
+
                 if not user.is_verified:
+                    print("DEBUG: User not verified")
                     return jsonify({'error': 'Please verify your email address to access this feature'}), 403
-                
+
                 if user.role not in allowed_roles:
+                    print("DEBUG: User does not have required role")
                     return jsonify({'error': 'Insufficient permissions'}), 403
-                    
+
+                print("DEBUG: Role access granted")
                 return f(*args, **kwargs)
-            except jwt.ExpiredSignatureError:
-                return jsonify({'error': 'Token has expired'}), 401
-            except jwt.InvalidTokenError:
-                return jsonify({'error': 'Invalid token'}), 401
-                
+            except Exception as e:
+                print("DEBUG: Unhandled exception in role_required:", repr(e))
+                return jsonify({'error': 'Unknown error'}), 401
         return decorated_function
     return decorator
 
@@ -2322,5 +2397,67 @@ def upload_profile_picture(current_user):
 @app.route('/uploads/profile_pics/<filename>')
 def serve_profile_picture(filename):
     return send_from_directory(UPLOAD_FOLDER, filename)
+
+@app.route('/uploads/kyc_docs/<filename>')
+def serve_kyc_doc(filename):
+    return send_from_directory(KYC_UPLOAD_FOLDER, filename)
+
+@app.route('/api/wallet/cards', methods=['POST'])
+@token_required
+def add_card(current_user):
+    data = request.get_json()
+    
+    # Validate required fields
+    required_fields = ['cardholder', 'cardNumber', 'expiry', 'cvv']
+    if not all(field in data for field in required_fields):
+        return jsonify({'error': 'Missing required fields'}), 400
+    
+    # Extract last 4 digits from card number
+    card_number = data['cardNumber'].replace(' ', '')
+    if len(card_number) < 4:
+        return jsonify({'error': 'Invalid card number'}), 400
+    
+    last4 = card_number[-4:]
+    
+    # Create new card
+    new_card = Card(
+        user_id=current_user.id,
+        cardholder=data['cardholder'],
+        card_number_last4=last4,
+        expiry=data['expiry'],
+        is_primary=data.get('primary', False)
+    )
+    
+    # If this is set as primary, unset other primary cards
+    if new_card.is_primary:
+        Card.query.filter_by(user_id=current_user.id, is_primary=True).update({'is_primary': False})
+    
+    db.session.add(new_card)
+    db.session.commit()
+    
+    return jsonify(new_card.to_dict()), 201
+
+@app.route('/api/wallet/cards', methods=['GET'])
+@token_required
+def get_cards(current_user):
+    cards = Card.query.filter_by(user_id=current_user.id).all()
+    return jsonify([card.to_dict() for card in cards]), 200
+
+@app.route('/api/admin/join-requests/delete-all', methods=['DELETE'])
+@jwt_required()
+def delete_all_join_requests():
+    GroupJoinRequest.query.delete()
+    db.session.commit()
+    return jsonify({'message': 'All join requests deleted'})
+
+@app.route('/api/admin/join-requests/bulk-delete', methods=['POST'])
+@jwt_required()
+def bulk_delete_join_requests():
+    ids = request.json.get('ids', [])
+    if not ids:
+        return jsonify({'error': 'No IDs provided'}), 400
+    GroupJoinRequest.query.filter(GroupJoinRequest.id.in_(ids)).delete(synchronize_session=False)
+    db.session.commit()
+    return jsonify({'message': 'Selected join requests deleted'})
 
 

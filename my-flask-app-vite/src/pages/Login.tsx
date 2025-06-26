@@ -4,7 +4,6 @@ import { login } from '../utils/auth';
 import PageTransition from '../components/PageTransition';
 import { toast } from 'react-hot-toast';
 import api from '../services/api';
-// import GoogleLoginButton from '../components/GoogleLoginButton';
 
 const Login: React.FC = () => {
   const navigate = useNavigate();

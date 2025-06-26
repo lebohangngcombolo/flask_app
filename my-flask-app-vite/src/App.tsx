@@ -26,6 +26,8 @@ import { Toaster } from 'react-hot-toast';
 import GroupAdminManagement from './pages/GroupAdminManagement';
 import StokvelGroups from './pages/StokvelGroups';
 import { ThemeProvider } from 'next-themes';
+import KYCManagement from './pages/KYCManagement';
+import AdminLayout from "./components/AdminLayout";
 
 const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
@@ -134,13 +136,16 @@ const App: React.FC = () => {
             {/* Add more dashboard sub-pages here if needed */}
           </Route>
 
-          {/* Admin routes */}
-          <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
-          <Route path="/admin/dashboard" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
-          <Route path="/admin/users" element={<AdminRoute><UserManagement /></AdminRoute>} />
-          <Route path="/admin/stokvels" element={<AdminRoute><StokvelManagement /></AdminRoute>} />
-          <Route path="/admin/groups" element={<GroupAdminManagement />} />
-
+          {/* Admin routes - ONLY NESTED UNDER /admin */}
+          <Route path="/admin" element={<AdminLayout />}>
+            <Route path="dashboard" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+            <Route path="kyc-management" element={<KYCManagement />} />
+            <Route path="groups" element={<GroupAdminManagement />} />
+            <Route path="group-admin-management" element={<GroupAdminManagement />} />
+            <Route path="users" element={<UserManagement />} />
+            <Route path="stokvels" element={<StokvelManagement />} />
+          </Route>
+          
           {/* Phone Auth route */}
           <Route path="/phone-auth" element={<PhoneAuth />} />
 

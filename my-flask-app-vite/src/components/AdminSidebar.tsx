@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -9,7 +9,9 @@ import {
   FileText,
   Bell,
   Settings,
-  UserCheck
+  UserCheck,
+  ChevronDown,
+  ChevronRight
 } from 'lucide-react';
 
 interface NavItem {
@@ -17,15 +19,26 @@ interface NavItem {
   path: string;
   icon: React.ComponentType;
   tooltip: string;
+  subItems?: { label: string; path: string }[];
 }
 
 const navItems: NavItem[] = [
   { name: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard, tooltip: 'Overview and platform stats' },
-  { name: 'Manage Users', path: '/admin/users', icon: Users, tooltip: 'View, edit, and manage all users' },
-  { name: 'Manage Groups', path: '/admin/groups', icon: Folder, tooltip: 'Create, edit, and manage all stokvel groups' },
+  { name: 'Manage Users', path: '/admin/users', icon: Users, tooltip: 'View, edit, and manage all users', subItems: [
+    { label: 'View all', path: '/admin/users' },
+    { label: 'Add new customer', path: '/admin/users/new' },
+  ] },
+  { name: 'Manage Groups', path: '/admin/groups', icon: Folder, tooltip: 'Create, edit, and manage all stokvel groups', subItems: [
+    { label: 'Group Management', path: '/admin/groups' }
+  ] },
   { name: 'Contribution Analytics', path: '/admin/analytics', icon: BarChart2, tooltip: 'View and analyze contributions' },
-  { name: 'KYC Approvals', path: '/admin/kyc', icon: ShieldCheck, tooltip: 'Approve or reject KYC submissions' },
-  { name: 'Reports', path: '/admin/reports', icon: FileText, tooltip: 'View and download platform reports' },
+  { name: 'KYC Approvals', path: '/admin/kyc-management', icon: ShieldCheck, tooltip: 'Approve or reject KYC submissions', subItems: [
+    { label: 'KYC Management', path: '/admin/kyc-management' },
+  ] },
+  { name: 'Reports', path: '/admin/reports', icon: FileText, tooltip: 'View and download platform reports', subItems: [
+    { label: 'Monthly', path: '/admin/reports/monthly' },
+    { label: 'Annual', path: '/admin/reports/annual' },
+  ] },
   { name: 'Notifications', path: '/admin/notifications', icon: Bell, tooltip: 'Send and manage notifications' },
   { name: 'Settings', path: '/admin/settings', icon: Settings, tooltip: 'Platform and admin settings' },
   { name: 'Admin Team', path: '/admin/team', icon: UserCheck, tooltip: 'Manage admin team and roles' }
@@ -33,34 +46,55 @@ const navItems: NavItem[] = [
 
 interface AdminSidebarProps {
   sidebarOpen: boolean;
+  setSidebarOpen: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
-const AdminSidebar: React.FC<AdminSidebarProps> = ({ sidebarOpen }) => {
+const AdminSidebar: React.FC<AdminSidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
+  const [openMenus, setOpenMenus] = useState<{ [key: string]: boolean }>({});
   const location = useLocation();
 
+  const toggleMenu = (label: string) => {
+    setOpenMenus((prev) => ({ ...prev, [label]: !prev[label] }));
+  };
+
   return (
-    <aside
-      className={`bg-white border-r flex flex-col justify-between transition-all duration-300 ease-in-out ${
-        sidebarOpen ? 'w-64' : 'w-0 border-none'
-      } overflow-hidden`}
-    >
-      <nav className="flex-1 mt-4 px-2 space-y-1">
+    <aside className="bg-[#23295A] min-h-screen w-64 flex flex-col py-6 px-2">
+      <nav className="flex-1 space-y-2">
         {navItems.map((item) => {
-          const isActive = location.pathname.startsWith(item.path);
+          const hasSubItems = !!item.subItems;
+          const isSubItemActive = hasSubItems && item.subItems!.some(sub => location.pathname === sub.path);
+          const isActive = location.pathname.startsWith(item.path) || isSubItemActive;
+
           return (
-            <Link
-              key={item.path}
-              to={item.path}
-              title={item.tooltip}
-              className={`flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 ${
-                isActive
-                  ? 'bg-blue-50 text-blue-600'
-                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-              }`}
-            >
-              <item.icon className="mr-3 flex-shrink-0" />
-              <span>{item.name}</span>
-            </Link>
+            <div key={item.name}>
+              <button
+                className={`flex items-center w-full gap-3 px-4 py-2 rounded-lg transition
+                  ${isActive ? 'bg-[#3B4CCA] text-white font-semibold shadow' : 'text-white'}`}
+                onClick={() => hasSubItems ? toggleMenu(item.name) : undefined}
+                title={item.tooltip}
+                style={{ background: isActive ? undefined : 'transparent', border: 'none', boxShadow: isActive ? undefined : 'none' }}
+              >
+                <item.icon className="w-5 h-5" />
+                <span>{item.name}</span>
+                {hasSubItems && (
+                  openMenus[item.name] ? <ChevronDown className="w-4 h-4 ml-auto" /> : <ChevronRight className="w-4 h-4 ml-auto" />
+                )}
+              </button>
+              {hasSubItems && openMenus[item.name] && (
+                <div className="ml-8 mt-1 space-y-1">
+                  {item.subItems!.map((sub) => (
+                    <Link
+                      key={sub.path}
+                      to={sub.path}
+                      className={`block px-4 py-2 rounded-lg transition text-white`}
+                      style={{ background: 'transparent', border: 'none', boxShadow: 'none' }}
+                    >
+                      {sub.label}
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
           );
         })}
       </nav>

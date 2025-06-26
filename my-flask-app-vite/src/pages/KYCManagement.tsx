@@ -13,7 +13,9 @@ import {
   User,
   Calendar,
   Building,
-  CreditCard
+  CreditCard,
+  Image as ImageIcon,
+  Loader2
 } from 'lucide-react';
 
 interface KYCSubmission {
@@ -45,6 +47,11 @@ const KYCManagement: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedSubmission, setSelectedSubmission] = useState<KYCSubmission | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewType, setPreviewType] = useState<'image' | 'pdf' | null>(null);
+  const [previewLabel, setPreviewLabel] = useState<string>('');
+
+  const backendUrl = import.meta.env.VITE_API_URL || "http://localhost:5001";
 
   useEffect(() => {
     fetchSubmissions();
@@ -67,6 +74,7 @@ const KYCManagement: React.FC = () => {
       await api.post(`/api/admin/kyc/${submissionId}/approve`);
       toast.success('KYC submission approved successfully');
       fetchSubmissions();
+      setSelectedSubmission(null);
     } catch (error: any) {
       toast.error(error.response?.data?.error || 'Failed to approve submission');
     }
@@ -148,6 +156,100 @@ const KYCManagement: React.FC = () => {
     return matchesSearch && matchesStatus;
   });
 
+  const getDocUrl = (docPath: string | null) => {
+    if (!docPath) return null;
+    const backendUrl = import.meta.env.VITE_API_URL || "http://localhost:5001";
+    if (docPath.includes('kyc_docs/')) {
+      const filename = docPath.split('kyc_docs/').pop();
+      return `${backendUrl}/uploads/kyc_docs/${filename}`;
+    }
+    if (docPath.startsWith('/')) {
+      return `${backendUrl}${docPath}`;
+    }
+    return `${backendUrl}/${docPath}`;
+  };
+
+  function DocPreview({ docPath, label, onPreview }: { docPath: string | null, label: string, onPreview: (url: string, type: 'image' | 'pdf', label: string) => void }) {
+    const url = getDocUrl(docPath);
+    const [imgError, setImgError] = useState(false);
+    const [loading, setLoading] = useState(true);
+
+    if (!url) {
+      return (
+        <div className="flex flex-col items-center text-gray-400">
+          <FileText className="w-8 h-8 mb-1" />
+          <span className="text-xs italic">No file</span>
+        </div>
+      );
+    }
+
+    if (/\.(jpg|jpeg|png)$/i.test(url)) {
+      return (
+        <div className="flex flex-col items-center group">
+          {loading && !imgError && (
+            <div className="w-[100px] h-[100px] bg-gray-100 animate-pulse rounded mb-1" />
+          )}
+          {!imgError ? (
+            <img
+              src={url}
+              alt={label}
+              className={`rounded shadow max-w-[100px] max-h-[100px] object-cover border transition-transform duration-200 group-hover:scale-105 cursor-pointer ${loading ? 'hidden' : ''}`}
+              onError={() => setImgError(true)}
+              onLoad={() => setLoading(false)}
+              title={label}
+              onClick={() => onPreview(url, 'image', label)}
+            />
+          ) : (
+            <div className="flex flex-col items-center text-gray-400">
+              <ImageIcon className="w-8 h-8 mb-1" />
+              <span className="text-xs italic">Image not available</span>
+            </div>
+          )}
+          <a
+            href={url}
+            download
+            className="mt-2 text-xs text-blue-600 underline hover:text-blue-800 transition-colors"
+            title={`Download ${label}`}
+          >
+            Download
+          </a>
+        </div>
+      );
+    }
+    if (/\.pdf$/i.test(url)) {
+      return (
+        <div className="flex flex-col items-center group">
+          <div
+            className="w-[100px] h-[120px] border rounded group-hover:shadow-lg transition-shadow flex items-center justify-center bg-gray-50 cursor-pointer"
+            onClick={() => onPreview(url, 'pdf', label)}
+            title={`Preview ${label}`}
+          >
+            <FileText className="w-8 h-8 text-gray-400" />
+            <span className="text-xs text-gray-500 ml-2">PDF</span>
+          </div>
+          <a
+            href={url}
+            download
+            className="mt-2 text-xs text-blue-600 underline hover:text-blue-800 transition-colors"
+            title={`Download ${label}`}
+          >
+            Download PDF
+          </a>
+        </div>
+      );
+    }
+    return (
+      <a
+        href={url}
+        download
+        className="text-blue-600 underline hover:text-blue-800 transition-colors"
+        title={`Download ${label}`}
+      >
+        Download
+      </a>
+    );
+  }
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -158,147 +260,63 @@ const KYCManagement: React.FC = () => {
 
   return (
     <div className="bg-white p-6 rounded-lg shadow-md">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold text-gray-800">KYC Management</h2>
-        <div className="text-sm text-gray-600">
-          Total: {submissions.length} | Pending: {submissions.filter(s => s.status === 'pending').length}
-        </div>
-      </div>
-
-      {/* Filters */}
-      <div className="flex gap-4 mb-6">
-        <div className="flex-1">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-            <input
-              type="text"
-              placeholder="Search by name, email, or ID number..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-            />
+      <div className="bg-white rounded-2xl shadow-lg p-6 mt-6">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-2xl font-bold text-[#1a237e]">KYC Management</h2>
+          <div className="flex items-center gap-4">
+            <span className="text-gray-500">Total: {submissions.length}</span>
+            <button className="bg-[#e8eaf6] text-[#1a237e] px-3 py-1 rounded-lg font-semibold">
+              <User className="inline w-4 h-4 mr-1" /> Pending: {submissions.filter(s => s.status === 'pending').length}
+            </button>
           </div>
         </div>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-        >
-          <option value="all">All Status</option>
-          <option value="pending">Pending</option>
-          <option value="approved">Approved</option>
-          <option value="rejected">Rejected</option>
-        </select>
-      </div>
-
-      {/* Submissions Table */}
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                User
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Status
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Documents
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Submitted
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Actions
-              </th>
+        <div className="mb-4">
+          <input
+            type="text"
+            placeholder="Search by name, email, or ID number..."
+            className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#3949ab] focus:outline-none"
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+          />
+        </div>
+        <table className="w-full text-left rounded-lg overflow-hidden">
+          <thead>
+            <tr className="bg-[#e8eaf6] text-[#1a237e]">
+              <th className="py-3 px-4">Status</th>
+              <th className="py-3 px-4">Documents</th>
+              <th className="py-3 px-4">Submitted</th>
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <tbody>
             {filteredSubmissions.map((submission) => (
-              <tr key={submission.id} className="hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap">
+              <tr key={submission.id} className="border-b last:border-b-0 hover:bg-[#f5f5f5] transition">
+                <td className="py-3 px-4">
+                  <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold
+                    ${submission.status === 'approved' ? 'bg-green-100 text-green-800' : 
+                      submission.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : 
+                      'bg-red-100 text-red-800'}`}>
+                    {submission.status}
+                  </span>
+                </td>
+                <td className="py-3 px-4 flex gap-3">
                   <div>
-                    <div className="text-sm font-medium text-gray-900">{submission.full_name}</div>
-                    <div className="text-sm text-gray-500">{submission.user_email}</div>
-                    <div className="text-xs text-gray-400">ID: {submission.id_number}</div>
+                    <span className="block text-xs text-gray-500">ID</span>
+                    <a href={getDocUrl(submission.id_document_path)} download className="text-[#3949ab] underline">Download</a>
+                  </div>
+                  <div>
+                    <span className="block text-xs text-gray-500">Proof of Address</span>
+                    <a href={getDocUrl(submission.proof_of_address_path)} download className="text-[#3949ab] underline">Download</a>
+                  </div>
+                  <div>
+                    <span className="block text-xs text-gray-500">Proof of Income</span>
+                    <a href={getDocUrl(submission.proof_of_income_path)} download className="text-[#3949ab] underline">Download</a>
+                  </div>
+                  <div>
+                    <span className="block text-xs text-gray-500">Bank Statement</span>
+                    <a href={getDocUrl(submission.bank_statement_path)} download className="text-[#3949ab] underline">Download</a>
                   </div>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="flex items-center">
-                    {getStatusIcon(submission.status)}
-                    <span className={`ml-2 px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(submission.status)}`}>
-                      {submission.status}
-                    </span>
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="flex gap-2">
-                    {submission.id_document_path && (
-                      <button
-                        onClick={() => downloadDocument(submission.id_document_path.split('/').pop()!)}
-                        className="text-blue-600 hover:text-blue-800 text-xs flex items-center"
-                      >
-                        <Download className="h-3 w-3 mr-1" />
-                        ID
-                      </button>
-                    )}
-                    {submission.proof_of_address_path && (
-                      <button
-                        onClick={() => downloadDocument(submission.proof_of_address_path.split('/').pop()!)}
-                        className="text-blue-600 hover:text-blue-800 text-xs flex items-center"
-                      >
-                        <Download className="h-3 w-3 mr-1" />
-                        Address
-                      </button>
-                    )}
-                    {submission.proof_of_income_path && (
-                      <button
-                        onClick={() => downloadDocument(submission.proof_of_income_path.split('/').pop()!)}
-                        className="text-blue-600 hover:text-blue-800 text-xs flex items-center"
-                      >
-                        <Download className="h-3 w-3 mr-1" />
-                        Income
-                      </button>
-                    )}
-                    {submission.bank_statement_path && (
-                      <button
-                        onClick={() => downloadDocument(submission.bank_statement_path.split('/').pop()!)}
-                        className="text-blue-600 hover:text-blue-800 text-xs flex items-center"
-                      >
-                        <Download className="h-3 w-3 mr-1" />
-                        Bank
-                      </button>
-                    )}
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {new Date(submission.created_at).toLocaleDateString()}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                  {submission.status === 'pending' && (
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleApprove(submission.id)}
-                        className="text-green-600 hover:text-green-900 text-xs flex items-center"
-                      >
-                        <CheckCircle className="h-3 w-3 mr-1" />
-                        Approve
-                      </button>
-                      <button
-                        onClick={() => setSelectedSubmission(submission)}
-                        className="text-red-600 hover:text-red-900 text-xs flex items-center"
-                      >
-                        <XCircle className="h-3 w-3 mr-1" />
-                        Reject
-                      </button>
-                    </div>
-                  )}
-                  {submission.status === 'rejected' && submission.rejection_reason && (
-                    <div className="text-xs text-red-600 max-w-xs truncate" title={submission.rejection_reason}>
-                      Reason: {submission.rejection_reason}
-                    </div>
-                  )}
-                </td>
+                <td className="py-3 px-4">{new Date(submission.created_at).toLocaleDateString()}</td>
               </tr>
             ))}
           </tbody>
@@ -307,40 +325,45 @@ const KYCManagement: React.FC = () => {
 
       {/* Rejection Modal */}
       {selectedSubmission && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-            <div className="mt-3">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">
-                Reject KYC Submission
-              </h3>
-              <p className="text-sm text-gray-600 mb-4">
-                Please provide a reason for rejecting {selectedSubmission.full_name}'s KYC submission.
-              </p>
-              <textarea
-                value={rejectionReason}
-                onChange={(e) => setRejectionReason(e.target.value)}
-                placeholder="Enter rejection reason..."
-                className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                rows={3}
-              />
-              <div className="flex gap-2 mt-4">
-                <button
-                  onClick={() => handleReject(selectedSubmission.id)}
-                  className="flex-1 bg-red-600 text-white py-2 px-4 rounded-md hover:bg-red-700"
-                >
-                  Reject
-                </button>
-                <button
-                  onClick={() => {
-                    setSelectedSubmission(null);
-                    setRejectionReason('');
-                  }}
-                  className="flex-1 bg-gray-300 text-gray-700 py-2 px-4 rounded-md hover:bg-gray-400"
-                >
-                  Cancel
-                </button>
-              </div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl p-8 relative">
+            <button
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-700 text-2xl"
+              onClick={() => setSelectedSubmission(null)}
+            >
+              &times;
+            </button>
+            <h2 className="text-2xl font-bold mb-6">Review KYC: {selectedSubmission.user_name}</h2>
+            <div className="grid grid-cols-2 gap-6 mb-6">
+              <DocPreview docPath={selectedSubmission.id_document_path} label="ID Document" onPreview={(url, type, label) => { setPreviewUrl(url); setPreviewType(type); setPreviewLabel(label); }} />
+              <DocPreview docPath={selectedSubmission.proof_of_address_path} label="Proof of Address" onPreview={(url, type, label) => { setPreviewUrl(url); setPreviewType(type); setPreviewLabel(label); }} />
+              <DocPreview docPath={selectedSubmission.proof_of_income_path} label="Proof of Income" onPreview={(url, type, label) => { setPreviewUrl(url); setPreviewType(type); setPreviewLabel(label); }} />
+              <DocPreview docPath={selectedSubmission.bank_statement_path} label="Bank Statement" onPreview={(url, type, label) => { setPreviewUrl(url); setPreviewType(type); setPreviewLabel(label); }} />
             </div>
+            <div className="flex gap-4">
+              <button className="px-6 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition">Approve</button>
+              <button className="px-6 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition">Reject</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {previewUrl && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-70">
+          <div className="relative bg-white rounded-lg shadow-lg p-4 max-w-3xl w-full flex flex-col items-center">
+            <button
+              className="absolute top-2 right-2 text-gray-500 hover:text-gray-700 text-2xl"
+              onClick={() => setPreviewUrl(null)}
+              title="Close"
+            >
+              &times;
+            </button>
+            <div className="mb-4 text-lg font-semibold">{previewLabel}</div>
+            {previewType === 'image' ? (
+              <img src={previewUrl} alt={previewLabel} className="max-h-[70vh] max-w-full rounded shadow" />
+            ) : (
+              <iframe src={previewUrl} title={previewLabel} className="w-full h-[70vh] rounded shadow" />
+            )}
           </div>
         </div>
       )}

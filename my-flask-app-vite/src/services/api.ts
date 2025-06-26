@@ -99,6 +99,8 @@ export const adminAPI = {
   deleteGroup: (id: number) => api.delete(`/api/admin/groups/${id}`),
   getJoinRequests: () => api.get('/api/admin/join-requests'),
   approveJoinRequest: (id: number) => api.post(`/api/admin/join-requests/${id}/approve`),
+  deleteJoinRequests: (ids: number[]) => api.post('/api/admin/join-requests/bulk-delete', { ids }),
+  rejectJoinRequest: (id: number, data: { reason: string }) => api.post(`/api/admin/join-requests/${id}/reject`, data),
 };
 
 // Dashboard API calls

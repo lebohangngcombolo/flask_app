@@ -8,14 +8,12 @@ import './index.css'
 import { ToastContainer } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.css'
 
-// If you had this:
 // ReactDOM.createRoot(document.getElementById('root')!).render(
 //   <GoogleOAuthProvider clientId={clientId}>
 //     <App />
 //   </GoogleOAuthProvider>
 // )
 
-// Replace with just:
 ReactDOM.createRoot(document.getElementById('root')!).render(
-      <App />
+  <App />
 )

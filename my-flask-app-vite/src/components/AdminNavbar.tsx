@@ -108,7 +108,7 @@ const AdminNavbar: React.FC<AdminNavbarProps> = ({ onToggleSidebar }) => {
         </button>
         <div className="w-px h-6 bg-gray-200 mx-4"></div>
         <div className="cursor-pointer" onClick={() => navigate('/admin/dashboard')}>
-          <span className="text-xl font-bold text-gray-800">i-STOKVEL Admin</span>
+          <span className="text-xl font-bold text-gray-800">i-STOKVEL</span>
         </div>
       </div>
       

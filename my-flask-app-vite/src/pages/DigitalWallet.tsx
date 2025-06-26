@@ -9,9 +9,13 @@ import {
   makeTransfer,
   Card,
   Transaction,
+  updateCard,
 } from "../services/walletService";
 import { toast } from "react-toastify";
 import { Plus, CreditCard, Send, Trash2, Loader2 } from "lucide-react";
+import AddCardModal from "../components/AddCardModal";
+import DepositModal from "../components/DepositModal";
+import TransferModal from "../components/TransferModal";
 
 const Spinner = ({ className = "h-5 w-5" }) => (
   <svg className={`animate-spin ${className}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -26,6 +30,12 @@ const cardTypeIcons: Record<string, string> = {
   mastercard: "/icons/mastercard.svg",
   amex: "/icons/amex.svg",
   unknown: "/icons/unknown.svg",
+};
+
+const maskCardNumber = (num: string) => {
+  const digits = num.replace(/\D/g, "");
+  if (digits.length < 4) return "••••";
+  return "•••• •••• •••• " + digits.slice(-4);
 };
 
 const DigitalWallet: React.FC = () => {
@@ -73,6 +83,23 @@ const DigitalWallet: React.FC = () => {
   // Summary
   const [summary, setSummary] = useState({ totalDeposits: 0, totalTransfers: 0 });
 
+  // Transfer modal
+  const [open, setOpen] = useState(false);
+  const [walletBalance, setWalletBalance] = useState(0.0);
+
+  // Example beneficiaries (replace with your real data or state)
+  const beneficiaries = [
+    { id: "1", name: "Ayanda M.", account: "1234567890" },
+    { id: "2", name: "Bongiwe N.", account: "0987654321" },
+  ];
+
+  // Additional state for editing
+  const [editingCard, setEditingCard] = useState<Card | null>(null);
+
+  // Additional state for deleting
+  const [cardToDelete, setCardToDelete] = useState<Card | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
   // Fetch wallet balance
   useEffect(() => {
     setLoading(true);
@@ -80,6 +107,7 @@ const DigitalWallet: React.FC = () => {
       .then((data) => {
         setBalance(data.balance);
         setCurrency(data.currency);
+        setWalletBalance(data.balance);
       })
       .catch(() => toast.error("Failed to load balance"))
       .finally(() => setLoading(false));
@@ -99,8 +127,8 @@ const DigitalWallet: React.FC = () => {
     setTxLoading(true);
     getTransactions(page, 10)
       .then((data) => {
-        setTransactions(data.transactions);
-        setPages(data.pages);
+        setTransactions(Array.isArray(data.transactions) ? data.transactions : []);
+        setPages(data.pages || 1);
       })
       .catch(() => toast.error("Failed to load transactions"))
       .finally(() => setTxLoading(false));
@@ -189,7 +217,7 @@ const DigitalWallet: React.FC = () => {
 
   // Delete card handler
   const handleDeleteCard = async (id: number) => {
-    if (!window.confirm("Delete this card?")) return;
+    if (!window.confirm("Are you sure you want to delete this card?")) return;
     try {
       await deleteCard(id);
       toast.success("Card deleted");
@@ -209,6 +237,9 @@ const DigitalWallet: React.FC = () => {
 
   // Find default card for deposit modal
   const defaultCardId = cards.find(card => card.is_default)?.id?.toString() || "";
+
+  // Additional handler for editing
+  const handleEditCard = (card: Card) => setEditingCard(card);
 
   // UI
   return (
@@ -235,7 +266,7 @@ const DigitalWallet: React.FC = () => {
             </button>
             <button
               className="btn-secondary flex items-center gap-2 shadow hover:scale-105 transition"
-              onClick={() => setShowTransfer(true)}
+              onClick={() => setOpen(true)}
             >
               <Send className="w-4 h-4" /> Transfer
             </button>
@@ -265,35 +296,68 @@ const DigitalWallet: React.FC = () => {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {cards.map(card => (
-                <div key={card.id} className={`bg-gradient-to-r from-blue-200/80 to-indigo-200/80 rounded-xl p-4 flex justify-between items-center shadow hover:shadow-lg transition ${card.is_default ? "ring-2 ring-blue-500" : ""}`}>
-                  <div className="flex items-center gap-2">
-                    <img src={cardTypeIcons[card.card_type] || cardTypeIcons.unknown} alt={card.card_type} className="w-8 h-8" />
-                    <div>
-                      <div className="font-mono text-lg tracking-widest">
-                        **** **** **** {card.card_number.slice(-4)}
-                      </div>
-                      <div className="text-xs text-gray-500">{card.card_holder} | {card.expiry_date}</div>
-                    </div>
-                  </div>
-                  <div className="flex flex-col items-end gap-2">
-                    {!card.is_default && (
-                      <button
-                        className="btn-outline text-xs px-2 py-1"
-                        onClick={() => handleSetDefaultCard(card.id)}
-                      >
-                        Set as Default
-                      </button>
-                    )}
-                    {card.is_default && (
-                      <span className="text-blue-600 text-xs font-bold">Default</span>
-                    )}
+                <div
+                  key={card.id}
+                  className="relative w-full max-w-sm mx-auto my-6 rounded-2xl shadow-xl overflow-hidden group transition-transform hover:scale-105"
+                  style={{
+                    background: "linear-gradient(135deg, #23295A 60%, #3B4CCA 100%)",
+                    minHeight: 180,
+                    border: "1.5px solid #e0e7ff",
+                  }}
+                >
+                  {/* Edit/Delete buttons */}
+                  <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-20">
                     <button
-                      className="text-red-500 hover:text-red-700 transition"
-                      onClick={() => handleDeleteCard(card.id)}
-                      aria-label="Delete card"
+                      className="bg-white/80 hover:bg-blue-100 rounded-full p-2 shadow"
+                      onClick={() => handleEditCard(card)}
+                      title="Edit Card"
                     >
-                      <Trash2 className="w-5 h-5" />
+                      <svg className="w-5 h-5 text-blue-700" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <path d="M15.232 5.232l3.536 3.536M9 13l6-6 3 3-6 6H9v-3z" />
+                      </svg>
                     </button>
+                    <button
+                      className="bg-white/80 hover:bg-red-100 rounded-full p-2 shadow"
+                      onClick={() => setCardToDelete(card)}
+                      title="Delete Card"
+                    >
+                      <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <path d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                  {/* Card chip */}
+                  <div className="absolute left-6 top-12 w-10 h-7 bg-yellow-400 rounded-md shadow-inner opacity-80"></div>
+                  {/* Card details */}
+                  <div className="relative z-10 w-full h-full flex flex-col justify-between p-6 text-white">
+                    <div>
+                      <span className="font-semibold text-lg tracking-wide block mb-2">{card.cardholder || card.card_holder}</span>
+                      <span className="font-mono text-2xl tracking-widest select-none block mb-6 mt-8">
+                        {maskCardNumber(card.card_number)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-end">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm tracking-wider">Exp: {card.expiry || card.expiry_date}</span>
+                        {card.is_primary && (
+                          <span className="bg-white/30 text-white px-2 py-0.5 rounded-full text-xs font-semibold tracking-wide shadow ml-2">
+                            Primary
+                          </span>
+                        )}
+                      </div>
+                      <img
+                        src={
+                          (card.card_type || "").toLowerCase() === "mastercard"
+                            ? "/icons/mastercard-svgrepo-com.svg"
+                            : (card.card_type || "").toLowerCase() === "visa"
+                            ? "/icons/visa-svgrepo-com.svg"
+                            : "/icons/visa-svgrepo-com.svg"
+                        }
+                        alt="Card brand"
+                        className="w-12 h-8 object-contain ml-2"
+                        style={{ background: "rgba(255,255,255,0.15)", borderRadius: "0.5rem", padding: "0.25rem" }}
+                      />
+                    </div>
                   </div>
                 </div>
               ))}
@@ -306,7 +370,7 @@ const DigitalWallet: React.FC = () => {
           <div className="font-semibold text-lg mb-4">Recent Transactions</div>
           {txLoading ? (
             <div className="flex justify-center py-6"><Spinner /></div>
-          ) : transactions.length === 0 ? (
+          ) : !transactions || transactions.length === 0 ? (
             <div className="flex flex-col items-center py-8 text-gray-400">
               <Loader2 className="w-10 h-10 mb-2 animate-spin" />
               <span>No transactions yet.</span>
@@ -357,171 +421,92 @@ const DigitalWallet: React.FC = () => {
         </div>
       </div>
 
-      {/* Deposit Modal */}
-      {showDeposit && (
-        <div className="modal" tabIndex={-1} aria-modal="true" role="dialog">
-          <div className="modal-content">
-            <form onSubmit={handleDeposit} className="space-y-4">
-              <h2 className="text-xl font-bold mb-2">Deposit Funds</h2>
-              <input
-                type="number"
-                min="1"
-                required
-                placeholder="Amount"
-                className="input"
-                value={depositAmount}
-                onChange={e => setDepositAmount(e.target.value)}
-              />
-              <select
-                required
-                className="input"
-                value={depositCard || defaultCardId}
-                onChange={e => setDepositCard(e.target.value)}
-              >
-                <option value="">Select Card</option>
-                {cards.map(card => (
-                  <option key={card.id} value={card.id}>
-                    **** **** **** {card.card_number.slice(-4)} ({card.card_holder}){card.is_default ? " (Default)" : ""}
-                  </option>
-                ))}
-              </select>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  className="btn-outline flex-1"
-                  onClick={() => setShowDeposit(false)}
-                  disabled={depositLoading}
-                >Cancel</button>
-                <button
-                  type="submit"
-                  className="btn-primary flex-1 flex items-center justify-center gap-2"
-                  disabled={depositLoading}
-                >
-                  {depositLoading && <Spinner />}
-                  Deposit
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <AddCardModal
+        open={showAddCard}
+        onClose={() => setShowAddCard(false)}
+        onSave={async (card) => {
+          await addCard(card);
+          toast.success("Card added!");
+          setShowAddCard(false);
+          setCards(await getCards());
+        }}
+      />
+
+      <DepositModal
+        open={showDeposit}
+        onClose={() => setShowDeposit(false)}
+        cards={cards.map(card => ({
+          id: String(card.id),
+          label: `${card.card_type?.toUpperCase() || "Card"} •••• ${card.card_number?.slice(-4)}`,
+        }))}
+        onDeposit={async (amount, method, note) => {
+          await makeDeposit({ amount, card_id: Number(method) });
+          toast.success("Deposit successful!");
+          setShowDeposit(false);
+          setBalance(await getWalletBalance());
+        }}
+      />
 
       {/* Transfer Modal */}
-      {showTransfer && (
-        <div className="modal" tabIndex={-1} aria-modal="true" role="dialog">
-          <div className="modal-content">
-            <form onSubmit={handleTransfer} className="space-y-4">
-              <h2 className="text-xl font-bold mb-2">Transfer Funds</h2>
-              <input
-                type="number"
-                min="1"
-                required
-                placeholder="Amount"
-                className="input"
-                value={transferAmount}
-                onChange={e => setTransferAmount(e.target.value)}
-              />
-              <input
-                type="email"
-                required
-                placeholder="Recipient Email"
-                className="input"
-                value={recipientEmail}
-                onChange={e => setRecipientEmail(e.target.value)}
-              />
-              <input
-                type="text"
-                placeholder="Description (optional)"
-                className="input"
-                value={transferDesc}
-                onChange={e => setTransferDesc(e.target.value)}
-              />
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  className="btn-outline flex-1"
-                  onClick={() => setShowTransfer(false)}
-                  disabled={transferLoading}
-                >Cancel</button>
-                <button
-                  type="submit"
-                  className="btn-primary flex-1 flex items-center justify-center gap-2"
-                  disabled={transferLoading}
-                >
-                  {transferLoading && <Spinner />}
-                  Transfer
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+      <TransferModal
+        open={open}
+        onClose={() => setOpen(false)}
+        walletBalance={walletBalance}
+        beneficiaries={beneficiaries}
+        onAddNewBeneficiary={() => alert("Add new beneficiary flow")}
+      />
+
+      {editingCard && (
+        <AddCardModal
+          open={!!editingCard}
+          onClose={() => setEditingCard(null)}
+          initialCard={editingCard}
+          onSave={async (updatedCard) => {
+            await updateCard(updatedCard);
+            toast.success("Card updated!");
+            setEditingCard(null);
+            setCards(await getCards());
+          }}
+        />
       )}
 
-      {/* Add Card Modal */}
-      {showAddCard && (
-        <div className="modal" tabIndex={-1} aria-modal="true" role="dialog">
-          <div className="modal-content">
-            <form onSubmit={handleAddCard} className="space-y-4">
-              <h2 className="text-xl font-bold mb-2">Add Card</h2>
-              <input
-                type="text"
-                required
-                placeholder="Card Number"
-                className="input"
-                value={cardForm.card_number}
-                onChange={e => setCardForm(f => ({ ...f, card_number: e.target.value }))}
-              />
-              <input
-                type="text"
-                required
-                placeholder="Card Holder"
-                className="input"
-                value={cardForm.card_holder}
-                onChange={e => setCardForm(f => ({ ...f, card_holder: e.target.value }))}
-              />
-              <input
-                type="text"
-                required
-                placeholder="Expiry Date (MM/YY)"
-                className="input"
-                value={cardForm.expiry_date}
-                onChange={e => setCardForm(f => ({ ...f, expiry_date: e.target.value }))}
-              />
-              <input
-                type="text"
-                required
-                placeholder="CVV"
-                className="input"
-                value={cardForm.cvv}
-                onChange={e => setCardForm(f => ({ ...f, cvv: e.target.value }))}
-              />
-              <select
-                className="input"
-                value={cardForm.card_type}
-                onChange={e => setCardForm(f => ({ ...f, card_type: e.target.value }))}
-              >
-                <option value="visa">Visa</option>
-                <option value="mastercard">Mastercard</option>
-                <option value="amex">Amex</option>
-                <option value="unknown">Other</option>
-              </select>
-              <div className="flex gap-2">
+      {cardToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm mx-2 p-6 relative">
+            <div className="flex flex-col items-center">
+              <svg className="w-12 h-12 text-red-500 mb-2" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path d="M6 18L18 6M6 6l12 12" />
+              </svg>
+              <h2 className="text-xl font-bold mb-2 text-red-600">Delete Card?</h2>
+              <p className="text-gray-600 mb-4 text-center">
+                Are you sure you want to delete this card ending in <b>{cardToDelete.card_number.slice(-4)}</b>?<br />
+                This action cannot be undone.
+              </p>
+              <div className="flex gap-2 w-full">
                 <button
-                  type="button"
-                  className="btn-outline flex-1"
-                  onClick={() => setShowAddCard(false)}
-                  disabled={addCardLoading}
-                >Cancel</button>
-                <button
-                  type="submit"
-                  className="btn-primary flex-1 flex items-center justify-center gap-2"
-                  disabled={addCardLoading}
+                  className="flex-1 bg-gray-200 text-gray-700 py-2 rounded-lg font-semibold"
+                  onClick={() => setCardToDelete(null)}
+                  disabled={deleting}
                 >
-                  {addCardLoading && <Spinner />}
-                  Add Card
+                  Cancel
+                </button>
+                <button
+                  className="flex-1 bg-red-600 text-white py-2 rounded-lg font-semibold"
+                  onClick={async () => {
+                    setDeleting(true);
+                    try {
+                      await handleDeleteCard(cardToDelete.id);
+                      setCardToDelete(null);
+                    } finally {
+                      setDeleting(false);
+                    }
+                  }}
+                  disabled={deleting}
+                >
+                  {deleting ? "Deleting..." : "Delete"}
                 </button>
               </div>
-            </form>
+            </div>
           </div>
         </div>
       )}

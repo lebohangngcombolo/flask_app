@@ -204,30 +204,35 @@ const DashboardLayout = () => {
       {/* --- MAIN BODY --- */}
       <div className="flex flex-1 overflow-hidden">
         {/* --- SIDEBAR --- */}
-        <aside 
-          className={`bg-white dark:bg-dark-card border-r dark:border-dark-border flex-shrink-0 flex flex-col justify-between transition-all duration-300 ease-in-out ${
-            sidebarOpen ? 'w-64' : 'w-0 border-r-0'
-          } overflow-hidden`}
+        <aside
+          className={`bg-[#23295A] min-h-screen w-64 flex flex-col py-6 px-2 transition-all duration-300 ease-in-out ${
+            sidebarOpen ? '' : 'hidden'
+          }`}
         >
-          <div className="overflow-y-auto">
-            <nav className="flex-1 mt-4 px-2 space-y-1">
-              {sidebarItems.map((item) => (
+          <nav className="flex-1 space-y-2">
+            {sidebarItems.map((item) => {
+              const isActive = location.pathname.startsWith(item.path);
+              return (
                 <button
                   key={item.label}
-                  className={`w-full flex items-center px-3 py-2.5 text-sm text-left rounded-lg my-1 transition-colors ${
-                    location.pathname.startsWith(item.path)
-                      ? 'bg-blue-50 dark:bg-blue-900/50 text-blue-600 dark:text-blue-300 font-semibold'
-                      : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                  }`}
+                  className={`flex items-center w-full gap-3 px-4 py-2 rounded-lg transition font-medium
+                    ${location.pathname.startsWith(item.path)
+                      ? 'bg-[#3B4CCA] text-white font-bold shadow'
+                      : 'text-white'}
+                  `}
+                  style={{
+                    background: location.pathname.startsWith(item.path) ? undefined : 'transparent',
+                    border: 'none',
+                    boxShadow: location.pathname.startsWith(item.path) ? undefined : 'none',
+                  }}
                   onClick={() => navigate(item.path)}
                 >
-                  <item.icon className="mr-3 flex-shrink-0" size={20} />
+                  <item.icon className="w-5 h-5" />
                   <span>{item.label}</span>
                 </button>
-              ))}
-            </nav>
-          </div>
-          
+              );
+            })}
+          </nav>
         </aside>
 
         {/* --- MAIN CONTENT --- */}

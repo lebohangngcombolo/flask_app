@@ -1,7 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { adminAPI } from '../services/api';
-import AdminSidebar from '../components/AdminSidebar';
-import AdminNavbar from '../components/AdminNavbar';
 import { toast } from "react-hot-toast";
 import { getAvailableGroups } from '../services/groupService';
 
@@ -48,6 +46,14 @@ const GroupAdminManagement: React.FC = () => {
 
   // New status filter state
   const [statusFilter, setStatusFilter] = useState('pending');
+
+  // Delete all join requests state
+  const [showDeleteAll, setShowDeleteAll] = useState(false);
+
+  // New selection state
+  const [selectedRequests, setSelectedRequests] = useState<number[]>([]);
+  const filteredRequests = requests.filter(r => statusFilter === 'all' || r.status === statusFilter);
+  const allSelected = selectedRequests.length === filteredRequests.length && filteredRequests.length > 0;
 
   useEffect(() => {
     fetchGroups();
@@ -196,480 +202,528 @@ const GroupAdminManagement: React.FC = () => {
     return group ? `${group.name} (${group.tier})` : tierId;
   };
 
-  // New filtered requests
-  const filteredRequests = requests.filter(r => statusFilter === 'all' || r.status === statusFilter);
+  // New selection functions
+  const toggleSelectAll = () => {
+    if (allSelected) setSelectedRequests([]);
+    else setSelectedRequests(filteredRequests.map(r => r.id));
+  };
+
+  const toggleSelect = (id: number) => {
+    setSelectedRequests(prev =>
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
+  };
+
+  // New delete selected state
+  const [showDeleteSelected, setShowDeleteSelected] = useState(false);
 
   return (
-    <div className="flex h-screen bg-gray-50 flex-col">
-      <AdminNavbar onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} />
-      <div className="flex flex-1 overflow-hidden">
-        <AdminSidebar sidebarOpen={sidebarOpen} />
-        <main className="flex-1 p-6 md:p-10 overflow-y-auto">
-          {/* Tabs */}
-          <div className="flex gap-4 mb-6">
-            <button
-              className={`px-4 py-2 rounded ${activeTab === 'groups' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'}`}
-              onClick={() => setActiveTab('groups')}
-            >
-              Groups
-            </button>
-            <button
-              className={`px-4 py-2 rounded ${activeTab === 'joinRequests' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'}`}
-              onClick={() => setActiveTab('joinRequests')}
-            >
-              Join Requests
-            </button>
+    <main className="flex-1 p-6 md:p-10 overflow-y-auto">
+      {/* Tabs */}
+      <div className="flex gap-4 mb-6">
+        <button
+          className={`px-4 py-2 rounded ${activeTab === 'groups' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'}`}
+          onClick={() => setActiveTab('groups')}
+        >
+          Groups
+        </button>
+        <button
+          className={`px-4 py-2 rounded ${activeTab === 'joinRequests' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'}`}
+          onClick={() => setActiveTab('joinRequests')}
+        >
+          Join Requests
+        </button>
+      </div>
+
+      {/* Conditional Rendering */}
+      {activeTab === 'groups' ? (
+        <>
+          {/* Summary Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 mb-8">
+            <div className="bg-white p-6 rounded-lg shadow flex flex-col items-center">
+              <span className="text-gray-500">Total Groups</span>
+              <span className="text-3xl font-bold text-blue-700">{totalGroups}</span>
+            </div>
+            <div className="bg-white p-6 rounded-lg shadow flex flex-col items-center">
+              <span className="text-gray-500">Active Groups</span>
+              <span className="text-3xl font-bold text-green-600">{activeGroups}</span>
+            </div>
+            <div className="bg-white p-6 rounded-lg shadow flex flex-col items-center">
+              <span className="text-gray-500">Inactive Groups</span>
+              <span className="text-3xl font-bold text-red-500">{totalGroups - activeGroups}</span>
+            </div>
           </div>
 
-          {/* Conditional Rendering */}
-          {activeTab === 'groups' ? (
-            <>
-              {/* Summary Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 mb-8">
-                <div className="bg-white p-6 rounded-lg shadow flex flex-col items-center">
-                  <span className="text-gray-500">Total Groups</span>
-                  <span className="text-3xl font-bold text-blue-700">{totalGroups}</span>
-                </div>
-                <div className="bg-white p-6 rounded-lg shadow flex flex-col items-center">
-                  <span className="text-gray-500">Active Groups</span>
-                  <span className="text-3xl font-bold text-green-600">{activeGroups}</span>
-                </div>
-                <div className="bg-white p-6 rounded-lg shadow flex flex-col items-center">
-                  <span className="text-gray-500">Inactive Groups</span>
-                  <span className="text-3xl font-bold text-red-500">{totalGroups - activeGroups}</span>
-                </div>
-              </div>
+          {/* Search, Filter, and Create */}
+          <div className="flex flex-col md:flex-row md:justify-between md:items-center mb-6 gap-4">
+            <h1 className="text-2xl font-bold">Manage Groups</h1>
+            <div className="flex gap-2 w-full md:w-auto">
+              <input
+                type="text"
+                placeholder="Search by name..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="border rounded px-3 py-2 w-full md:w-56"
+              />
+              <select
+                value={filter}
+                onChange={e => setFilter(e.target.value as any)}
+                className="border rounded px-3 py-2"
+              >
+                <option value="all">All</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+              <button
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow hover:bg-blue-700 transition"
+                onClick={() => setShowCreate(true)}
+              >
+                + Create Group
+              </button>
+            </div>
+          </div>
 
-              {/* Search, Filter, and Create */}
-              <div className="flex flex-col md:flex-row md:justify-between md:items-center mb-6 gap-4">
-                <h1 className="text-2xl font-bold">Manage Groups</h1>
-                <div className="flex gap-2 w-full md:w-auto">
-                  <input
-                    type="text"
-                    placeholder="Search by name..."
-                    value={search}
-                    onChange={e => setSearch(e.target.value)}
-                    className="border rounded px-3 py-2 w-full md:w-56"
-                  />
-                  <select
-                    value={filter}
-                    onChange={e => setFilter(e.target.value as any)}
-                    className="border rounded px-3 py-2"
-                  >
-                    <option value="all">All</option>
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                  </select>
+          {/* Table */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredGroups.length === 0 && (
+              <div className="col-span-full text-center text-gray-400 py-8">
+                No groups found.
+              </div>
+            )}
+            {filteredGroups.map((group) => (
+              <div key={group.id} className="bg-white rounded-xl shadow p-6 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <h2 className="text-lg font-bold text-blue-700">{group.name}</h2>
+                    <span
+                      className={`px-2 py-1 rounded text-xs font-semibold ${
+                        group.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                      }`}
+                    >
+                      {group.is_active ? 'Active' : 'Inactive'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xs bg-gray-200 px-2 py-1 rounded font-mono text-gray-700">
+                      Code: {group.group_code || <span className="italic text-gray-400">N/A</span>}
+                    </span>
+                    {group.group_code && (
+                      <button
+                        className="text-blue-600 text-xs underline hover:text-blue-800"
+                        onClick={() => {
+                          copyToClipboard(group.group_code);
+                          alert('Group code copied!');
+                        }}
+                        title="Copy group code"
+                      >
+                        Copy
+                      </button>
+                    )}
+                  </div>
+                  <div className="mb-2 text-gray-600">{group.description || <span className="italic text-gray-400">No description</span>}</div>
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    <span className="inline-block bg-gray-100 text-gray-700 px-2 py-1 rounded text-xs">
+                      <b>Tier:</b> {group.tier || <span className="italic text-gray-400">-</span>}
+                    </span>
+                    <span className="inline-block bg-gray-100 text-gray-700 px-2 py-1 rounded text-xs">
+                      <b>Contribution:</b> R{group.contribution_amount}
+                    </span>
+                    <span className="inline-block bg-gray-100 text-gray-700 px-2 py-1 rounded text-xs">
+                      <b>Frequency:</b> {group.frequency}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-2 mb-4">
+                    <span className="inline-block bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs">
+                      <b>Members:</b> {group.member_count ?? group.current_members ?? 0}
+                    </span>
+                    <span className="inline-block bg-purple-50 text-purple-700 px-2 py-1 rounded text-xs">
+                      <b>Max:</b> {group.max_members || <span className="italic text-gray-400">-</span>}
+                    </span>
+                    <span className="inline-block bg-gray-50 text-gray-700 px-2 py-1 rounded text-xs">
+                      <b>Created:</b> {group.created_at ? new Date(group.created_at).toLocaleDateString() : '-'}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex gap-2 mt-2">
                   <button
-                    className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow hover:bg-blue-700 transition"
-                    onClick={() => setShowCreate(true)}
+                    className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition"
+                    onClick={() => openEdit(group)}
                   >
-                    + Create Group
+                    Edit
+                  </button>
+                  <button
+                    className="flex-1 bg-red-600 text-white py-2 rounded hover:bg-red-700 transition"
+                    onClick={() => openDelete(group)}
+                  >
+                    Delete
                   </button>
                 </div>
               </div>
+            ))}
+          </div>
 
-              {/* Table */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredGroups.length === 0 && (
-                  <div className="col-span-full text-center text-gray-400 py-8">
-                    No groups found.
-                  </div>
-                )}
-                {filteredGroups.map((group) => (
-                  <div key={group.id} className="bg-white rounded-xl shadow p-6 flex flex-col justify-between">
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <h2 className="text-lg font-bold text-blue-700">{group.name}</h2>
-                        <span
-                          className={`px-2 py-1 rounded text-xs font-semibold ${
-                            group.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                          }`}
-                        >
-                          {group.is_active ? 'Active' : 'Inactive'}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="text-xs bg-gray-200 px-2 py-1 rounded font-mono text-gray-700">
-                          Code: {group.group_code || <span className="italic text-gray-400">N/A</span>}
-                        </span>
-                        {group.group_code && (
-                          <button
-                            className="text-blue-600 text-xs underline hover:text-blue-800"
-                            onClick={() => {
-                              copyToClipboard(group.group_code);
-                              alert('Group code copied!');
-                            }}
-                            title="Copy group code"
-                          >
-                            Copy
-                          </button>
-                        )}
-                      </div>
-                      <div className="mb-2 text-gray-600">{group.description || <span className="italic text-gray-400">No description</span>}</div>
-                      <div className="flex flex-wrap gap-2 mb-2">
-                        <span className="inline-block bg-gray-100 text-gray-700 px-2 py-1 rounded text-xs">
-                          <b>Tier:</b> {group.tier || <span className="italic text-gray-400">-</span>}
-                        </span>
-                        <span className="inline-block bg-gray-100 text-gray-700 px-2 py-1 rounded text-xs">
-                          <b>Contribution:</b> R{group.contribution_amount}
-                        </span>
-                        <span className="inline-block bg-gray-100 text-gray-700 px-2 py-1 rounded text-xs">
-                          <b>Frequency:</b> {group.frequency}
-                        </span>
-                      </div>
-                      <div className="flex flex-wrap gap-2 mb-4">
-                        <span className="inline-block bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs">
-                          <b>Members:</b> {group.member_count ?? group.current_members ?? 0}
-                        </span>
-                        <span className="inline-block bg-purple-50 text-purple-700 px-2 py-1 rounded text-xs">
-                          <b>Max:</b> {group.max_members || <span className="italic text-gray-400">-</span>}
-                        </span>
-                        <span className="inline-block bg-gray-50 text-gray-700 px-2 py-1 rounded text-xs">
-                          <b>Created:</b> {group.created_at ? new Date(group.created_at).toLocaleDateString() : '-'}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex gap-2 mt-2">
-                      <button
-                        className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition"
-                        onClick={() => openEdit(group)}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        className="flex-1 bg-red-600 text-white py-2 rounded hover:bg-red-700 transition"
-                        onClick={() => openDelete(group)}
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Create Group Modal */}
-              {showCreate && (
-                <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
-                  <div className="bg-white p-6 rounded shadow-lg w-full max-w-md">
-                    <h2 className="text-xl font-bold mb-4">Create New Group</h2>
-                    <form onSubmit={handleCreateGroup} className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Group Name</label>
-                        <input
-                          type="text"
-                          value={form.name}
-                          onChange={e => setForm({ ...form, name: e.target.value })}
-                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Description</label>
-                        <textarea
-                          value={form.description}
-                          onChange={e => setForm({ ...form, description: e.target.value })}
-                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                          rows={2}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Contribution Amount (R)</label>
-                        <input
-                          type="number"
-                          value={form.contribution_amount}
-                          onChange={e => setForm({ ...form, contribution_amount: e.target.value })}
-                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                          required
-                          min="0"
-                          step="0.01"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Frequency</label>
-                        <select
-                          value={form.frequency}
-                          onChange={e => setForm({ ...form, frequency: e.target.value })}
-                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                        >
-                          <option value="weekly">Weekly</option>
-                          <option value="monthly">Monthly</option>
-                          <option value="quarterly">Quarterly</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Maximum Members</label>
-                        <input
-                          type="number"
-                          value={form.max_members}
-                          onChange={e => setForm({ ...form, max_members: e.target.value })}
-                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                          required
-                          min="2"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Tier</label>
-                        <select
-                          value={form.tier}
-                          onChange={e => setForm({ ...form, tier: e.target.value })}
-                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                          required
-                        >
-                          <option value="">Select Tier</option>
-                          {tierOptions.map(tier => (
-                            <option key={tier} value={tier}>{tier}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="flex justify-end gap-2 mt-6">
-                        <button
-                          type="button"
-                          className="bg-gray-300 px-4 py-2 rounded"
-                          onClick={() => setShowCreate(false)}
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="submit"
-                          className="bg-blue-600 text-white px-4 py-2 rounded"
-                        >
-                          Create
-                        </button>
-                      </div>
-                    </form>
-                  </div>
-                </div>
-              )}
-
-              {/* Edit Group Modal */}
-              {showEdit && (
-                <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
-                  <div className="bg-white p-6 rounded shadow-lg w-full max-w-md">
-                    <h2 className="text-xl font-bold mb-4">Edit Group</h2>
-                    <form onSubmit={handleEdit} className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Group Name</label>
-                        <input
-                          type="text"
-                          value={editForm.name}
-                          onChange={e => setEditForm({ ...editForm, name: e.target.value })}
-                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Description</label>
-                        <textarea
-                          value={editForm.description}
-                          onChange={e => setEditForm({ ...editForm, description: e.target.value })}
-                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                          rows={2}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Contribution Amount (R)</label>
-                        <input
-                          type="number"
-                          value={editForm.contribution_amount}
-                          onChange={e => setEditForm({ ...editForm, contribution_amount: e.target.value })}
-                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                          required
-                          min="0"
-                          step="0.01"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Frequency</label>
-                        <select
-                          value={editForm.frequency}
-                          onChange={e => setEditForm({ ...editForm, frequency: e.target.value })}
-                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                        >
-                          <option value="weekly">Weekly</option>
-                          <option value="monthly">Monthly</option>
-                          <option value="quarterly">Quarterly</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Maximum Members</label>
-                        <input
-                          type="number"
-                          value={editForm.max_members}
-                          onChange={e => setEditForm({ ...editForm, max_members: e.target.value })}
-                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                          required
-                          min="2"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Tier</label>
-                        <select
-                          value={editForm.tier}
-                          onChange={e => setEditForm({ ...editForm, tier: e.target.value })}
-                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                          required
-                        >
-                          <option value="">Select Tier</option>
-                          {tierOptions.map(tier => (
-                            <option key={tier} value={tier}>{tier}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="flex justify-end gap-2 mt-6">
-                        <button
-                          type="button"
-                          className="bg-gray-300 px-4 py-2 rounded"
-                          onClick={() => setShowEdit(false)}
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="submit"
-                          className="bg-blue-600 text-white px-4 py-2 rounded"
-                        >
-                          Save
-                        </button>
-                      </div>
-                    </form>
-                  </div>
-                </div>
-              )}
-
-              {/* Delete Confirmation Modal */}
-              {showDelete && (
-                <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
-                  <div className="bg-white p-6 rounded shadow-lg w-full max-w-sm">
-                    <h2 className="text-xl font-bold mb-4">Delete Group</h2>
-                    <p>Are you sure you want to delete <span className="font-semibold">{selectedGroup?.name}</span>?</p>
-                    <div className="flex justify-end gap-2 mt-6">
-                      <button
-                        className="px-4 py-2 bg-gray-200 rounded"
-                        onClick={() => setShowDelete(false)}
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        className="px-4 py-2 bg-red-600 text-white rounded"
-                        onClick={handleDelete}
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="p-6 bg-white rounded-lg shadow">
-              <h2 className="text-2xl font-bold mb-4">Join Requests</h2>
-              {loadingRequests ? (
-                <div>Loading...</div>
-              ) : requests.length === 0 ? (
-                <div className="text-gray-500">No join requests found.</div>
-              ) : (
-                <table className="min-w-full border">
-                  <thead>
-                    <tr className="bg-gray-100">
-                      <th className="p-2">User</th>
-                      <th className="p-2">Email</th>
-                      <th className="p-2">Group (Tier)</th>
-                      <th className="p-2">Status</th>
-                      <th className="p-2">Reason</th>
-                      <th className="p-2">Date</th>
-                      <th className="p-2">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredRequests.map((req: any) => (
-                      <tr key={req.id} className="border-t">
-                        <td className="p-2">{req.user?.name}</td>
-                        <td className="p-2">{req.user?.email}</td>
-                        <td className="p-2">{getGroupName(req.tier_id)}</td>
-                        <td className="p-2">
-                          <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                            req.status === "pending"
-                              ? "bg-yellow-100 text-yellow-700"
-                              : req.status === "approved"
-                              ? "bg-green-100 text-green-700"
-                              : "bg-red-100 text-red-700"
-                          }`}>
-                            {req.status.charAt(0).toUpperCase() + req.status.slice(1)}
-                          </span>
-                        </td>
-                        <td className="p-2">{req.reason || "-"}</td>
-                        <td className="p-2">{new Date(req.created_at).toLocaleString()}</td>
-                        <td className="p-2 flex gap-2">
-                          {req.status === "pending" && (
-                            <>
-                              <button
-                                className="bg-green-100 text-green-700 px-3 py-1 rounded hover:bg-green-200 font-semibold"
-                                disabled={actionLoading === req.id}
-                                onClick={() => handleApprove(req.id)}
-                              >
-                                {actionLoading === req.id ? "Approving..." : "Approve"}
-                              </button>
-                              <button
-                                className="bg-red-100 text-red-700 px-3 py-1 rounded hover:bg-red-200 font-semibold"
-                                disabled={actionLoading === req.id}
-                                onClick={() => setRejectingId(req.id)}
-                              >
-                                Reject
-                              </button>
-                            </>
-                          )}
-                          {/* Show nothing for approved/rejected */}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-
-              {/* Reject Modal */}
-              {rejectingId && (
-                <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-30 z-50">
-                  <div className="bg-white p-6 rounded shadow-lg w-full max-w-md relative">
-                    <button
-                      className="absolute top-2 right-2 text-gray-400 hover:text-gray-600"
-                      onClick={() => setRejectingId(null)}
-                    >
-                      &times;
-                    </button>
-                    <h2 className="text-xl font-bold mb-2">Reject Join Request</h2>
-                    <div className="mb-4 text-gray-600">
-                      Please provide a reason for rejection:
-                    </div>
-                    <textarea
-                      className="w-full border rounded p-2 mb-4"
-                      rows={3}
-                      value={rejectReason}
-                      onChange={e => setRejectReason(e.target.value)}
-                      placeholder="Reason for rejection"
+          {/* Create Group Modal */}
+          {showCreate && (
+            <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
+              <div className="bg-white p-6 rounded shadow-lg w-full max-w-md">
+                <h2 className="text-xl font-bold mb-4">Create New Group</h2>
+                <form onSubmit={handleCreateGroup} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Group Name</label>
+                    <input
+                      type="text"
+                      value={form.name}
+                      onChange={e => setForm({ ...form, name: e.target.value })}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      required
                     />
-                    <div className="flex gap-2 justify-end">
-                      <button
-                        className="bg-gray-200 px-4 py-2 rounded"
-                        onClick={() => setRejectingId(null)}
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        className="bg-red-600 text-white px-4 py-2 rounded"
-                        disabled={actionLoading === rejectingId}
-                        onClick={() => handleReject(rejectingId)}
-                      >
-                        {actionLoading === rejectingId ? "Rejecting..." : "Reject"}
-                      </button>
-                    </div>
                   </div>
-                </div>
-              )}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Description</label>
+                    <textarea
+                      value={form.description}
+                      onChange={e => setForm({ ...form, description: e.target.value })}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      rows={2}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Contribution Amount (R)</label>
+                    <input
+                      type="number"
+                      value={form.contribution_amount}
+                      onChange={e => setForm({ ...form, contribution_amount: e.target.value })}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      required
+                      min="0"
+                      step="0.01"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Frequency</label>
+                    <select
+                      value={form.frequency}
+                      onChange={e => setForm({ ...form, frequency: e.target.value })}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    >
+                      <option value="weekly">Weekly</option>
+                      <option value="monthly">Monthly</option>
+                      <option value="quarterly">Quarterly</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Maximum Members</label>
+                    <input
+                      type="number"
+                      value={form.max_members}
+                      onChange={e => setForm({ ...form, max_members: e.target.value })}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      required
+                      min="2"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Tier</label>
+                    <select
+                      value={form.tier}
+                      onChange={e => setForm({ ...form, tier: e.target.value })}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      required
+                    >
+                      <option value="">Select Tier</option>
+                      {tierOptions.map(tier => (
+                        <option key={tier} value={tier}>{tier}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex justify-end gap-2 mt-6">
+                    <button
+                      type="button"
+                      className="bg-gray-300 px-4 py-2 rounded"
+                      onClick={() => setShowCreate(false)}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="bg-blue-600 text-white px-4 py-2 rounded"
+                    >
+                      Create
+                    </button>
+                  </div>
+                </form>
+              </div>
             </div>
           )}
-        </main>
-      </div>
-    </div>
+
+          {/* Edit Group Modal */}
+          {showEdit && (
+            <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
+              <div className="bg-white p-6 rounded shadow-lg w-full max-w-md">
+                <h2 className="text-xl font-bold mb-4">Edit Group</h2>
+                <form onSubmit={handleEdit} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Group Name</label>
+                    <input
+                      type="text"
+                      value={editForm.name}
+                      onChange={e => setEditForm({ ...editForm, name: e.target.value })}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Description</label>
+                    <textarea
+                      value={editForm.description}
+                      onChange={e => setEditForm({ ...editForm, description: e.target.value })}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      rows={2}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Contribution Amount (R)</label>
+                    <input
+                      type="number"
+                      value={editForm.contribution_amount}
+                      onChange={e => setEditForm({ ...editForm, contribution_amount: e.target.value })}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      required
+                      min="0"
+                      step="0.01"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Frequency</label>
+                    <select
+                      value={editForm.frequency}
+                      onChange={e => setEditForm({ ...editForm, frequency: e.target.value })}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    >
+                      <option value="weekly">Weekly</option>
+                      <option value="monthly">Monthly</option>
+                      <option value="quarterly">Quarterly</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Maximum Members</label>
+                    <input
+                      type="number"
+                      value={editForm.max_members}
+                      onChange={e => setEditForm({ ...editForm, max_members: e.target.value })}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      required
+                      min="2"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Tier</label>
+                    <select
+                      value={editForm.tier}
+                      onChange={e => setEditForm({ ...editForm, tier: e.target.value })}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      required
+                    >
+                      <option value="">Select Tier</option>
+                      {tierOptions.map(tier => (
+                        <option key={tier} value={tier}>{tier}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex justify-end gap-2 mt-6">
+                    <button
+                      type="button"
+                      className="bg-gray-300 px-4 py-2 rounded"
+                      onClick={() => setShowEdit(false)}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="bg-blue-600 text-white px-4 py-2 rounded"
+                    >
+                      Save
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* Delete Confirmation Modal */}
+          {showDelete && (
+            <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
+              <div className="bg-white p-6 rounded shadow-lg w-full max-w-sm">
+                <h2 className="text-xl font-bold mb-4">Delete Group</h2>
+                <p>Are you sure you want to delete <span className="font-semibold">{selectedGroup?.name}</span>?</p>
+                <div className="flex justify-end gap-2 mt-6">
+                  <button
+                    className="px-4 py-2 bg-gray-200 rounded"
+                    onClick={() => setShowDelete(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className="px-4 py-2 bg-red-600 text-white rounded"
+                    onClick={handleDelete}
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="p-6 bg-white rounded-lg shadow">
+          <h2 className="text-2xl font-bold mb-4">Join Requests</h2>
+          {loadingRequests ? (
+            <div>Loading...</div>
+          ) : requests.length === 0 ? (
+            <div className="text-gray-500">No join requests found.</div>
+          ) : (
+            <>
+              {selectedRequests.length > 0 && (
+                <button
+                  className="bg-red-600 text-white px-4 py-2 rounded mb-4"
+                  onClick={() => setShowDeleteSelected(true)}
+                >
+                  Delete Selected ({selectedRequests.length})
+                </button>
+              )}
+              <table className="min-w-full border">
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="p-2"></th>
+                    <th className="p-2">User</th>
+                    <th className="p-2">Email</th>
+                    <th className="p-2">Group (Tier)</th>
+                    <th className="p-2">Status</th>
+                    <th className="p-2">Reason</th>
+                    <th className="p-2">Date</th>
+                    <th className="p-2">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredRequests.map((req: any, idx: number) => (
+                    <tr key={req.id} className="border-t">
+                      <td className="p-2">
+                        {idx !== 0 && (
+                          <input
+                            type="checkbox"
+                            checked={selectedRequests.includes(req.id)}
+                            onChange={() => toggleSelect(req.id)}
+                          />
+                        )}
+                      </td>
+                      <td className="p-2">{req.user?.name}</td>
+                      <td className="p-2">{req.user?.email}</td>
+                      <td className="p-2">{getGroupName(req.tier_id)}</td>
+                      <td className="p-2">
+                        <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                          req.status === "pending"
+                            ? "bg-yellow-100 text-yellow-700"
+                            : req.status === "approved"
+                            ? "bg-green-100 text-green-700"
+                            : "bg-red-100 text-red-700"
+                        }`}>
+                          {req.status.charAt(0).toUpperCase() + req.status.slice(1)}
+                        </span>
+                      </td>
+                      <td className="p-2">{req.reason || "-"}</td>
+                      <td className="p-2">{new Date(req.created_at).toLocaleString()}</td>
+                      <td className="p-2 flex gap-2">
+                        {req.status === "pending" && (
+                          <>
+                            <button
+                              className="bg-green-100 text-green-700 px-3 py-1 rounded hover:bg-green-200 font-semibold"
+                              disabled={actionLoading === req.id}
+                              onClick={() => handleApprove(req.id)}
+                            >
+                              {actionLoading === req.id ? "Approving..." : "Approve"}
+                            </button>
+                            <button
+                              className="bg-red-100 text-red-700 px-3 py-1 rounded hover:bg-red-200 font-semibold"
+                              disabled={actionLoading === req.id}
+                              onClick={() => setRejectingId(req.id)}
+                            >
+                              Reject
+                            </button>
+                          </>
+                        )}
+                        {/* Show nothing for approved/rejected */}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
+
+          {/* Reject Modal */}
+          {rejectingId && (
+            <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-30 z-50">
+              <div className="bg-white p-6 rounded shadow-lg w-full max-w-md relative">
+                <button
+                  className="absolute top-2 right-2 text-gray-400 hover:text-gray-600"
+                  onClick={() => setRejectingId(null)}
+                >
+                  &times;
+                </button>
+                <h2 className="text-xl font-bold mb-2">Reject Join Request</h2>
+                <div className="mb-4 text-gray-600">
+                  Please provide a reason for rejection:
+                </div>
+                <textarea
+                  className="w-full border rounded p-2 mb-4"
+                  rows={3}
+                  value={rejectReason}
+                  onChange={e => setRejectReason(e.target.value)}
+                  placeholder="Reason for rejection"
+                />
+                <div className="flex gap-2 justify-end">
+                  <button
+                    className="bg-gray-200 px-4 py-2 rounded"
+                    onClick={() => setRejectingId(null)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className="bg-red-600 text-white px-4 py-2 rounded"
+                    disabled={actionLoading === rejectingId || !rejectReason.trim()}
+                    onClick={() => handleReject(rejectingId)}
+                  >
+                    {actionLoading === rejectingId ? "Rejecting..." : "Reject"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showDeleteSelected && (
+            <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-30 z-50">
+              <div className="bg-white p-6 rounded shadow-lg w-full max-w-md relative">
+                <h2 className="text-xl font-bold mb-2 text-red-600">Delete Selected Join Requests?</h2>
+                <p className="mb-4">Are you sure you want to delete the selected join requests? This cannot be undone.</p>
+                <div className="flex gap-2 justify-end">
+                  <button className="bg-gray-200 px-4 py-2 rounded" onClick={() => setShowDeleteSelected(false)}>Cancel</button>
+                  <button
+                    className="bg-red-600 text-white px-4 py-2 rounded"
+                    onClick={async () => {
+                      await adminAPI.deleteJoinRequests(selectedRequests);
+                      setShowDeleteSelected(false);
+                      setSelectedRequests([]);
+                      fetchRequests();
+                      toast.success("Selected join requests deleted!");
+                    }}
+                  >Delete</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </main>
   );
 };
 

@@ -68,13 +68,13 @@ export const getTransactions = async (page = 1, per_page = 10): Promise<Transact
 };
 
 export const getCards = async (): Promise<Card[]> => {
-  const { data } = await api.get('/wallet/cards');
-  return data;
+  const response = await api.get('/api/wallet/cards');
+  return response.data;
 };
 
-export const addCard = async (cardData: AddCardPayload): Promise<{ message: string }> => {
-  const { data } = await api.post('/wallet/cards', cardData);
-  return data;
+export const addCard = async (cardData: any) => {
+  const response = await api.post('/api/wallet/cards', cardData);
+  return response.data;
 };
 
 export const deleteCard = async (cardId: number): Promise<{ message: string }> => {
@@ -90,4 +90,10 @@ export const makeDeposit = async (depositData: DepositPayload): Promise<{ messag
 export const makeTransfer = async (transferData: TransferPayload): Promise<{ message: string, new_balance: number }> => {
     const { data } = await api.post('/wallet/transfer', transferData);
     return data;
+};
+
+export const updateCard = async (cardData: any) => {
+  // Adjust the endpoint and payload as per your backend API
+  const response = await api.put(`/api/wallet/cards/${cardData.id}`, cardData);
+  return response.data;
 }; 
