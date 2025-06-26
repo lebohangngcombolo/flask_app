@@ -121,6 +121,7 @@ def send_otp_email(email, otp):
         return False
 
 def get_user_by_referral_code(code):
+    # Refer and Earn: Utility to fetch a user by their referral code
     stmt = select(User).where(User.referral_code == code)
     return db.session.execute(stmt).scalar_one_or_none()
 
@@ -129,7 +130,7 @@ def is_group_member(user_id, group_id):
     return db.session.execute(stmt).first() is not None
 
 def check_and_process_referral_completion(referee_user):
-    # This function now checks only for verification and KYC completion.
+    # Refer and Earn: Main logic for awarding points and milestone notifications
     stmt = select(Referral).where(
         Referral.referee_id == referee_user.id,
         Referral.status == 'verified'
@@ -153,15 +154,13 @@ def check_and_process_referral_completion(referee_user):
     if not referrer:
         return
 
-    # --- New Points Logic based on your table ---
-    # Increment the count of successful referrals for the referrer first
+    # --- Refer and Earn: Points and Milestone Logic ---
     referrer.valid_referrals += 1
 
-    # Case 1: The very first successful referral
     if referrer.valid_referrals == 1:
-        # Award the one-time 20-point "unlock bonus"
+        # Refer and Earn: First referral unlock bonus (20 pts)
         referrer.points += 20
-        # Create a notification for unlocking the bonus
+        # Refer and Earn: Notification for unlock bonus
         unlock_notification = Notification(
             user_id=referrer.id,
             title="Referral Bonus Unlocked!",
@@ -169,15 +168,13 @@ def check_and_process_referral_completion(referee_user):
         )
         db.session.add(unlock_notification)
     else:
-        # Case 2: All subsequent referrals (2nd, 3rd, 4th, etc.)
-        # Award the base 30 points for every successful referral after the first
+        # Refer and Earn: Base points for every referral after the first (30 pts)
         referrer.points += 30
         
-        # Additionally, check for a milestone bonus
+        # Refer and Earn: Milestone bonus every 3rd referral (100 pts)
         if referrer.valid_referrals > 0 and referrer.valid_referrals % 3 == 0:
-            # Award a 100-point bonus on every 3rd referral (3rd, 6th, 9th, etc.)
             referrer.points += 100
-            # Create a notification for the milestone
+            # Refer and Earn: Notification for milestone
             milestone_notification = Notification(
                 user_id=referrer.id,
                 title="🎉 Milestone Reached! 🎉",
@@ -486,7 +483,7 @@ class Referral(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     referrer_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     referee_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    status = db.Column(db.String(20), default='pending')  # pending, verified, kyc_complete, completed
+    status = db.Column(db.String(20), default='pending')  # Refer and Earn: pending, verified, completed
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     __table_args__ = (
         db.UniqueConstraint('referrer_id', 'referee_id', name='uq_referral_pair'),
@@ -637,8 +634,7 @@ def register():
             if referral_code:
                 referrer = get_user_by_referral_code(referral_code)
                 if referrer:
-                    # Create a pending referral record.
-                    # The status will be updated to 'validated' once the referee verifies their account.
+                    # Refer and Earn: Create a pending referral record
                     referral = Referral(referrer_id=referrer.id, referee_id=user.id, status='pending')
                     db.session.add(referral)
                     # DO NOT increment valid_referrals here. It happens upon verification.
@@ -694,8 +690,7 @@ def verify_otp():
             # Mark the referral as 'verified'. Points are awarded later.
             pending_referral.status = 'verified'
         
-        # CRITICAL FIX: Check for referral completion right after verification.
-        # This ensures points are awarded even if KYC was done before verification.
+        # Refer and Earn: Check for referral completion (awards points if KYC is also done)
         check_and_process_referral_completion(user)
         
         db.session.delete(otp_entry) # OTP is used, so delete it
@@ -769,6 +764,7 @@ def login():
 @app.route('/api/auth/me', methods=['GET'])
 @jwt_required()
 def get_current_user():
+    # Refer and Earn: Returns points, valid_referrals, and referral_code in user object
     user_id = get_jwt_identity()
     user = db.session.get(User, user_id)
     if not user:
@@ -778,10 +774,7 @@ def get_current_user():
 @app.route('/api/user/referral-details', methods=['GET'])
 @token_required
 def get_user_referral_details(current_user):
-    """
-    Provides the necessary details for the frontend to create
-    Facebook sharing links.
-    """
+    # Refer and Earn: Returns referral code and referral link for sharing
     try:
         # 1. Get the user's unique referral code
         referral_code = current_user.referral_code
@@ -810,10 +803,7 @@ def get_user_referral_details(current_user):
 @app.route('/api/user/kyc', methods=['POST'])
 @token_required
 def complete_kyc(current_user):
-    """
-    A mock endpoint for a user to complete their KYC.
-    In a real application, this would involve document uploads and verification.
-    """
+    # Refer and Earn: Completing KYC may trigger referral completion and points
     try:
         if current_user.kyc_completed:
             return jsonify({'message': 'KYC already completed'}), 200
@@ -1508,7 +1498,7 @@ app.register_blueprint(facebook_bp, url_prefix="/login")
 @app.route('/api/user/notifications', methods=['GET'])
 @token_required
 def get_notifications(current_user):
-    """Fetches all notifications for the current user, ordered by most recent."""
+    # Refer and Earn: Used to fetch referral milestone/unlock notifications
     try:
         # The backref is 'notifications' with lazy='dynamic', so it's a query object
         notifications_query = current_user.notifications.order_by(Notification.created_at.desc())
@@ -1525,11 +1515,7 @@ def get_notifications(current_user):
 @app.route('/api/user/notifications/mark-as-read', methods=['POST'])
 @token_required
 def mark_notifications_as_read(current_user):
-    """
-    Marks notifications as read.
-    - If a list of IDs is provided in `notification_ids`, it marks those as read.
-    - If the list is empty or not provided, it marks ALL unread notifications as read.
-    """
+    # Refer and Earn: Used to mark referral notifications as read
     try:
         data = request.get_json() or {}
         notification_ids = data.get('notification_ids')
