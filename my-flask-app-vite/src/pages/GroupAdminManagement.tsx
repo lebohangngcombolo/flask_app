@@ -591,22 +591,22 @@ const GroupAdminManagement: React.FC = () => {
                   Delete Selected ({selectedRequests.length})
                 </button>
               )}
-              <table className="min-w-full border">
-                <thead>
-                  <tr className="bg-gray-100">
+            <table className="min-w-full border">
+              <thead>
+                <tr className="bg-gray-100">
                     <th className="p-2"></th>
-                    <th className="p-2">User</th>
-                    <th className="p-2">Email</th>
-                    <th className="p-2">Group (Tier)</th>
-                    <th className="p-2">Status</th>
-                    <th className="p-2">Reason</th>
-                    <th className="p-2">Date</th>
-                    <th className="p-2">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
+                  <th className="p-2">User</th>
+                  <th className="p-2">Email</th>
+                  <th className="p-2">Group (Tier)</th>
+                  <th className="p-2">Status</th>
+                  <th className="p-2">Reason</th>
+                  <th className="p-2">Date</th>
+                  <th className="p-2">Action</th>
+                </tr>
+              </thead>
+              <tbody>
                   {filteredRequests.map((req: any, idx: number) => (
-                    <tr key={req.id} className="border-t">
+                  <tr key={req.id} className="border-t">
                       <td className="p-2">
                         {idx !== 0 && (
                           <input
@@ -616,47 +616,47 @@ const GroupAdminManagement: React.FC = () => {
                           />
                         )}
                       </td>
-                      <td className="p-2">{req.user?.name}</td>
-                      <td className="p-2">{req.user?.email}</td>
-                      <td className="p-2">{getGroupName(req.tier_id)}</td>
-                      <td className="p-2">
-                        <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                          req.status === "pending"
-                            ? "bg-yellow-100 text-yellow-700"
-                            : req.status === "approved"
-                            ? "bg-green-100 text-green-700"
-                            : "bg-red-100 text-red-700"
-                        }`}>
-                          {req.status.charAt(0).toUpperCase() + req.status.slice(1)}
-                        </span>
-                      </td>
-                      <td className="p-2">{req.reason || "-"}</td>
-                      <td className="p-2">{new Date(req.created_at).toLocaleString()}</td>
-                      <td className="p-2 flex gap-2">
-                        {req.status === "pending" && (
-                          <>
-                            <button
-                              className="bg-green-100 text-green-700 px-3 py-1 rounded hover:bg-green-200 font-semibold"
-                              disabled={actionLoading === req.id}
-                              onClick={() => handleApprove(req.id)}
-                            >
-                              {actionLoading === req.id ? "Approving..." : "Approve"}
-                            </button>
-                            <button
-                              className="bg-red-100 text-red-700 px-3 py-1 rounded hover:bg-red-200 font-semibold"
-                              disabled={actionLoading === req.id}
-                              onClick={() => setRejectingId(req.id)}
-                            >
-                              Reject
-                            </button>
-                          </>
-                        )}
-                        {/* Show nothing for approved/rejected */}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                    <td className="p-2">{req.user?.name}</td>
+                    <td className="p-2">{req.user?.email}</td>
+                    <td className="p-2">{getGroupName(req.tier_id)}</td>
+                    <td className="p-2">
+                      <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                        req.status === "pending"
+                          ? "bg-yellow-100 text-yellow-700"
+                          : req.status === "approved"
+                          ? "bg-green-100 text-green-700"
+                          : "bg-red-100 text-red-700"
+                      }`}>
+                        {req.status.charAt(0).toUpperCase() + req.status.slice(1)}
+                      </span>
+                    </td>
+                    <td className="p-2">{req.reason || "-"}</td>
+                    <td className="p-2">{new Date(req.created_at).toLocaleString()}</td>
+                    <td className="p-2 flex gap-2">
+                      {req.status === "pending" && (
+                        <>
+                          <button
+                            className="bg-green-100 text-green-700 px-3 py-1 rounded hover:bg-green-200 font-semibold"
+                            disabled={actionLoading === req.id}
+                            onClick={() => handleApprove(req.id)}
+                          >
+                            {actionLoading === req.id ? "Approving..." : "Approve"}
+                          </button>
+                          <button
+                            className="bg-red-100 text-red-700 px-3 py-1 rounded hover:bg-red-200 font-semibold"
+                            disabled={actionLoading === req.id}
+                            onClick={() => setRejectingId(req.id)}
+                          >
+                            Reject
+                          </button>
+                        </>
+                      )}
+                      {/* Show nothing for approved/rejected */}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
             </>
           )}
 

@@ -28,6 +28,8 @@ import StokvelGroups from './pages/StokvelGroups';
 import { ThemeProvider } from 'next-themes';
 import KYCManagement from './pages/KYCManagement';
 import AdminLayout from "./components/AdminLayout";
+import ReferralHistory from './pages/ReferralHistory';
+import ReferralDashboard from './pages/ReferralDashboard';
 
 const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
@@ -133,6 +135,8 @@ const App: React.FC = () => {
             <Route path="kyc" element={<KYCPage />} />
             <Route path="marketplace" element={<Marketplace />} />
             <Route path="stokvel-groups" element={<StokvelGroups />} />
+            <Route path="refer" element={<ReferralDashboard />} />
+            <Route path="referral-history" element={<ReferralHistory />} />
             {/* Add more dashboard sub-pages here if needed */}
           </Route>
 

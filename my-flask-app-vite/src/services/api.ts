@@ -144,4 +144,11 @@ export const newsAPI = {
   getNewsArticle: (id: number) => api.get(`/api/news/${id}`),
 };
 
+// Referral & Rewards API
+export const referralAPI = {
+  getReferralDetails: () => api.get('/api/user/referral-details'),
+  getRewardsCatalog: () => api.get('/api/user/points/rewards'),
+  redeemReward: (reward_key: string) => api.post('/api/user/points/redeem', { reward_key }),
+};
+
 export default api; 
