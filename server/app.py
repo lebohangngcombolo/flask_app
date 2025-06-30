@@ -38,6 +38,7 @@ import uuid
 import openai
 import jwt as pyjwt
 from sqlalchemy import select
+from flask_socketio import SocketIO, emit
 
 # Load environment variables from .env file
 load_dotenv()
@@ -61,6 +62,12 @@ app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=1)  # Token expires in 
 app.config['JWT_TOKEN_LOCATION'] = ['headers']
 app.config['JWT_HEADER_NAME'] = 'Authorization'
 app.config['JWT_HEADER_TYPE'] = 'Bearer'
+
+# Add to your app configuration
+app.config['DAILY_DEPOSIT_LIMIT'] = 10000.00  # R10,000 daily limit
+app.config['DAILY_TRANSFER_LIMIT'] = 5000.00   # R5,000 daily limit
+app.config['MIN_TRANSACTION_AMOUNT'] = 1.00    # R1 minimum
+app.config['MAX_TRANSACTION_AMOUNT'] = 50000.00 # R50,000 maximum
 
 # -------------------- INITIALIZE EXTENSIONS --------------------
 db = SQLAlchemy(app)
@@ -142,6 +149,7 @@ class User(db.Model):
     referral_code = db.Column(db.String(8), unique=True, nullable=True, default=lambda: uuid.uuid4().hex[:8].upper())
     points = db.Column(db.Integer, default=0)
     valid_referrals = db.Column(db.Integer, default=0)
+    account_number = db.Column(db.String(20), unique=True, nullable=True)
 
     def set_password(self, password):
         self.password = generate_password_hash(password)
@@ -377,6 +385,7 @@ class Card(db.Model):
     card_number_last4 = db.Column(db.String(4), nullable=False)  # Only store last 4 digits!
     expiry = db.Column(db.String(5), nullable=False)  # MM/YY
     is_primary = db.Column(db.Boolean, default=False)
+    card_type = db.Column(db.String(20), default='visa')  # visa, mastercard, etc.
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     # Relationship
@@ -389,8 +398,23 @@ class Card(db.Model):
             'card_number': f"**** **** **** {self.card_number_last4}",
             'expiry': self.expiry,
             'is_primary': self.is_primary,
+            'card_type': self.card_type,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
+    
+    @staticmethod
+    def detect_card_type(card_number):
+        """Detect card type based on card number"""
+        card_number = card_number.replace(' ', '').replace('-', '')
+        
+        if card_number.startswith('4'):
+            return 'visa'
+        elif card_number.startswith('5'):
+            return 'mastercard'
+        elif card_number.startswith('3'):
+            return 'amex'
+        else:
+            return 'unknown'
 
 # -------------------- DECORATORS --------------------
 def token_required(f):
@@ -2401,11 +2425,26 @@ def add_card(current_user):
     if not all(field in data for field in required_fields):
         return jsonify({'error': 'Missing required fields'}), 400
     
-    # Extract last 4 digits from card number
+    # Validate card details
     card_number = data['cardNumber'].replace(' ', '')
-    if len(card_number) < 4:
-        return jsonify({'error': 'Invalid card number'}), 400
+    expiry = data['expiry']
+    cvv = data['cvv']
     
+    is_valid, result = validate_card(card_number, expiry, cvv)
+    if not is_valid:
+        error_messages = {
+            'invalid_length': 'Card number must be 13-19 digits',
+            'invalid_number': 'Invalid card number',
+            'invalid_expiry': 'Invalid expiry date',
+            'expired': 'Card has expired',
+            'invalid_expiry_format': 'Invalid expiry format (MM/YY)',
+            'invalid_cvv': 'Invalid CVV'
+        }
+        return jsonify({'error': error_messages.get(result, 'Invalid card details')}), 400
+    
+    card_type = result  # The card type returned from validation
+    
+    # Extract last 4 digits from card number
     last4 = card_number[-4:]
     
     # Create new card
@@ -2413,7 +2452,8 @@ def add_card(current_user):
         user_id=current_user.id,
         cardholder=data['cardholder'],
         card_number_last4=last4,
-        expiry=data['expiry'],
+        expiry=expiry,
+        card_type=card_type,
         is_primary=data.get('primary', False)
     )
     
@@ -2424,7 +2464,10 @@ def add_card(current_user):
     db.session.add(new_card)
     db.session.commit()
     
-    return jsonify(new_card.to_dict()), 201
+    return jsonify({
+        'message': 'Card added successfully',
+        'card': new_card.to_dict()
+    }), 201
 
 @app.route('/api/wallet/cards', methods=['GET'])
 @token_required
@@ -2453,7 +2496,7 @@ def bulk_delete_join_requests():
 @token_required
 def get_user_referral_details(current_user):
     referral_code = current_user.referral_code
-    base_frontend_url = "https://your-app-website.com"  # Change to your real frontend
+    base_frontend_url = "http://localhost:5173"  # Change to your real frontend
     referral_link = f"{base_frontend_url}/signup?ref={referral_code}"
     return jsonify({
         'referral_code': referral_code,
@@ -2566,5 +2609,542 @@ import os
 
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads', 'profile_pics')
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+about_us_text = "You are i-STOKVEL, a helpful assistant for stokvel group members and admins in South Africa."
+
+class Transaction(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    transaction_type = db.Column(db.String(20), nullable=False)  # 'deposit', 'transfer', 'withdrawal'
+    amount = db.Column(db.Float, nullable=False)
+    status = db.Column(db.String(20), default='pending')  # 'pending', 'completed', 'failed'
+    reference = db.Column(db.String(50), unique=True)
+    description = db.Column(db.String(200))
+    recipient_email = db.Column(db.String(120))  # For transfers
+    sender_email = db.Column(db.String(120))     # For transfers
+    card_id = db.Column(db.Integer, db.ForeignKey('card.id'))  # For deposits
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    completed_at = db.Column(db.DateTime)
+    
+    # Relationships
+    user = db.relationship('User', backref='transactions')
+    card = db.relationship('Card', backref='transactions')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'amount': float(self.amount),
+            'transaction_type': self.transaction_type,
+            'status': self.status,
+            'reference': self.reference,
+            'description': self.description,
+            'recipient_email': self.recipient_email,
+            'sender_email': self.sender_email,
+            'created_at': self.created_at.isoformat(),
+            'completed_at': self.completed_at.isoformat() if self.completed_at else None
+        }
+
+def get_or_create_wallet(user_id):
+    """Get existing wallet or create new one for user"""
+    wallet = Wallet.query.filter_by(user_id=user_id).first()
+    if not wallet:
+        wallet = Wallet(user_id=user_id, balance=0.00)
+        db.session.add(wallet)
+        db.session.commit()
+    return wallet
+
+def generate_transaction_reference():
+    """Generate unique transaction reference"""
+    return f"TXN{datetime.utcnow().strftime('%Y%m%d%H%M%S')}{random.randint(1000, 9999)}"
+
+def validate_test_card(card_number, expiry, cvv):
+    """Validate test card details - for development only"""
+    # Test card validation rules
+    card_number = card_number.replace(' ', '').replace('-', '')
+    
+    # Test card numbers (these are common test numbers)
+    test_cards = {
+        'visa': '4242424242424242',
+        'mastercard': '5555555555554444',
+        'amex': '378282246310005'
+    }
+    
+    # Check if it's a known test card
+    for card_type, test_number in test_cards.items():
+        if card_number == test_number:
+            return True, card_type
+    
+    # For development, accept any card number that looks valid
+    if len(card_number) >= 13 and len(card_number) <= 19:
+        card_type = Card.detect_card_type(card_number)
+        return True, card_type
+    
+    return False, 'unknown'
+
+def process_deposit(user_id, amount, card_id, description=""):
+    """Process a deposit transaction"""
+    try:
+        # Get or create wallet
+        wallet = get_or_create_wallet(user_id)
+        
+        # Get card details
+        card = Card.query.get(card_id)
+        if not card:
+            raise ValueError("Card not found")
+        
+        # For development, simulate payment processing
+        # In production, you would integrate with a real payment processor
+        payment_successful = simulate_payment_processing(amount, card)
+        
+        if not payment_successful:
+            raise ValueError("Payment processing failed")
+        
+        # Create transaction record
+        transaction = Transaction(
+            user_id=user_id,
+            transaction_type='deposit',
+            amount=amount,
+            status='completed',
+            reference=generate_transaction_reference(),
+            description=description or f"Deposit via {card.card_type.title()} ****{card.card_number_last4}",
+            card_id=card_id,
+            completed_at=datetime.utcnow()
+        )
+        
+        # Update wallet balance
+        wallet.balance += amount
+        
+        db.session.add(transaction)
+        db.session.commit()
+        
+        return {
+            'success': True,
+            'transaction': transaction.to_dict(),
+            'new_balance': float(wallet.balance)
+        }
+    except Exception as e:
+        db.session.rollback()
+        raise e
+
+def simulate_payment_processing(amount, card):
+    """Simulate payment processing - for development only"""
+    # In development, always succeed
+    # In production, integrate with Stripe, PayGate, or other payment processor
+    return True
+
+def process_transfer(sender_id, recipient_account_number, amount, description=""):
+    recipient = User.query.filter_by(account_number=recipient_account_number).first()
+    if not recipient:
+        raise ValueError("Recipient not found")
+    if sender_id == recipient.id:
+        raise ValueError("Cannot transfer to yourself")
+    # ... rest of logic ...
+
+@app.route('/api/wallet/balance', methods=['GET'])
+@token_required
+def get_wallet_balance(current_user):
+    """Get user's wallet balance"""
+    try:
+        wallet = get_or_create_wallet(current_user.id)
+        balance = float(wallet.balance) if wallet.balance is not None else 0.0
+        return jsonify({
+            'balance': balance,
+            'currency': 'ZAR'
+        }), 200
+    except Exception as e:
+        print(f"Error getting wallet balance: {str(e)}")
+        return jsonify({
+            'balance': 0.0,
+            'currency': 'ZAR'
+        }), 500
+
+@app.route('/api/wallet/transactions', methods=['GET'])
+@token_required
+def get_wallet_transactions(current_user):
+    """Get user's transaction history"""
+    try:
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 10, type=int)
+        
+        transactions = Transaction.query.filter_by(user_id=current_user.id)\
+            .order_by(Transaction.created_at.desc())\
+            .paginate(page=page, per_page=per_page, error_out=False)
+        
+        return jsonify({
+            'transactions': [tx.to_dict() for tx in transactions.items],
+            'pages': transactions.pages,
+            'current_page': page,
+            'total': transactions.total
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/wallet/deposit', methods=['POST'])
+@token_required
+def make_deposit(current_user):
+    """Process a deposit to wallet"""
+    try:
+        data = request.get_json()
+        amount = data.get('amount')
+        card_id = data.get('card_id')
+        description = data.get('description', '')
+        
+        if not amount or amount <= 0:
+            return jsonify({'error': 'Invalid amount'}), 400
+        
+        if not card_id:
+            return jsonify({'error': 'Card ID is required'}), 400
+        
+        # Verify card belongs to user
+        card = Card.query.filter_by(id=card_id, user_id=current_user.id).first()
+        if not card:
+            return jsonify({'error': 'Invalid card'}), 400
+        
+        result = process_deposit(current_user.id, amount, card_id, description)
+        
+        return jsonify({
+            'message': 'Deposit successful',
+            'new_balance': result['new_balance'],
+            'transaction': result['transaction']
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/wallet/transfer', methods=['POST'])
+@token_required
+def make_transfer(current_user):
+    data = request.get_json()
+    amount = data.get('amount')
+    recipient_account_number = data.get('recipient_account_number')
+    description = data.get('description', '')
+
+    if not amount or amount <= 0:
+        return jsonify({'error': 'Invalid amount'}), 400
+    if not recipient_account_number:
+        return jsonify({'error': 'Recipient account number is required'}), 400
+
+    result = process_transfer(current_user.id, recipient_account_number, amount, description)
+    return jsonify({
+        'message': 'Transfer successful',
+        'new_balance': result['new_balance'],
+        'transaction': result['transaction']
+    }), 200
+
+@app.cli.command('add-test-card')
+@with_appcontext
+def add_test_card():
+    """Add a test card for development"""
+    email = click.prompt('Enter user email to add test card for', type=str)
+    
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        click.echo(click.style(f"Error: User with email '{email}' not found.", fg='red'))
+        return
+    
+    # Check if test card already exists
+    existing_card = Card.query.filter_by(user_id=user.id, card_number_last4='1234').first()
+    if existing_card:
+        click.echo(click.style(f"Test card already exists for user '{email}'.", fg='yellow'))
+        return
+    
+    test_card = Card(
+        user_id=user.id,
+        cardholder="Bongiwe M",  # Changed from "Test User"
+        card_number_last4="1234",
+        expiry="12/25",
+        is_primary=True
+    )
+    
+    db.session.add(test_card)
+    db.session.commit()
+    
+    click.echo(click.style(f"Test card added successfully for user '{email}'.", fg='green'))
+    click.echo(f"Card Details: Visa ****1234, Expires: 12/25")
+
+@app.route('/api/test/add-test-card', methods=['POST'])
+@token_required
+def add_test_card_api(current_user):
+    """Temporary endpoint to add test card - REMOVE IN PRODUCTION"""
+    try:
+        # Check if test card already exists
+        existing_card = Card.query.filter_by(user_id=current_user.id, card_number_last4='1234').first()
+        if existing_card:
+            return jsonify({'message': 'Test card already exists', 'card': existing_card.to_dict()}), 200
+        
+        # Unset other primary cards
+        Card.query.filter_by(user_id=current_user.id, is_primary=True).update({'is_primary': False})
+        
+        test_card = Card(
+            user_id=current_user.id,
+            cardholder="Bongiwe M",  # Changed from current_user.full_name
+            card_number_last4="1234",
+            expiry="12/25",
+            is_primary=True
+        )
+        
+        db.session.add(test_card)
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Test card added successfully',
+            'card': test_card.to_dict()
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+def check_transaction_limits(user_id, amount, transaction_type):
+    """Check if transaction is within limits"""
+    today = datetime.utcnow().date()
+    
+    if transaction_type == 'deposit':
+        daily_total = db.session.query(func.sum(Transaction.amount))\
+            .filter(
+                Transaction.user_id == user_id,
+                Transaction.transaction_type == 'deposit',
+                func.date(Transaction.created_at) == today,
+                Transaction.status == 'completed'
+            ).scalar() or 0.0
+        
+        if daily_total + amount > app.config['DAILY_DEPOSIT_LIMIT']:
+            raise ValueError(f"Daily deposit limit exceeded. You can deposit R{app.config['DAILY_DEPOSIT_LIMIT'] - daily_total:.2f} more today.")
+    
+    elif transaction_type == 'transfer':
+        daily_total = db.session.query(func.sum(Transaction.amount))\
+            .filter(
+                Transaction.user_id == user_id,
+                Transaction.transaction_type == 'transfer',
+                func.date(Transaction.created_at) == today,
+                Transaction.status == 'completed',
+                Transaction.amount < 0  # Outgoing transfers
+            ).scalar() or 0.0
+        
+        if abs(daily_total) + amount > app.config['DAILY_TRANSFER_LIMIT']:
+            raise ValueError(f"Daily transfer limit exceeded. You can transfer R{app.config['DAILY_TRANSFER_LIMIT'] - abs(daily_total):.2f} more today.")
+    
+    # Check amount limits
+    if amount < app.config['MIN_TRANSACTION_AMOUNT']:
+        raise ValueError(f"Minimum transaction amount is R{app.config['MIN_TRANSACTION_AMOUNT']:.2f}")
+    
+    if amount > app.config['MAX_TRANSACTION_AMOUNT']:
+        raise ValueError(f"Maximum transaction amount is R{app.config['MAX_TRANSACTION_AMOUNT']:.2f}")
+
+@app.route('/api/wallet/analytics', methods=['GET'])
+@token_required
+def get_wallet_analytics(current_user):
+    """Get wallet analytics and insights"""
+    try:
+        # Get date range from query params
+        days = request.args.get('days', 30, type=int)
+        end_date = datetime.utcnow()
+        start_date = end_date - timedelta(days=days)
+        
+        # Get transactions in date range
+        transactions = Transaction.query.filter(
+            Transaction.user_id == current_user.id,
+            Transaction.created_at >= start_date,
+            Transaction.created_at <= end_date
+        ).all()
+        
+        # Calculate analytics
+        total_deposits = sum(tx.amount for tx in transactions if tx.transaction_type == 'deposit' and tx.status == 'completed')
+        total_transfers_out = abs(sum(tx.amount for tx in transactions if tx.transaction_type == 'transfer' and tx.amount < 0 and tx.status == 'completed'))
+        total_transfers_in = sum(tx.amount for tx in transactions if tx.transaction_type == 'transfer' and tx.amount > 0 and tx.status == 'completed')
+        total_fees = sum(tx.fee for tx in transactions if tx.fee)
+        
+        # Monthly breakdown
+        monthly_data = db.session.query(
+            func.to_char(Transaction.created_at, 'YYYY-MM').label('month'),
+            func.sum(Transaction.amount).label('total'),
+            func.count(Transaction.id).label('count')
+        ).filter(
+            Transaction.user_id == current_user.id,
+            Transaction.created_at >= start_date,
+            Transaction.status == 'completed'
+        ).group_by('month').order_by('month').all()
+        
+        return jsonify({
+            'period': f'Last {days} days',
+            'summary': {
+                'total_deposits': float(total_deposits),
+                'total_transfers_out': float(total_transfers_out),
+                'total_transfers_in': float(total_transfers_in),
+                'total_fees': float(total_fees),
+                'net_flow': float(total_deposits + total_transfers_in - total_transfers_out)
+            },
+            'monthly_breakdown': [
+                {
+                    'month': row.month,
+                    'total': float(row.total),
+                    'count': row.count
+                } for row in monthly_data
+            ],
+            'transaction_count': len(transactions)
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/wallet/export', methods=['GET'])
+@token_required
+def export_transactions(current_user):
+    """Export transactions as CSV"""
+    try:
+        from io import StringIO
+        import csv
+        
+        # Get date range
+        days = request.args.get('days', 30, type=int)
+        end_date = datetime.utcnow()
+        start_date = end_date - timedelta(days=days)
+        
+        # Get transactions
+        transactions = Transaction.query.filter(
+            Transaction.user_id == current_user.id,
+            Transaction.created_at >= start_date,
+            Transaction.created_at <= end_date
+        ).order_by(Transaction.created_at.desc()).all()
+        
+        # Create CSV
+        output = StringIO()
+        writer = csv.writer(output)
+        writer.writerow(['Date', 'Type', 'Amount', 'Fee', 'Net Amount', 'Status', 'Reference', 'Description'])
+        
+        for tx in transactions:
+            writer.writerow([
+                tx.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+                tx.transaction_type,
+                f"R{tx.amount:.2f}",
+                f"R{tx.fee:.2f}",
+                f"R{tx.net_amount:.2f}",
+                tx.status,
+                tx.reference,
+                tx.description
+            ])
+        
+        output.seek(0)
+        
+        response = make_response(output.getvalue())
+        response.headers['Content-Type'] = 'text/csv'
+        response.headers['Content-Disposition'] = f'attachment; filename=transactions_{datetime.utcnow().strftime("%Y%m%d")}.csv'
+        
+        return response
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.cli.command('update-test-card-name')
+@with_appcontext
+def update_test_card_name():
+    """Update existing test card name to Bongiwe M"""
+    email = click.prompt('Enter user email to update test card for', type=str)
+    
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        click.echo(click.style(f"Error: User with email '{email}' not found.", fg='red'))
+        return
+    
+    # Find the test card
+    test_card = Card.query.filter_by(user_id=user.id, card_number_last4='1234').first()
+    if not test_card:
+        click.echo(click.style(f"No test card found for user '{email}'.", fg='yellow'))
+        return
+    
+    # Update the cardholder name
+    test_card.cardholder = "Bongiwe M"
+    db.session.commit()
+    
+    click.echo(click.style(f"Test card updated successfully for user '{email}'.", fg='green'))
+    click.echo(f"Card Details: {test_card.cardholder} - Visa ****{test_card.card_number_last4}, Expires: {test_card.expiry}")
+
+def validate_card(card_number, expiry, cvv):
+    """Validate card details - accepts both test and real cards"""
+    # Clean card number
+    card_number = card_number.replace(' ', '').replace('-', '')
+    
+    # Basic validation
+    if len(card_number) < 13 or len(card_number) > 19:
+        return False, 'invalid_length'
+    
+    # Luhn algorithm check for valid card number
+    if not luhn_check(card_number):
+        return False, 'invalid_number'
+    
+    # Validate expiry date
+    try:
+        month, year = expiry.split('/')
+        month, year = int(month), int(year)
+        if month < 1 or month > 12:
+            return False, 'invalid_expiry'
+        
+        # Check if card is expired
+        current_year = datetime.utcnow().year % 100
+        current_month = datetime.utcnow().month
+        if year < current_year or (year == current_year and month < current_month):
+            return False, 'expired'
+    except:
+        return False, 'invalid_expiry_format'
+    
+    # Validate CVV
+    if len(cvv) < 3 or len(cvv) > 4:
+        return False, 'invalid_cvv'
+    
+    # Detect card type
+    card_type = Card.detect_card_type(card_number)
+    
+    return True, card_type
+
+def luhn_check(card_number):
+    """Luhn algorithm to validate card number"""
+    digits = [int(d) for d in card_number]
+    odd_digits = digits[-1::-2]
+    even_digits = digits[-2::-2]
+    checksum = sum(odd_digits)
+    for d in even_digits:
+        checksum += sum(divmod(d * 2, 10))
+    return checksum % 10 == 0
+
+class Beneficiary(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    name = db.Column(db.String(100), nullable=False)
+    account_number = db.Column(db.String(20), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+@app.route('/api/beneficiaries', methods=['POST'])
+@token_required
+def add_beneficiary(current_user):
+    data = request.get_json()
+    beneficiary = Beneficiary(
+        user_id=current_user.id,
+        name=data['name'],
+        account_number=data['account_number']
+    )
+    db.session.add(beneficiary)
+    db.session.commit()
+    return jsonify({'message': 'Beneficiary added successfully'})
+
+@app.route('/api/beneficiaries', methods=['GET'])
+@token_required
+def list_beneficiaries(current_user):
+    beneficiaries = Beneficiary.query.filter_by(user_id=current_user.id).all()
+    return jsonify([
+        {
+            'id': b.id,
+            'name': b.name,
+            'account_number': b.account_number,
+            'created_at': b.created_at.isoformat()
+        } for b in beneficiaries
+    ])
+
+@app.route('/api/beneficiaries/<int:beneficiary_id>', methods=['DELETE'])
+@token_required
+def delete_beneficiary(current_user, beneficiary_id):
+    beneficiary = Beneficiary.query.filter_by(id=beneficiary_id, user_id=current_user.id).first()
+    if not beneficiary:
+        return jsonify({'error': 'Beneficiary not found'}), 404
+    db.session.delete(beneficiary)
+    db.session.commit()
+    return jsonify({'message': 'Beneficiary deleted successfully'})
 
 
