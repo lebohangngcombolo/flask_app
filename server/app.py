@@ -1,4 +1,5 @@
-from flask import Flask, request, jsonify, Response
+from networkx import volume
+from flask import Flask, request, jsonify, Response, make_response
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -11,19 +12,33 @@ from datetime import datetime, timedelta
 from sqlalchemy import func
 from dotenv import load_dotenv
 import os
-from flask_jwt_extended import JWTManager, jwt_required, create_access_token, get_jwt_identity
+from flask_jwt_extended import (
+    JWTManager, 
+    jwt_required, 
+    create_access_token, 
+    get_jwt_identity,
+)
 from sqlalchemy.exc import SQLAlchemyError
 from flask_mail import Mail, Message
 import random
 import requests
 import logging
 import string
+import time
 from iStokvel.utils.email_utils import send_verification_email
 from flask_migrate import Migrate
+from twilio.rest import Client
+import phonenumbers
+from werkzeug.utils import secure_filename
+from werkzeug.exceptions import HTTPException
+from sqlalchemy import event
+from sqlalchemy.engine import Engine
+from jwt.exceptions import ExpiredSignatureError, InvalidTokenError
 from openai import OpenAI
-from models import db, User, Conversation, Message
 import uuid
-import os
+import openai
+from google.oauth2 import id_token
+from google.auth.transport import requests as grequests
 
 # Load environment variables from .env file
 load_dotenv()
@@ -31,7 +46,7 @@ load_dotenv()
 # Config
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key')
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///istokvel.db')
+app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:stenaman@localhost:5432/dude_db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['MAIL_SERVER'] = os.getenv('MAIL_SERVER')
 app.config['MAIL_PORT'] = int(os.getenv('MAIL_PORT')) if os.getenv('MAIL_PORT') else None
@@ -40,74 +55,68 @@ app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME')
 app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD')
 app.config['SENDGRID_API_KEY'] = os.getenv('SENDGRID_API_KEY')
 app.config['SENDGRID_FROM_EMAIL'] = os.getenv('SENDGRID_FROM_EMAIL')
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 
 # Add JWT configuration
 app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'your-jwt-secret-key')  # Change this in production
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=1)  # Token expires in 1 hour
+app.config['JWT_TOKEN_LOCATION'] = ['headers']
+app.config['JWT_HEADER_NAME'] = 'Authorization'
+app.config['JWT_HEADER_TYPE'] = 'Bearer'
 
-# Initialize extensions
-db = SQLAlchemy(app)
-mail = Mail(app)
-migrate = Migrate(app, db)
-jwt = JWTManager(app)  # Initialize JWT
 
-----------------------------------------------------------init chatbot------------------------------------------------------------------------------
 # Initialize OpenAI client
-client = OpenAI(
+openai_client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
     api_key=os.getenv("OPENROUTER_API_KEY")
 )
-------------------------------------------------------------------------------------------------------------------------------------------------------
 
-# Add this after creating the app
+# -------------------- INITIALIZE EXTENSIONS --------------------
+db = SQLAlchemy(app)
+mail = Mail(app)
+migrate = Migrate(app, db)
+jwt = JWTManager(app)
+
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-# Simple CORS setup - only needed for production
-if os.getenv('FLASK_ENV') == 'production':
-    CORS(app, resources={
-        r"/api/*": {
-            "origins": ["https://your-production-domain.com"],
-            "supports_credentials": True
-        }
-    })
+# -------------------- CORS SETUP --------------------
+CORS(app, resources={r"/api/*": {"origins": "http://localhost:5173"}}, supports_credentials=True)
 
-# Add these functions after the imports and before the models
+# -------------------- UTILITY FUNCTIONS --------------------
 def generate_otp():
     """Generate a 6-digit OTP"""
     return ''.join([str(random.randint(0, 9)) for _ in range(6)])
-
 
 def send_verification_sms(phone_number, otp_code):
     """Send verification SMS with OTP"""
     # Implement SMS sending logic here
     pass
 
-------------------------------------------------------------------updated models user models------------------------------------------------------------------------------
-
-# Models
+# -------------------- MODELS --------------------
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     full_name = db.Column(db.String(100), nullable=False)
     phone = db.Column(db.String(20), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
-    date_of_birth = db.Column(db.Date)
-    gender = db.Column(db.String(20))
-    employment_status = db.Column(db.String(100))
-    two_factor_enabled = db.Column(db.Boolean, default=False)
     password = db.Column(db.String(200), nullable=False)
-    conversations = db.relationship('Conversation', backref='user', lazy=True)
     role = db.Column(db.String(20), default='member')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     profile_picture = db.Column(db.String(200))
-    email_announcements = db.Column(db.Boolean, default=True)
+    gender = db.Column(db.String(10))
+    employment_status = db.Column(db.String(100))
+    google_id = db.Column(db.String(120), unique=True, nullable=True)
     is_verified = db.Column(db.Boolean, default=False)
-    push_announcements = db.Column(db.Boolean, default=True)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    two_factor_enabled = db.Column(db.Boolean, default=False)
+    two_factor_method = db.Column(db.String(10), default='email')  # 'email' or 'sms'
     otps = db.relationship('OTP', backref='user', lazy=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     verification_code = db.Column(db.String(6), nullable=True)
     verification_code_expiry = db.Column(db.DateTime, nullable=True)
-    __table_args__ = (
+    date_of_birth = db.Column(db.Date, nullable=True)
+    sessions = db.relationship('UserSession', backref='user', lazy=True, cascade="all, delete-orphan")
+    _table_args_ = (
         db.Index('idx_user_email', 'email'),
         db.Index('idx_user_phone', 'phone'),
     )
@@ -126,47 +135,6 @@ class User(db.Model):
         db.session.commit()
         return self.verification_code
 
-def serialize_profile(self):
-        return {
-            "id": self.id,
-            "name": self.name,
-            "email": self.email,
-            "phone": self.phone,
-            "date_of_birth": str(self.date_of_birth) if self.date_of_birth else None,
-            "gender": self.gender,
-            "employment_status": self.employment_status,
-        }
-
-    def serialize_communication(self):
-        return {
-            "email_announcements": self.email_announcements,
-            "email_stokvel_updates": self.email_stokvel_updates,
-            "push_announcements": self.push_announcements
-        }
-
-    def serialize_privacy(self):
-        return {
-            "data_for_personalization": True,  # Make dynamic if needed
-            "data_for_analytics": True,
-            "data_for_third_parties": False
-        }
-
-    def get_sessions(self):
-        return []  # Implement session store if needed
-
-    def revoke_session(self, session_id):
-        pass  # Implement session logic if needed
-
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'name': self.name,
-            'email': self.email,
-            'phone': self.phone,
-            'role': self.role,
-            'is_verified': self.is_verified
-        }
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 class StokvelGroup(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
@@ -259,8 +227,12 @@ class Wallet(db.Model):
 class NotificationSettings(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    email_notifications = db.Column(db.Boolean, default=True)
-    sms_notifications = db.Column(db.Boolean, default=True)
+    email_announcements = db.Column(db.Boolean, default=True)
+    email_stokvel_updates = db.Column(db.Boolean, default=True)
+    email_marketplace_offers = db.Column(db.Boolean, default=False)
+    push_announcements = db.Column(db.Boolean, default=True)
+    push_stokvel_updates = db.Column(db.Boolean, default=True)
+    push_marketplace_offers = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     user = db.relationship('User', backref='notification_settings')
@@ -271,6 +243,9 @@ class UserPreferences(db.Model):
     language = db.Column(db.String(10), default='en')
     currency = db.Column(db.String(3), default='ZAR')
     theme = db.Column(db.String(10), default='light')
+    data_for_personalization = db.Column(db.Boolean, default=True)
+    data_for_analytics = db.Column(db.Boolean, default=True)
+    data_for_third_parties = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     user = db.relationship('User', backref='preferences')
@@ -285,16 +260,27 @@ class OTP(db.Model):
 
     def is_valid(self):
         return datetime.utcnow() < self.expires_at and not self.is_used
----------------------------------------------------------------------------new models---------------------------------------------------------------------------------
+
+class UserSession(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    user_agent = db.Column(db.String(500))
+    ip_address = db.Column(db.String(45))
+    login_time = db.Column(db.DateTime, default=datetime.utcnow)
+    last_activity = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    is_active = db.Column(db.Boolean, default=True)
+
+
+#---------------------------------------------------------------------------new models-----------------------------------
 
 class Conversation(db.Model):
     __tablename__ = 'conversations'
 
     id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id = db.Column(db.String(36), db.ForeignKey('users.id'))
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     title = db.Column(db.String(200))
     is_stokvel_related = db.Column(db.Boolean, default=False)
-    stokvel_id = db.Column(db.String(36), db.ForeignKey('stokvels.id'), nullable=True)
+    stokvel_id = db.Column(db.Integer, db.ForeignKey('stokvel_group.id'), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     messages = db.relationship('Message', backref='conversation', lazy=True, cascade='all, delete-orphan')
@@ -310,30 +296,18 @@ class Message(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     is_read = db.Column(db.Boolean, default=False)
 
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-# JWT token decorator
+#------------------------------------------------------------------------------------------
+
+
+# -------------------- DECORATORS --------------------
 def token_required(f):
     @wraps(f)
+    @jwt_required()
     def decorated(*args, **kwargs):
-        token = None
-        auth_header = request.headers.get('Authorization')
-
-        if auth_header and auth_header.startswith('Bearer '):
-            token = auth_header.split(' ')[1]
-
-        if not token:
-            return jsonify({'error': 'Token is missing'}), 401
-
-        try:
-            data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=["HS256"])
-            current_user = User.query.get(data['user_id'])
-            if not current_user:
-                return jsonify({'error': 'User not found'}), 404
-        except jwt.ExpiredSignatureError:
-            return jsonify({'error': 'Token has expired'}), 401
-        except jwt.InvalidTokenError:
-            return jsonify({'error': 'Invalid token'}), 401
-
+        current_user_id = get_jwt_identity()
+        current_user = User.query.get(current_user_id)
+        if not current_user:
+            return jsonify({'error': 'User not found'}), 404
         return f(current_user, *args, **kwargs)
     return decorated
 
@@ -388,150 +362,132 @@ def role_required(allowed_roles):
         return decorated_function
     return decorator
 
-# Routes
+# -------------------- ROUTES --------------------
+
 
 @app.route('/api/test', methods=['GET'])
 def test():
     logger.debug('Test route accessed')
     return jsonify({"message": "Server is working!"}), 200
 
-@app.route('/api/auth/register', methods=['POST', 'OPTIONS'])
+@app.route('/api/auth/register', methods=['POST'])
 def register():
-    if request.method == 'OPTIONS':
-        # Explicitly handle OPTIONS preflight request
-        response = Response()
-        response.headers.add('Access-Control-Allow-Origin', 'http://localhost:5173')
-        response.headers.add('Access-Control-Allow-Headers', request.headers.get('Access-Control-Request-Headers'))
-        response.headers.add('Access-Control-Allow-Methods', request.headers.get('Access-Control-Request-Method'))
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
-        response.headers.add('Access-Control-Max-Age', '3600')
-        return response, 200
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
 
-    # Handle the POST request
-    if request.method == 'POST':
+        email = data.get('email')
+        password = data.get('password')
+        full_name = data.get('full_name')
+        phone = data.get('phone')
+
+        # Check if user already exists
+        if User.query.filter_by(email=email).first():
+            return jsonify({'error': 'Email already registered'}), 400
+
+        # Create new user
+        user = User(
+            email=email,
+            full_name=full_name,
+            phone=phone,
+            role='member'
+        )
+        user.set_password(password)
+
+        db.session.add(user)
+        db.session.commit()
+
+        # Generate and send verification code
         try:
-            data = request.get_json()
-            if not data:
-                return jsonify({'error': 'No data provided'}), 400
-
-            email = data.get('email')
-            password = data.get('password')
-            full_name = data.get('full_name')
-            phone = data.get('phone')
-        
-            # Check if user already exists
-            if User.query.filter_by(email=email).first():
-                return jsonify({'error': 'Email already registered'}), 400
-        
-            # Create new user
-            user = User(
-                email=email,
-                full_name=full_name,
-                phone=phone,
-                role='member'  # Default role
-            )
-            user.set_password(password)
-
-            db.session.add(user)
-            # Commit now to get user.id for potential verification code generation if needed
-            db.session.commit()
-
-            # Generate and send verification code
-            print(f"Attempting to send verification email to: {user.email}")
-            try:
-                verification_code = user.generate_verification()  # This will also commit the code and expiry
-                print(f"Generated verification code: {verification_code}")
-                success, message = send_verification_email(user.email, verification_code)
-                print(f"SendGrid send result: Success={success}, Message={message}")
-
-                if not success:
-                    # Log the email sending failure, but don't rollback registration if user is created
-                    print(f"Warning: Failed to send verification email: {message}")
-            
-            except Exception as email_e:
-                print(f"Warning: Exception during verification email sending: {str(email_e)}")
-                import traceback
-                traceback.print_exc()
-                # Continue registration success even if email sending fails
-
-            # Registration successful in terms of user creation
-            return jsonify({
-                'message': 'Registration successful. Please check your email for verification code.',
-                'email': user.email,
-                'user_id': user.id  # Include user_id for potential verification step on frontend
-            }), 201
-        
-        except Exception as e:
-            db.session.rollback()  # Rollback if any error occurred before commit or in critical steps
-            print(f"Error during registration: {str(e)}")
+            verification_code = user.generate_verification()
+            success, message = send_verification_email(user.email, verification_code)
+            if not success:
+                print(f"Warning: Failed to send verification email: {message}")
+        except Exception as email_e:
+            print(f"Warning: Exception during verification email sending: {str(email_e)}")
             import traceback
             traceback.print_exc()
-            return jsonify({'error': 'An unexpected error occurred during registration'}), 500
 
-@app.route('/api/auth/login', methods=['POST', 'OPTIONS'])
+        return jsonify({
+            'message': 'Registration successful. Please check your email for verification code.',
+            'email': user.email,
+            'user_id': user.id
+        }, 201)
+
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error during registration: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'An unexpected error occurred during registration'}), 500
+
+@app.route('/api/auth/login', methods=['POST'])
 def login():
-    if request.method == 'OPTIONS':
-        # Explicitly handle OPTIONS preflight request
-        response = Response()
-        response.headers.add('Access-Control-Allow-Origin', 'http://localhost:5173')
-        response.headers.add('Access-Control-Allow-Headers', request.headers.get('Access-Control-Request-Headers'))
-        response.headers.add('Access-Control-Allow-Methods', request.headers.get('Access-Control-Request-Method'))
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
-        response.headers.add('Access-Control-Max-Age', '3600')
-        return response, 200
+    data = request.get_json()
+    email = data.get('email')
+    password = data.get('password')
+    user = User.query.filter_by(email=email).first()
+    if not user or not user.check_password(password):
+        return jsonify({'error': 'Invalid email or password'}), 401
 
-    # Handle the POST request
-    if request.method == 'POST':
-        try:
-            data = request.get_json()
-            if not data:
-                return jsonify({'error': 'No data provided'}), 400
+    if user.two_factor_enabled:
+        otp_code = generate_otp()
+        expiry = datetime.utcnow() + timedelta(minutes=10)
+        otp = OTP(user_id=user.id, code=otp_code, expires_at=expiry)
+        db.session.add(otp)
+        db.session.commit()
+        if user.two_factor_method == 'sms':
+            send_verification_sms(user.phone, otp_code)
+        else:
+            send_verification_email(user.email, otp_code)
+        return jsonify({'message': '2FA code sent', 'user_id': user.id, 'two_factor_required': True}), 200
 
-            email = data.get('email')
-            password = data.get('password')
+    access_token = create_access_token(identity=str(user.id))
 
-            if not email or not password:
-                return jsonify({'error': 'Email and password are required'}), 400
+    user_agent = request.headers.get('User-Agent', 'Unknown')
+    ip_address = request.remote_addr or 'Unknown'
+    session = UserSession(
+        user_id=user.id,
+        user_agent=user_agent,
+        ip_address=ip_address
+    )
+    db.session.add(session)
+    db.session.commit()
 
-            user = User.query.filter_by(email=email).first()
-            if not user or not user.check_password(password):
-                return jsonify({'error': 'Invalid email or password'}), 401
-
-            if not user.is_verified:
-                return jsonify({'error': 'Please verify your email first'}), 401
-
-            # Create access token using Flask-JWT-Extended
-            access_token = create_access_token(identity=user.id)
-
-            return jsonify({
-                'message': 'Login successful',
-                'access_token': access_token,
-                'user': {
-                    'id': user.id,
-                    'email': user.email,
-                    'name': user.full_name,
-                    'role': user.role
-                }
-            }), 200
-
-        except Exception as e:
-            logger.error(f"Login error: {str(e)}")
-            return jsonify({'error': str(e)}), 500
+    user_data = {
+        "id": user.id,
+        "full_name": user.full_name,
+        "email": user.email,
+        "phone": user.phone,
+        "role": user.role,
+        "profile_picture": user.profile_picture,
+        "gender": user.gender,
+        "employment_status": user.employment_status,
+        "is_verified": user.is_verified,
+        "two_factor_enabled": user.two_factor_enabled
+    }
+    return jsonify({
+        "success": True,
+        "message": "Login successful",
+        "access_token": access_token,
+        "user": user_data
+    }), 200
 
 @app.route('/api/auth/me', methods=['GET'])
-@token_required
-def get_current_user(current_user):
-    try:
-        return jsonify({
-            'id': current_user.id,
-            'name': current_user.full_name,
-            'email': current_user.email,
-            'role': current_user.role,
-            'profilePicture': current_user.profile_picture
-        })
-    except Exception as e:
-        print(f"Error fetching user data: {str(e)}")
-        return jsonify({'error': 'Failed to fetch user data'}), 500
+@jwt_required()
+def get_current_user():
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+    return jsonify({
+        'id': user.id,
+        'name': user.full_name,
+        'email': user.email,
+        'role': user.role,
+        'profilePicture': user.profile_picture
+    })
 
 @app.route('/api/admin/groups', methods=['GET'])
 @token_required
@@ -1020,10 +976,6 @@ def test_users():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# Run
-if __name__ == '__main__':
-    app.run(port=5001, debug=True)
-
 @app.route('/test-email')
 def test_email():
     try:
@@ -1037,7 +989,6 @@ def test_email():
         return jsonify({'message': 'Test email sent successfully!'}), 200
     except Exception as e:
         return jsonify({'error': f'Failed to send email: {str(e)}'}), 500
-
 
 # After your app configuration
 try:
@@ -1063,7 +1014,7 @@ def test_connection():
             'status': 'success',
             'database': db_status,
             'email': mail_status,
-            'database_url': app.config['SQLALCHEMY_DATABASE_URI'].replace('postgres:postgres', '***:***')  # Hide password
+            'database_url': app.config['SQLALCHEMY_DATABASE_URI'].replace('postgres:postgres', ':')  # Hide password
         })
     except Exception as e:
         return jsonify({
@@ -1180,9 +1131,151 @@ def resend_verification():
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
-// ----------------------------------------------------------------New Routes--------------------------------------------------------------------------------------
+@app.route('/api/user/profile', methods=['GET'])
+@jwt_required()
+def get_user_profile():
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+    return jsonify({
+        'id': user.id,
+        'name': user.full_name,
+        'email': user.email,
+        'phone': user.phone,
+        'role': user.role,
+        'profile_picture': user.profile_picture,
+        'is_verified': user.is_verified,
+        'gender': user.gender,
+        'employment_status': user.employment_status,
+        'two_factor_enabled': user.two_factor_enabled,
+        'date_of_birth': user.date_of_birth.isoformat() if user.date_of_birth else None
+    })
 
-@app.route('/start', methods=['POST'])
+@app.route('/api/user/profile', methods=['PUT'])
+@jwt_required()
+def update_user_profile():
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+
+    data = request.get_json()
+
+    # Update fields that are simple string assignments
+    if 'name' in data:
+        user.full_name = data['name']
+    if 'phone' in data:
+        user.phone = data['phone']
+    if 'gender' in data:
+        user.gender = data['gender']
+    if 'employment_status' in data:
+        user.employment_status = data['employment_status']
+
+    # Specifically handle date_of_birth: parse string to datetime object
+    if 'date_of_birth' in data and data['date_of_birth']:
+        try:
+            # The fromisoformat() method correctly parses 'YYYY-MM-DD'
+            user.date_of_birth = datetime.fromisoformat(data['date_of_birth'])
+        except (ValueError, TypeError):
+            # Handle cases where the date format is wrong or data is null
+            return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD.'}), 400
+
+    db.session.commit()
+    return jsonify({'message': 'Profile updated successfully'}), 200
+
+@app.route('/api/user/security/password', methods=['PUT', 'OPTIONS'])
+@jwt_required()
+def change_password():
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    data = request.get_json()
+    current_password = data.get('current_password')
+    new_password = data.get('new_password')
+
+    if not user or not user.check_password(current_password):
+        return jsonify({'error': 'Current password is incorrect'}), 400
+
+    user.set_password(new_password)
+    db.session.commit()
+    return jsonify({'message': 'Password changed successfully'})
+
+@app.route('/api/user/security/2fa', methods=['POST', 'OPTIONS'])
+@jwt_required()
+def toggle_two_factor():
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+
+    user.two_factor_enabled = not user.two_factor_enabled
+    db.session.commit()
+    return jsonify({
+        "message": "Two-factor authentication updated",
+        "two_factor_enabled": user.two_factor_enabled
+    }), 200
+
+@app.route('/api/user/communication', methods=['GET', 'OPTIONS'])
+@jwt_required()
+def get_communication_preferences():
+    user_id = get_jwt_identity()
+    settings = NotificationSettings.query.filter_by(user_id=user_id).first()
+    if not settings:
+        settings = NotificationSettings(user_id=user_id)
+        db.session.add(settings)
+        db.session.commit()
+    return jsonify({
+        "email_announcements": settings.email_announcements,
+        "email_stokvel_updates": settings.email_stokvel_updates,
+        "push_announcements": settings.push_announcements
+    })
+
+@app.route('/api/user/communication', methods=['PUT', 'OPTIONS'])
+@jwt_required()
+def update_communication_preferences():
+    user_id = get_jwt_identity()
+    data = request.get_json()
+    settings = NotificationSettings.query.filter_by(user_id=user_id).first()
+    if not settings:
+        settings = NotificationSettings(user_id=user_id)
+        db.session.add(settings)
+    for field in ["email_announcements", "email_stokvel_updates", "push_announcements"]:
+        if field in data:
+            setattr(settings, field, data[field])
+    db.session.commit()
+    return jsonify({"message": "Communication preferences updated successfully"}), 200
+
+@app.route('/api/user/privacy', methods=['GET', 'OPTIONS'])
+@jwt_required()
+def get_privacy_settings():
+    user_id = get_jwt_identity()
+    prefs = UserPreferences.query.filter_by(user_id=user_id).first()
+    if not prefs:
+        prefs = UserPreferences(user_id=user_id)
+        db.session.add(prefs)
+        db.session.commit()
+    return jsonify({
+        "data_for_personalization": prefs.data_for_personalization,
+        "data_for_analytics": prefs.data_for_analytics,
+        "data_for_third_parties": prefs.data_for_third_parties,
+    })
+
+@app.route('/api/user/account', methods=['DELETE', 'OPTIONS'])
+@jwt_required()
+def delete_account():
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    data = request.get_json() or {}
+    password = data.get('password')
+
+    if not user or not user.check_password(password):
+        return jsonify({'error': 'Incorrect password'}), 401
+
+    db.session.delete(user)
+    db.session.commit()
+    return jsonify({'message': 'Account deleted successfully'})
+
+@app.route('/api/start', methods=['POST'])
 @jwt_required()
 def start_chat():
     user_id = get_jwt_identity()
@@ -1212,7 +1305,7 @@ def start_chat():
 
     return jsonify({"conversation_id": conversation.id}), 201
 
-@app.route('/message', methods=['POST'])
+@app.route('/api/message', methods=['POST'])
 @jwt_required()
 def send_message():
     user_id = get_jwt_identity()
@@ -1246,7 +1339,7 @@ def send_message():
                 "HTTP-Referer": os.getenv('FRONTEND_URL', 'http://localhost:3000'),
                 "X-Title": "Stokvel Assistant",
             },
-            model="meta-llama/llama-3.3-8b-instruct:free",
+            model="meta-llama/llama-3-8b-instruct",
             messages=messages,
             max_tokens=150
         )
@@ -1266,132 +1359,282 @@ def send_message():
             "conversation_id": conversation_id
         })
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
 
-# ===========================
-# ROUTES - USER PROFILE
-# ===========================
+@app.route('/api/chat', methods=['POST'])
+def chat():
+    data = request.get_json()
+    user_message = data.get('message')
+    if not user_message:
+        return jsonify({'error': 'No message provided'}), 400
 
-@app.route('/api/user/profile', methods=['GET'])
-@jwt_required()
-@token_required
-def get_profile(user):
     try:
-        return jsonify({
-            "name": user.name,
+        api_key = os.getenv('OPENROUTER_API_KEY')
+        if not api_key:
+            return jsonify({'error': 'OpenRouter API key not set'}), 500
+
+        payload = {
+            "model": "meta-llama/llama-3-8b-instruct",
+            "messages": [
+                {"role": "system", "content": about_us_text},
+                {"role": "user", "content": user_message}
+            ],
+            "max_tokens": 150
+        }
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        response = requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            json=payload,
+            headers=headers
+        )
+        if response.status_code != 200:
+            print("OpenRouter error:", response.text)
+            return jsonify({'error': f'OpenRouter error: {response.text}'}), 500
+
+        data = response.json()
+        answer = data['choices'][0]['message']['content']
+        return jsonify({'answer': answer})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+@app.errorhandler(Exception)
+def handle_error(error):
+    # Let Flask handle HTTP errors (like 404, 405, etc.) with its default pages
+    if isinstance(error, HTTPException):
+        return error
+
+    logger.error(f"Unhandled error: {str(error)}")
+    if isinstance(error, SQLAlchemyError):
+        db.session.rollback()
+        return jsonify({"error": "Database error occurred"}), 500
+    if isinstance(error, (ExpiredSignatureError, InvalidTokenError)):
+        return jsonify({"error": "Token has expired"}), 401
+    return jsonify({"error": "An unexpected error occurred"}), 500
+
+# -------------------- MAIN --------------------
+if __name__ == '__main__':
+    app.run(port=5001, debug=True)
+
+@event.listens_for(Engine, "connect")
+def connect(dbapi_connection, connection_record):
+    connection_record.info['pid'] = os.getpid()
+
+@event.listens_for(Engine, "checkout")
+def checkout(dbapi_connection, connection_record, connection_proxy):
+    pid = os.getpid()
+    if connection_record.info['pid'] != pid:
+        connection_record.info['pid'] = pid
+        connection_record.info['checked_out'] = time.time()
+
+@app.before_request
+def handle_options_requests():
+    if request.method == 'OPTIONS':
+        return '', 200
+
+@app.route('/api/user/security/2fa/start', methods=['POST'])
+@jwt_required()
+def start_2fa_setup():
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    data = request.get_json()
+    method = data.get('method', 'email')  # 'email' or 'sms'
+
+    # Generate OTP
+    otp_code = generate_otp()
+    expiry = datetime.utcnow() + timedelta(minutes=10)
+    otp = OTP(user_id=user.id, code=otp_code, expires_at=expiry)
+    db.session.add(otp)
+    db.session.commit()
+
+    # Send OTP
+    if method == 'sms':
+        send_verification_sms(user.phone, otp_code)
+    else:
+        send_verification_email(user.email, otp_code)
+
+    user.two_factor_method = method
+    db.session.commit()
+
+    return jsonify({'message': f'OTP sent via {method}.', 'method': method}), 200
+
+@app.route('/api/user/security/2fa/verify', methods=['POST'])
+@jwt_required()
+def verify_2fa_setup():
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    data = request.get_json()
+    otp_code = data.get('otp_code')
+
+    otp = OTP.query.filter_by(user_id=user.id, code=otp_code, is_used=False).order_by(OTP.created_at.desc()).first()
+    if not otp or not otp.is_valid():
+        return jsonify({'error': 'Invalid or expired OTP'}), 400
+
+    otp.is_used = True
+    user.two_factor_enabled = True
+    db.session.commit()
+    return jsonify({'message': 'Two-factor authentication enabled!'}), 200
+
+@app.route('/api/auth/verify-2fa-login', methods=['POST'])
+def verify_2fa_login():
+    data = request.get_json()
+    user_id = data.get('user_id')
+    otp_code = data.get('otp_code')
+    user = User.query.get(user_id)
+    otp = OTP.query.filter_by(user_id=user.id, code=otp_code, is_used=False).order_by(OTP.created_at.desc()).first()
+    if not otp or not otp.is_valid():
+        return jsonify({'error': 'Invalid or expired OTP'}), 400
+    otp.is_used = True
+    db.session.commit()
+    access_token = create_access_token(identity=str(user.id))
+    return jsonify({'message': '2FA login successful', 'access_token': access_token}), 200
+
+@app.route('/api/user/security/2fa/disable', methods=['POST'])
+@jwt_required()
+def disable_2fa():
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    data = request.get_json()
+    password = data.get('password')
+
+    if not user or not user.check_password(password):
+        return jsonify({'error': 'Incorrect password'}), 401
+
+    user.two_factor_enabled = False
+    db.session.commit()
+    return jsonify({'message': 'Two-factor authentication disabled!'}), 200
+
+@app.route('/api/user/session/<int:session_id>/logout', methods=['POST'])
+@jwt_required()
+def logout_session(session_id):
+    user_id = get_jwt_identity()
+    session = UserSession.query.filter_by(id=session_id, user_id=user_id, is_active=True).first()
+    if not session:
+        return jsonify({'error': 'Session not found'}), 404
+    session.is_active = False
+    db.session.commit()
+    return jsonify({'message': 'Session logged out successfully'})
+
+@app.route('/api/user/sessions', methods=['GET'])
+@jwt_required()
+def get_user_sessions():
+    user_id = get_jwt_identity()
+    sessions = UserSession.query.filter_by(user_id=user_id).order_by(UserSession.login_time.desc()).all()
+    return jsonify([
+        {
+            'id': s.id,
+            'user_agent': s.user_agent,
+            'ip_address': s.ip_address,
+            'login_time': s.login_time.isoformat(),
+            'last_activity': s.last_activity.isoformat(),
+            'is_active': s.is_active
+        }
+        for s in sessions
+    ])
+
+@app.route('/api/user/sessions/logout_all', methods=['POST'])
+@jwt_required()
+def logout_all_sessions():
+    user_id = get_jwt_identity()
+    current_user_agent = request.headers.get('User-Agent', '')
+    current_ip = request.remote_addr or ''
+    sessions = UserSession.query.filter_by(user_id=user_id, is_active=True).all()
+    for session in sessions:
+        # Keep the current session active, log out others
+        if session.user_agent != current_user_agent or session.ip_address != current_ip:
+            session.is_active = False
+    db.session.commit()
+    return jsonify({'message': 'Logged out from all other sessions.'})
+
+about_us_text = "You are a helpful assistant. Answer concisely in 1-3 sentences."
+
+@app.route("/api/auth/google", methods=["POST", "OPTIONS"])
+def google_login():
+    if request.method == "OPTIONS":
+        return '', 200
+    token = request.json.get("token")
+    logger.debug("Received Google token")  # Using your existing logger instead of print
+    
+    if not token:
+        return jsonify({"error": "Missing Google token"}), 400
+
+    try:
+        # Verify the Google token
+        idinfo = id_token.verify_oauth2_token(token, grequests.Request(), GOOGLE_CLIENT_ID)
+        
+        # Validate that the token is for your app
+        if idinfo['aud'] != GOOGLE_CLIENT_ID:
+            raise ValueError("Invalid client ID")
+
+        google_id = idinfo["sub"]
+        email = idinfo.get("email")
+        full_name = idinfo.get("name")
+        profile_picture = idinfo.get("picture")
+
+        # Check if user exists by email (since not all users may have google_id)
+        user = User.query.filter_by(email=email).first()
+        
+        if not user:
+            # Create new user with Google auth
+            user = User(
+                email=email,
+                full_name=full_name,
+                profile_picture=profile_picture,
+                is_verified=True,  # Google verified the email
+                google_id=google_id
+            )
+            db.session.add(user)
+            db.session.commit()
+        elif not user.google_id:
+            # Existing user without google_id - update it
+            user.google_id = google_id
+            if not user.profile_picture:
+                user.profile_picture = profile_picture
+            db.session.commit()
+
+        # Create JWT token (using your existing JWT setup)
+        access_token = create_access_token(identity=str(user.id))
+
+        # Track the login session
+        user_agent = request.headers.get('User-Agent', 'Unknown')
+        ip_address = request.remote_addr or 'Unknown'
+        session = UserSession(
+            user_id=user.id,
+            user_agent=user_agent,
+            ip_address=ip_address
+        )
+        db.session.add(session)
+        db.session.commit()
+
+        # Return user data in the same format as your regular login
+        user_data = {
+            "id": user.id,
+            "full_name": user.full_name,
             "email": user.email,
             "phone": user.phone,
-            "date_of_birth": user.date_of_birth.isoformat() if user.date_of_birth else None,
-            "gender": user.gender,
-            "employment_status": user.employment_status,
-            "registration_date": user.created_at.isoformat(),
             "role": user.role,
-            "two_factor_enabled": user.two_factor_enabled
-        }), 200
-    except Exception as e:
-        return handle_error(e, log_trace=True)
-
-@app.route('/api/user/profile', methods=['PUT', 'OPTIONS'])
-@jwt_required()
-@token_required
-def update_profile(user):
-    try:
-        data = request.get_json()
-        user.name = data.get('name', user.name)
-        user.email = data.get('email', user.email)
-        user.phone = data.get('phone', user.phone)
-        user.gender = data.get('gender', user.gender)
-        user.employment_status = data.get('employment_status', user.employment_status)
-        if 'date_of_birth' in data:
-            user.date_of_birth = datetime.fromisoformat(data['date_of_birth'])
-
-        db.session.commit()
-        return jsonify({"message": "Profile updated successfully"}), 200
-    except ValueError:
-        return jsonify({"error": "Invalid date format. Use YYYY-MM-DD."}), 400
-    except Exception as e:
-        return handle_error(e, log_trace=True)
-
-@app.route('/api/user/security/password', methods=['PUT', 'OPTIONS'])
-@jwt_required()
-@token_required
-def change_password(user):
-    try:
-        data = request.get_json()
-        if not all(k in data for k in ['current_password', 'new_password']):
-            return jsonify({"error": "Missing required fields"}), 400
-
-        if not verify_password(user.password_hash, data['current_password']):
-            return jsonify({"error": "Current password is incorrect"}), 401
-
-        update_password(user, data['new_password'])
-        db.session.commit()
-        return jsonify({"message": "Password changed successfully"}), 200
-    except Exception as e:
-        return handle_error(e, log_trace=True)
-
-@app.route('/api/user/security/2fa', methods=['POST', 'OPTIONS'])
-@jwt_required()
-@token_required
-def toggle_two_factor(user):
-    try:
-        user.two_factor_enabled = not user.two_factor_enabled
-        db.session.commit()
+            "profile_picture": user.profile_picture,
+            "is_verified": user.is_verified
+        }
+        
         return jsonify({
-            "message": "Two-factor authentication updated",
-            "two_factor_enabled": user.two_factor_enabled
+            "success": True,
+            "message": "Google login successful",
+            "access_token": access_token,
+            "user": user_data
         }), 200
-    except Exception as e:
-        return handle_error(e, log_trace=True)
 
-@app.route('/api/user/communication', methods=['GET', 'OPTIONS'])
-@jwt_required()
-@token_required
-def get_communication_preferences(user):
-    try:
-        return jsonify({
-            "email_announcements": user.email_announcements,
-            "email_stokvel_updates": user.email_stokvel_updates,
-            "push_announcements": user.push_announcements
-        }), 200
+    except ValueError as e:
+        logger.error(f"Google token validation failed: {str(e)}")
+        return jsonify({"error": "Invalid Google token", "details": str(e)}), 401
     except Exception as e:
-        return handle_error(e, log_trace=True)
+        db.session.rollback()
+        logger.error(f"Google login error: {str(e)}")
+        return jsonify({"error": "Server error during Google login"}), 500
 
-@app.route('/api/user/communication', methods=['PUT', 'OPTIONS'])
-@jwt_required()
-@token_required
-def update_communication_preferences(user):
-    try:
-        data = request.get_json()
-        for field in ["email_announcements", "email_stokvel_updates", "push_announcements"]:
-            if field in data:
-                setattr(user, field, data[field])
-
-        db.session.commit()
-        return jsonify({"message": "Communication preferences updated successfully"}), 200
-    except Exception as e:
-        return handle_error(e, log_trace=True)
-
-@app.route('/api/user/privacy', methods=['GET', 'OPTIONS'])
-@jwt_required()
-@token_required
-def get_privacy_settings(user):
-    try:
-        return jsonify({
-            "data_for_personalization": True,
-            "data_for_analytics": True,
-            "data_for_third_parties": False
-        }), 200
-    except Exception as e:
-        return handle_error(e, log_trace=True)
-
-@app.route('/api/user/account', methods=['DELETE', 'OPTIONS'])
-@jwt_required()
-@token_required
-def delete_account(user):
-    try:
-        db.session.delete(user)
-        db.session.commit()
-        return jsonify({"message": "Account deleted successfully"}), 200
-    except Exception as e:
-        return handle_error(e, log_trace=True)
