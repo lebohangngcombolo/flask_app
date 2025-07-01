@@ -1,5 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
+  darkMode: 'class',
   content: [
     "./src/**/*.{js,jsx,ts,tsx}",
   ],
@@ -23,10 +24,7 @@ module.exports = {
         'shake': 'shake 0.5s ease-in-out',
         'slide-out': 'slideOut 0.5s ease-in',
         'slide-up': 'slideUp 0.5s ease-out',
-<<<<<<< HEAD
         'spin': 'spin 1s linear infinite',
-=======
->>>>>>> origin/master
       },
       keyframes: {
         growTrunk: {
@@ -87,13 +85,10 @@ module.exports = {
           '0%': { transform: 'translateY(20px)', opacity: '0' },
           '100%': { transform: 'translateY(0)', opacity: '1' },
         },
-<<<<<<< HEAD
         spin: {
           from: { transform: 'rotate(0deg)' },
           to: { transform: 'rotate(360deg)' },
         },
-=======
->>>>>>> origin/master
       },
       colors: {
         'google-red': '#DB4437',
@@ -111,6 +106,12 @@ module.exports = {
           800: '#1e40af',
           900: '#1e3a8a',
         },
+        dark: {
+          background: '#1a202c',
+          text: '#e2e8f0',
+          card: '#2d3748',
+          border: '#4a5568',
+        }
       },
     },
   },

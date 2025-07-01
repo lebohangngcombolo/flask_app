@@ -1,35 +1,26 @@
 import React from 'react';
 
-interface ButtonProps {
-  children: React.ReactNode;
-  onClick?: () => void;
-  type?: 'button' | 'submit' | 'reset';
-  variant?: 'primary' | 'secondary';
-  className?: string;
-}
+type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: "primary" | "secondary" | "ghost";
+};
+
+const base =
+  "rounded-lg px-6 py-2 font-semibold transition-all duration-150 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-400";
+const variants = {
+  primary: "bg-indigo-600 text-white hover:bg-indigo-700",
+  secondary: "bg-white border border-indigo-600 text-indigo-600 hover:bg-indigo-50",
+  ghost: "bg-transparent text-indigo-600 hover:bg-indigo-100",
+};
 
 const Button: React.FC<ButtonProps> = ({
   children,
-  onClick,
-  type = 'button',
-  variant = 'primary',
-  className = '',
-}) => {
-  const baseStyles = 'px-6 py-2 rounded-lg font-medium transition-all duration-200 shadow-sm';
-  const variantStyles = {
-    primary: 'bg-blue-600 text-white hover:bg-blue-700',
-    secondary: 'bg-gray-200 text-gray-800 hover:bg-gray-300',
-  };
-
-  return (
-    <button
-      type={type}
-      onClick={onClick}
-      className={`${baseStyles} ${variantStyles[variant]} ${className}`}
-    >
-      {children}
-    </button>
-  );
-};
+  variant = "primary",
+  className = "",
+  ...props
+}) => (
+  <button className={`${base} ${variants[variant]} ${className}`} {...props}>
+    {children}
+  </button>
+);
 
 export default Button; 

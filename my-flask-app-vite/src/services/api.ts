@@ -1,5 +1,4 @@
 import axios from 'axios';
-import api from '../services/api';
 
 // Create an axios instance with default config
 const api = axios.create({
@@ -25,11 +24,18 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Response interceptor: Optional, for logging or error handling
+// Response interceptor: Handle verification errors
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    // Optionally log or handle errors here
+    // SECURITY FIX: Handle verification errors
+    if (error.response?.status === 403 && 
+        error.response?.data?.error?.includes('verify your email')) {
+      // Clear authentication data and redirect to login
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = '/login';
+    }
     return Promise.reject(error);
   }
 );
@@ -43,7 +49,7 @@ export const authAPI = {
     api.post('/api/verify-email', { email, verification_code: verificationCode }),
   resendVerificationCode: (email: string) => api.post('/api/resend-verification', { email }),
   verifyPhone: (phone: string, verificationCode: string) => 
-    api.post('/api/auth/verify-phone', { phone, verification_code: verificationCode }),
+    api.post('/api/auth/verify', { phone, otp_code: verificationCode }),
   resendSmsVerificationCode: (phone: string) => api.post('/api/auth/resend-sms', { phone })
 };
 
@@ -88,7 +94,13 @@ export const stokvelAPI = {
 export const adminAPI = {
   getStats: () => api.get('/api/dashboard/stats'),
   getGroups: () => api.get('/api/admin/groups'),
-  createGroup: (data: any) => api.post('/api/admin/groups', data)
+  createGroup: (data: any) => api.post('/api/admin/groups', data),
+  updateGroup: (id: number, data: any) => api.put(`/api/admin/groups/${id}`, data),
+  deleteGroup: (id: number) => api.delete(`/api/admin/groups/${id}`),
+  getJoinRequests: () => api.get('/api/admin/join-requests'),
+  approveJoinRequest: (id: number) => api.post(`/api/admin/join-requests/${id}/approve`),
+  deleteJoinRequests: (ids: number[]) => api.post('/api/admin/join-requests/bulk-delete', { ids }),
+  rejectJoinRequest: (id: number, data: { reason: string }) => api.post(`/api/admin/join-requests/${id}/reject`, data),
 };
 
 // Dashboard API calls
@@ -130,6 +142,13 @@ export const marketplaceAPI = {
 export const newsAPI = {
   getNews: () => api.get('/api/news'),
   getNewsArticle: (id: number) => api.get(`/api/news/${id}`),
+};
+
+// Referral & Rewards API
+export const referralAPI = {
+  getReferralDetails: () => api.get('/api/user/referral-details'),
+  getRewardsCatalog: () => api.get('/api/user/points/rewards'),
+  redeemReward: (reward_key: string) => api.post('/api/user/points/redeem', { reward_key }),
 };
 
 export default api; 

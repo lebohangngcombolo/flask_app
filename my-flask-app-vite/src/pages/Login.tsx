@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { login } from '../utils/auth';
 import PageTransition from '../components/PageTransition';
-import GoogleAuthButton from '../components/GoogleAuthButton';
 import { toast } from 'react-hot-toast';
 import api from '../services/api';
 
@@ -221,8 +220,6 @@ const Login: React.FC = () => {
             </div>
 
             <div className="space-y-3">
-            <GoogleAuthButton />
-              
               <button
                 type="button"
                 className="w-full flex items-center justify-center gap-2 bg-white text-gray-700 border border-gray-300 py-2 px-4 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 text-sm"
@@ -242,6 +239,14 @@ const Login: React.FC = () => {
               </Link>
             </div>
           </form>
+
+          <div className="flex items-center my-4">
+            <div className="flex-grow border-t border-gray-300"></div>
+            <span className="mx-2 text-gray-400">or</span>
+            <div className="flex-grow border-t border-gray-300"></div>
+          </div>
+
+          {/* <GoogleLoginButton /> */}
         </div>
       </div>
 

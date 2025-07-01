@@ -41,13 +41,16 @@ export const groupService = {
     return response.data;
   },
 
-  joinGroup: async (groupCode: string): Promise<{ message: string; group: Group }> => {
-    const response = await api.post('/api/stokvel/join-group', { group_code: groupCode });
-    return response.data;
+  joinGroup: async (tierId: number) => {
+    return api.post('/api/groups/join', { tierId });
   },
 
   getUserGroups: async (): Promise<Group[]> => {
     const response = await api.get('/api/dashboard/stats');
     return response.data.activeGroups;
-  }
+  },
+
+  getAvailableGroups: () => api.get('/api/groups/available')
 };
+
+export const getAvailableGroups = () => api.get('/api/groups/available');

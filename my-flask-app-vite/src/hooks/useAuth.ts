@@ -1,12 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getCurrentUser, logout as authLogout, isAuthenticated } from '../utils/auth';
+import { authAPI } from '../services/api';
 
 interface User {
   id?: string;
   name?: string;
   email?: string;
   role?: string;
+  is_verified?: boolean;
   // Add other user properties as needed
 }
 
@@ -18,8 +20,15 @@ export const useAuth = () => {
   const fetchUser = useCallback(async () => {
     try {
       if (isAuthenticated()) {
-        const currentUser = getCurrentUser();
-        setUser(currentUser);
+        // Fetch from backend
+        const response = await authAPI.getCurrentUser();
+        const user = response.data;
+        const mappedUser = {
+          ...user,
+          profilePicture: user.profile_picture,
+        };
+        setUser(mappedUser);
+        localStorage.setItem('user', JSON.stringify(mappedUser));
       } else {
         setUser(null);
       }
@@ -43,7 +52,7 @@ export const useAuth = () => {
   return {
     user,
     loading,
-    isAuthenticated: !!user,
+    isAuthenticated: !!user && user.is_verified,
     fetchUser,
     logout
   };

@@ -20,15 +20,28 @@ import Programs from './pages/Programs';
 import DigitalWallet from './pages/DigitalWallet';
 import PhoneAuth from './pages/PhoneAuth';
 import KYCPage from './pages/KYC';
-import { getCurrentUser as getCurrentUserService } from './services/auth';
+import { getCurrentUser as getCurrentUserService } from './utils/auth';
 import DashboardLayout from './components/DashboardLayout';
 import { Toaster } from 'react-hot-toast';
+import GroupAdminManagement from './pages/GroupAdminManagement';
+import StokvelGroups from './pages/StokvelGroups';
+import { ThemeProvider } from 'next-themes';
+import KYCManagement from './pages/KYCManagement';
+import AdminLayout from "./components/AdminLayout";
+import ReferralHistory from './pages/ReferralHistory';
+import ReferralDashboard from './pages/ReferralDashboard';
 
 const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
   
   if (!isAuthenticated()) {
     // Redirect to login but save the attempted url
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+  
+  // SECURITY FIX: Additional check for verification status
+  const user = getCurrentUser();
+  if (!user || !user.is_verified) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
   
@@ -97,7 +110,7 @@ const App: React.FC = () => {
   }
 
   return (
-    <>
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
       <Toaster position="top-center" reverseOrder={false} />
       <Router>
         {/* ChatBot is placed outside of Routes so it's always visible */}
@@ -121,15 +134,22 @@ const App: React.FC = () => {
             <Route path="digital-wallet" element={<DigitalWallet />} />
             <Route path="kyc" element={<KYCPage />} />
             <Route path="marketplace" element={<Marketplace />} />
+            <Route path="stokvel-groups" element={<StokvelGroups />} />
+            <Route path="refer" element={<ReferralDashboard />} />
+            <Route path="referral-history" element={<ReferralHistory />} />
             {/* Add more dashboard sub-pages here if needed */}
           </Route>
 
-          {/* Admin routes */}
-          <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
-          <Route path="/admin/dashboard" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
-          <Route path="/admin/users" element={<AdminRoute><UserManagement /></AdminRoute>} />
-          <Route path="/admin/stokvels" element={<AdminRoute><StokvelManagement /></AdminRoute>} />
-
+          {/* Admin routes - ONLY NESTED UNDER /admin */}
+          <Route path="/admin" element={<AdminLayout />}>
+            <Route path="dashboard" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+            <Route path="kyc-management" element={<KYCManagement />} />
+            <Route path="groups" element={<GroupAdminManagement />} />
+            <Route path="group-admin-management" element={<GroupAdminManagement />} />
+            <Route path="users" element={<UserManagement />} />
+            <Route path="stokvels" element={<StokvelManagement />} />
+          </Route>
+          
           {/* Phone Auth route */}
           <Route path="/phone-auth" element={<PhoneAuth />} />
 
@@ -137,7 +157,7 @@ const App: React.FC = () => {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Router>
-    </>
+    </ThemeProvider>
   );
 };
 

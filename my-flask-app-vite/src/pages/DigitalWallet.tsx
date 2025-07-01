@@ -1,505 +1,515 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from "react";
 import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler
-} from 'chart.js';
-import { Line } from 'react-chartjs-2';
-import { useAuth } from '../hooks/useAuth';
-import api from '../services/api';
+  getWalletBalance,
+  getTransactions,
+  getCards,
+  addCard,
+  deleteCard,
+  makeDeposit,
+  makeTransfer,
+  Card,
+  Transaction,
+  updateCard,
+} from "../services/walletService";
+import { toast } from "react-toastify";
+import { Plus, CreditCard, Send, Trash2, Loader2 } from "lucide-react";
+import AddCardModal from "../components/AddCardModal";
+import DepositModal from "../components/DepositModal";
+import TransferModal from "../components/TransferModal";
 
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler
+const Spinner = ({ className = "h-5 w-5" }) => (
+  <svg className={`animate-spin ${className}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+  </svg>
 );
 
+// Add this mapping for card icons (update paths as needed)
+const cardTypeIcons: Record<string, string> = {
+  visa: "/icons/visa.svg",
+  mastercard: "/icons/mastercard.svg",
+  amex: "/icons/amex.svg",
+  unknown: "/icons/unknown.svg",
+};
+
+const maskCardNumber = (num: string) => {
+  const digits = num.replace(/\D/g, "");
+  if (digits.length < 4) return "••••";
+  return "•••• •••• •••• " + digits.slice(-4);
+};
+
 const DigitalWallet: React.FC = () => {
-  const { user } = useAuth();
-  const [selectedPeriod, setSelectedPeriod] = useState<'weekly' | 'monthly' | 'yearly'>('weekly');
-  const [activeTab, setActiveTab] = useState<'marketplace' | 'history' | 'payment'>('marketplace');
-  const [isConnecting, setIsConnecting] = useState(false);
-  const [walletData, setWalletData] = useState<any>(null);
+  // State
+  const [balance, setBalance] = useState<number | null>(null);
+  const [currency, setCurrency] = useState<string>("ZAR");
   const [loading, setLoading] = useState(true);
-  
+
+  // Cards
+  const [cards, setCards] = useState<Card[]>([]);
+  const [cardsLoading, setCardsLoading] = useState(false);
+
+  // Transactions
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [txLoading, setTxLoading] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pages, setPages] = useState(1);
+
+  // Modals
+  const [showDeposit, setShowDeposit] = useState(false);
+  const [showTransfer, setShowTransfer] = useState(false);
+  const [showAddCard, setShowAddCard] = useState(false);
+
+  // Deposit form
+  const [depositAmount, setDepositAmount] = useState("");
+  const [depositCard, setDepositCard] = useState("");
+  const [depositLoading, setDepositLoading] = useState(false);
+
+  // Transfer form
+  const [transferAmount, setTransferAmount] = useState("");
+  const [recipientEmail, setRecipientEmail] = useState("");
+  const [transferDesc, setTransferDesc] = useState("");
+  const [transferLoading, setTransferLoading] = useState(false);
+
+  // Card form
+  const [cardForm, setCardForm] = useState({
+    card_number: "",
+    card_holder: "",
+    expiry_date: "",
+    cvv: "",
+    card_type: "visa",
+  });
+  const [addCardLoading, setAddCardLoading] = useState(false);
+
+  // Summary
+  const [summary, setSummary] = useState({ totalDeposits: 0, totalTransfers: 0 });
+
+  // Transfer modal
+  const [open, setOpen] = useState(false);
+  const [walletBalance, setWalletBalance] = useState(0.0);
+
+  // Example beneficiaries (replace with your real data or state)
+  const beneficiaries = [
+    { id: "1", name: "Ayanda M.", account: "1234567890" },
+    { id: "2", name: "Bongiwe N.", account: "0987654321" },
+  ];
+
+  // Additional state for editing
+  const [editingCard, setEditingCard] = useState<Card | null>(null);
+
+  // Additional state for deleting
+  const [cardToDelete, setCardToDelete] = useState<Card | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  // Fetch wallet balance
   useEffect(() => {
-    const fetchWallet = async () => {
-      try {
-        const res = await api.get('/api/wallet');
-        setWalletData(res.data);
-      } catch (err) {
-        // Handle error
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchWallet();
+    setLoading(true);
+    getWalletBalance()
+      .then((data) => {
+        setBalance(data.balance);
+        setCurrency(data.currency);
+        setWalletBalance(data.balance);
+      })
+      .catch(() => toast.error("Failed to load balance"))
+      .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div>Loading...</div>;
-  if (!walletData) return <div>No wallet data found.</div>;
+  // Fetch cards
+  useEffect(() => {
+    setCardsLoading(true);
+    getCards()
+      .then(setCards)
+      .catch(() => toast.error("Failed to load cards"))
+      .finally(() => setCardsLoading(false));
+  }, []);
 
-  // Chart data configuration
-  const chartData = {
-    weekly: {
-      labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-      earning: [1200, 1900, 1500, 2100, 1800, 2300, 2100],
-      spending: [800, 1200, 900, 1500, 1100, 1800, 1400]
-    },
-    monthly: {
-      labels: ['Week 1', 'Week 2', 'Week 3', 'Week 4'],
-      earning: [8500, 9200, 8800, 9100],
-      spending: [5200, 5800, 5100, 5400]
-    },
-    yearly: {
-      labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
-      earning: [85000, 92000, 88000, 91000, 95000, 89000, 92000, 94000, 91000, 93000, 96000, 98000],
-      spending: [52000, 58000, 51000, 54000, 56000, 53000, 55000, 57000, 54000, 56000, 58000, 59000]
+  // Fetch transactions
+  useEffect(() => {
+    setTxLoading(true);
+    getTransactions(page, 10)
+      .then((data) => {
+        setTransactions(Array.isArray(data.transactions) ? data.transactions : []);
+        setPages(data.pages || 1);
+      })
+      .catch(() => toast.error("Failed to load transactions"))
+      .finally(() => setTxLoading(false));
+  }, [page]);
+
+  // Calculate summary
+  useEffect(() => {
+    const deposits = transactions.filter(tx => tx.transaction_type === "deposit" && tx.status === "completed")
+      .reduce((sum, tx) => sum + tx.amount, 0);
+    const transfers = transactions.filter(tx => tx.transaction_type === "transfer" && tx.status === "completed")
+      .reduce((sum, tx) => sum + tx.amount, 0);
+    setSummary({ totalDeposits: deposits, totalTransfers: transfers });
+  }, [transactions]);
+
+  // Deposit handler
+  const handleDeposit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setDepositLoading(true);
+    try {
+      const res = await makeDeposit({
+        amount: Number(depositAmount),
+        card_id: Number(depositCard),
+      });
+      toast.success(res.message);
+      setBalance(res.new_balance);
+      setShowDeposit(false);
+      setDepositAmount("");
+      setDepositCard("");
+      setPage(1);
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || "Deposit failed");
+    } finally {
+      setDepositLoading(false);
     }
   };
 
-  const chartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        display: false
-      },
-      tooltip: {
-        enabled: true,
-        mode: 'index',
-        intersect: false,
-      }
-    },
-    scales: {
-      x: {
-        grid: {
-          display: false
-        },
-        ticks: {
-          color: '#6B7280'
-        }
-      },
-      y: {
-        grid: {
-          color: '#E5E7EB',
-          drawBorder: false
-        },
-        ticks: {
-          color: '#6B7280',
-          callback: (value: number) => `R${value.toLocaleString()}`
-        }
-      }
-    },
-    elements: {
-      line: {
-        tension: 0.4
-      },
-      point: {
-        radius: 0
-      }
+  // Transfer handler
+  const handleTransfer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setTransferLoading(true);
+    try {
+      const res = await makeTransfer({
+        amount: Number(transferAmount),
+        recipient_email: recipientEmail,
+        description: transferDesc,
+      });
+      toast.success(res.message);
+      setBalance(res.new_balance);
+      setShowTransfer(false);
+      setTransferAmount("");
+      setRecipientEmail("");
+      setTransferDesc("");
+      setPage(1);
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || "Transfer failed");
+    } finally {
+      setTransferLoading(false);
     }
   };
 
-  const data = {
-    labels: chartData[selectedPeriod].labels,
-    datasets: [
-      {
-        label: 'Earning',
-        data: chartData[selectedPeriod].earning,
-        borderColor: '#3B82F6',
-        backgroundColor: 'rgba(59, 130, 246, 0.1)',
-        fill: true,
-        borderWidth: 2
-      },
-      {
-        label: 'Spending',
-        data: chartData[selectedPeriod].spending,
-        borderColor: '#EC4899',
-        backgroundColor: 'rgba(236, 72, 153, 0.1)',
-        fill: true,
-        borderWidth: 2
-      }
-    ]
+  // Add card handler
+  const handleAddCard = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAddCardLoading(true);
+    try {
+      await addCard(cardForm);
+      toast.success("Card added!");
+      setShowAddCard(false);
+      setCardForm({
+        card_number: "",
+        card_holder: "",
+        expiry_date: "",
+        cvv: "",
+        card_type: "visa",
+      });
+      setCardsLoading(true);
+      const res = await getCards();
+      setCards(res);
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || "Failed to add card");
+    } finally {
+      setAddCardLoading(false);
+      setCardsLoading(false);
+    }
   };
 
+  // Delete card handler
+  const handleDeleteCard = async (id: number) => {
+    if (!window.confirm("Are you sure you want to delete this card?")) return;
+    try {
+      await deleteCard(id);
+      toast.success("Card deleted");
+      setCards(cards.filter((c) => c.id !== id));
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || "Failed to delete card");
+    }
+  };
+
+  // Set default card (requires backend/service implementation)
+  const handleSetDefaultCard = async (id: number) => {
+    // await setDefaultCard(id);
+    // toast.success("Default card set!");
+    // setCards(cards.map(card => ({ ...card, is_default: card.id === id })));
+    toast.info("Set default card functionality not yet implemented.");
+  };
+
+  // Find default card for deposit modal
+  const defaultCardId = cards.find(card => card.is_default)?.id?.toString() || "";
+
+  // Additional handler for editing
+  const handleEditCard = (card: Card) => setEditingCard(card);
+
+  // UI
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-100 via-green-100 to-yellow-100 p-6">
-      <div className="container mx-auto px-4 py-6">
-        <h1 className="text-3xl font-bold text-gray-900 mb-6">Digital Wallet</h1>
-        <div className="max-w-5xl mx-auto p-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* LEFT COLUMN */}
-            <div className="flex flex-col gap-6">
-              {/* Earning & Spending */}
-          <div className="bg-white rounded-3xl shadow-lg p-6 flex flex-col gap-6">
-            <div className="flex gap-4">
-              <div className="flex-1 bg-blue-50 rounded-xl p-4">
-                <p className="text-gray-500">Earning</p>
-                <p className="text-2xl font-bold text-blue-700">R{walletData.earning.toLocaleString()}</p>
-                <p className="text-xs text-blue-400 mt-1">{walletData.earningChange}</p>
-              </div>
-              <div className="flex-1 bg-pink-50 rounded-xl p-4">
-                <p className="text-gray-500">Spending</p>
-                <p className="text-2xl font-bold text-pink-700">R{walletData.spending.toLocaleString()}</p>
-                <p className="text-xs text-pink-400 mt-1">{walletData.spendingChange}</p>
-              </div>
+    <div className="min-h-screen bg-gray-100 dark:bg-dark-background py-10 px-4 transition-colors">
+      <div className="max-w-4xl mx-auto space-y-8">
+        {/* Wallet Overview */}
+        <div className="backdrop-blur-md bg-white/70 border border-blue-100 rounded-2xl shadow-2xl p-8 flex flex-col md:flex-row items-center justify-between transition-all">
+          <div>
+            <div className="text-gray-500 text-sm">Wallet Balance</div>
+            <div className="text-4xl font-extrabold text-blue-700 tracking-tight">
+              {loading ? <Spinner /> : `ZAR ${(balance ?? 0).toFixed(2)}`}
             </div>
-                {/* Statistic */}
-            <div>
-              <div className="flex justify-between items-center mb-4">
-                <p className="font-semibold">Statistic</p>
-                <div className="flex gap-2">
-                  <button 
-                    onClick={() => setSelectedPeriod('weekly')}
-                    className={`px-3 py-1 rounded-lg text-sm ${
-                      selectedPeriod === 'weekly' 
-                        ? 'bg-blue-500 text-white' 
-                        : 'bg-gray-100 text-gray-600'
-                    }`}
-                  >
-                    Weekly
-                  </button>
-                  <button 
-                    onClick={() => setSelectedPeriod('monthly')}
-                    className={`px-3 py-1 rounded-lg text-sm ${
-                      selectedPeriod === 'monthly' 
-                        ? 'bg-blue-500 text-white' 
-                        : 'bg-gray-100 text-gray-600'
-                    }`}
-                  >
-                    Monthly
-                  </button>
-                  <button 
-                    onClick={() => setSelectedPeriod('yearly')}
-                    className={`px-3 py-1 rounded-lg text-sm ${
-                      selectedPeriod === 'yearly' 
-                        ? 'bg-blue-500 text-white' 
-                        : 'bg-gray-100 text-gray-600'
-                    }`}
-                  >
-                    Yearly
-                  </button>
-                </div>
-              </div>
-              <div className="bg-white rounded-xl p-4">
-                <div className="flex justify-between items-center mb-4">
-                  <div>
-                    <p className="text-gray-500 text-sm">Earning</p>
-                    <p className="text-xl font-bold text-blue-700">
-                      R{walletData.statistics[selectedPeriod].earning.toLocaleString()}
-                    </p>
-                  </div>
-              <div>
-                    <p className="text-gray-500 text-sm">Spending</p>
-                    <p className="text-xl font-bold text-pink-700">
-                      R{walletData.statistics[selectedPeriod].spending.toLocaleString()}
-                    </p>
-                  </div>
-                </div>
-                <div className="h-64">
-                  <Line data={data} options={chartOptions} />
-                </div>
-                <div className="mt-4 flex justify-between items-center">
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-                    <span className="text-sm text-gray-600">Earning</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-pink-500"></div>
-                    <span className="text-sm text-gray-600">Spending</span>
-                  </div>
-                  <div className="text-sm text-blue-500 font-medium">
-                    {walletData.statistics[selectedPeriod].change}
-                  </div>
-                </div>
-              </div>
-            </div>
-            {/* Monthly Payment */}
-            <div>
-              <p className="font-semibold mb-2">Monthly payment</p>
-              <div className="flex flex-col gap-2">
-                {walletData.monthlyPayments.map((pay) => (
-                  <div key={pay.id} className="flex justify-between items-center bg-gray-50 rounded-lg p-3">
-                    <span>{pay.name}</span>
-                    <span className="font-bold">R{pay.amount.toFixed(2)}</span>
-                    <button className="bg-blue-500 text-white px-3 py-1 rounded-lg text-xs">Pay now</button>
-                  </div>
-                ))}
-              </div>
+            <div className="text-xs text-gray-400 mt-1">
+              <span>Total Deposits: ZAR {summary.totalDeposits.toFixed(2)}</span> |{" "}
+              <span>Total Transfers: ZAR {summary.totalTransfers.toFixed(2)}</span>
             </div>
           </div>
+          <div className="flex gap-3 mt-4 md:mt-0">
+            <button
+              className="btn-primary flex items-center gap-2 shadow hover:scale-105 transition"
+              onClick={() => setShowDeposit(true)}
+            >
+              <Plus className="w-4 h-4" /> Deposit
+            </button>
+            <button
+              className="btn-secondary flex items-center gap-2 shadow hover:scale-105 transition"
+              onClick={() => setOpen(true)}
+            >
+              <Send className="w-4 h-4" /> Transfer
+            </button>
+          </div>
+        </div>
+
+        {/* Cards Section */}
+        <div className="backdrop-blur-md bg-white/70 border border-indigo-100 rounded-2xl shadow-xl p-8">
+          <div className="flex justify-between items-center mb-4">
+            <div className="font-semibold text-lg">
+              My Cards <span className="text-xs text-gray-400">({cards.length})</span>
             </div>
-            {/* MIDDLE COLUMN */}
-            <div className="flex flex-col gap-6">
-          <div className="bg-gradient-to-br from-blue-400 via-pink-300 to-yellow-200 rounded-3xl shadow-xl p-6 flex flex-col gap-6">
-            {/* Card */}
-            <div className="bg-white bg-opacity-30 rounded-2xl p-6 shadow-lg relative">
-              <div className="absolute top-4 right-4 text-gray-400">Visa</div>
-              <p className="text-lg text-white font-semibold">Card balance</p>
-              <p className="text-3xl font-bold text-white">R{walletData.balance.toLocaleString()}</p>
-              <p className="text-white mt-4 tracking-widest">{walletData.cardNumber}</p>
-              <div className="flex justify-between text-white text-xs mt-2">
-                <span>{walletData.cardExpiry}</span>
-                <span>{walletData.cardHolder}</span>
-              </div>
+            <button
+              className="btn-outline flex items-center gap-2 hover:bg-indigo-50 transition"
+              onClick={() => setShowAddCard(true)}
+            >
+              <CreditCard className="w-4 h-4" /> Add Card
+            </button>
+          </div>
+          {cardsLoading ? (
+            <div className="flex justify-center py-6"><Spinner /></div>
+          ) : cards.length === 0 ? (
+            <div className="flex flex-col items-center py-8 text-gray-400">
+              <CreditCard className="w-10 h-10 mb-2" />
+              <span>No cards added yet.</span>
             </div>
-            {/* Card Info */}
-            <div className="bg-white rounded-xl p-4">
-              <div className="flex justify-between items-center mb-4">
-                <p className="font-semibold">Card information</p>
-                <button className="text-blue-500 text-sm">Edit</button>
-              </div>
-              <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">Name:</span>
-                  <span className="font-medium">{walletData.cardHolder}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">Card No:</span>
-                  <span className="font-medium">{walletData.cardNumber.slice(-4)}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">Valid until:</span>
-                  <span className="font-medium">{walletData.cardExpiry}</span>
-                </div>
-              </div>
-            </div>
-            {/* Tabs */}
-            <div className="flex gap-2">
-              <button 
-                onClick={() => setActiveTab('marketplace')}
-                className={`flex-1 px-3 py-1.5 rounded-lg text-sm ${
-                  activeTab === 'marketplace' 
-                    ? 'bg-blue-500 text-white' 
-                    : 'bg-white bg-opacity-20 text-white'
-                } font-medium`}
-              >
-                Marketplace
-              </button>
-              <button 
-                onClick={() => setActiveTab('history')}
-                className={`flex-1 px-3 py-1.5 rounded-lg text-sm ${
-                  activeTab === 'history' 
-                    ? 'bg-blue-500 text-white' 
-                    : 'bg-white bg-opacity-20 text-white'
-                } font-medium`}
-              >
-                History
-              </button>
-              <button 
-                onClick={() => setActiveTab('payment')}
-                className={`flex-1 px-3 py-1.5 rounded-lg text-sm ${
-                  activeTab === 'payment' 
-                    ? 'bg-blue-500 text-white' 
-                    : 'bg-white bg-opacity-20 text-white'
-                } font-medium`}
-              >
-                Payment
-              </button>
-            </div>
-            {/* Tab Content */}
-            {activeTab === 'marketplace' && (
-              <div className="space-y-2">
-                    {walletData.marketplaces.map((marketplace) => (
-                      <div 
-                        key={marketplace.id}
-                        className="bg-white bg-opacity-30 rounded-xl p-3 flex items-center justify-between cursor-pointer hover:bg-opacity-40 transition-all"
-                      >
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-white flex items-center justify-center">
-                      <img 
-                              src={marketplace.logo} 
-                              alt={marketplace.name} 
-                        className="w-8 h-8 object-contain"
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {cards.map(card => (
+                <div
+                  key={card.id}
+                  className="relative w-full max-w-sm mx-auto my-6 rounded-2xl shadow-xl overflow-hidden group transition-transform hover:scale-105"
+                  style={{
+                    background: "linear-gradient(135deg, #23295A 60%, #3B4CCA 100%)",
+                    minHeight: 180,
+                    border: "1.5px solid #e0e7ff",
+                  }}
+                >
+                  {/* Edit/Delete buttons */}
+                  <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-20">
+                    <button
+                      className="bg-white/80 hover:bg-blue-100 rounded-full p-2 shadow"
+                      onClick={() => handleEditCard(card)}
+                      title="Edit Card"
+                    >
+                      <svg className="w-5 h-5 text-blue-700" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <path d="M15.232 5.232l3.536 3.536M9 13l6-6 3 3-6 6H9v-3z" />
+                      </svg>
+                    </button>
+                    <button
+                      className="bg-white/80 hover:bg-red-100 rounded-full p-2 shadow"
+                      onClick={() => setCardToDelete(card)}
+                      title="Delete Card"
+                    >
+                      <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <path d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                  {/* Card chip */}
+                  <div className="absolute left-6 top-12 w-10 h-7 bg-yellow-400 rounded-md shadow-inner opacity-80"></div>
+                  {/* Card details */}
+                  <div className="relative z-10 w-full h-full flex flex-col justify-between p-6 text-white">
+                    <div>
+                      <span className="font-semibold text-lg tracking-wide block mb-2">{card.cardholder || card.card_holder}</span>
+                      <span className="font-mono text-2xl tracking-widest select-none block mb-6 mt-8">
+                        {maskCardNumber(card.card_number)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-end">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm tracking-wider">Exp: {card.expiry || card.expiry_date}</span>
+                        {card.is_primary && (
+                          <span className="bg-white/30 text-white px-2 py-0.5 rounded-full text-xs font-semibold tracking-wide shadow ml-2">
+                            Primary
+                          </span>
+                        )}
+                      </div>
+                      <img
+                        src={
+                          (card.card_type || "").toLowerCase() === "mastercard"
+                            ? "/icons/mastercard-svgrepo-com.svg"
+                            : (card.card_type || "").toLowerCase() === "visa"
+                            ? "/icons/visa-svgrepo-com.svg"
+                            : "/icons/visa-svgrepo-com.svg"
+                        }
+                        alt="Card brand"
+                        className="w-12 h-8 object-contain ml-2"
+                        style={{ background: "rgba(255,255,255,0.15)", borderRadius: "0.5rem", padding: "0.25rem" }}
                       />
                     </div>
-                    <div>
-                            <p className="font-medium text-white">{marketplace.name}</p>
-                            <p className="text-xs text-white text-opacity-70">{marketplace.category}</p>
-                    </div>
-                  </div>
-                  <button 
-                    onClick={() => setIsConnecting(true)}
-                    className="px-3 py-1 bg-white bg-opacity-20 rounded-lg text-white text-sm hover:bg-opacity-30"
-                  >
-                    Connect
-                  </button>
-                </div>
-                    ))}
-              </div>
-            )}
-            {activeTab === 'history' && (
-              <div className="space-y-2">
-                {walletData.transactions.map((transaction) => (
-                  <div 
-                    key={transaction.id}
-                    className="bg-white bg-opacity-30 rounded-xl p-3 flex items-center justify-between"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                        transaction.type === 'credit' ? 'bg-green-500' : 'bg-red-500'
-                      }`}>
-                        <span className="text-white text-sm">
-                          {transaction.type === 'credit' ? '+' : '-'}
-                        </span>
-                      </div>
-                      <div>
-                        <p className="font-medium text-white text-sm">{transaction.description}</p>
-                        <p className="text-xs text-white text-opacity-70">{transaction.date}</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className={`font-medium text-sm ${
-                        transaction.type === 'credit' ? 'text-green-500' : 'text-red-500'
-                      }`}>
-                        R{transaction.amount.toLocaleString()}
-                      </p>
-                      <p className="text-xs text-white text-opacity-70">{transaction.status}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-            {activeTab === 'payment' && (
-              <div className="space-y-4">
-                {walletData.monthlyPayments.map((payment) => (
-                  <div 
-                    key={payment.id}
-                    className="bg-white bg-opacity-30 rounded-xl p-4"
-                  >
-                    <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <p className="font-medium text-white text-lg">{payment.name}</p>
-                        <p className="text-sm text-white text-opacity-70">Due: {payment.dueDate}</p>
-                      </div>
-                      <p className="font-bold text-white text-xl">R{payment.amount.toLocaleString()}</p>
-                    </div>
-                    <div className="flex justify-end">
-                      <button className="px-4 py-2 bg-white bg-opacity-20 rounded-lg text-white text-sm hover:bg-opacity-30 transition-all">
-                        Pay Now
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-            {/* Connection Modal */}
-            {isConnecting && (
-              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                <div className="bg-white rounded-2xl p-6 w-96">
-                  <h3 className="text-xl font-bold mb-4">Connect Card</h3>
-                  <p className="text-gray-600 mb-4">Enter your card details to connect with the marketplace</p>
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Card Number</label>
-                      <input 
-                        type="text" 
-                        className="w-full p-2 border rounded-lg"
-                        placeholder="**** **** **** ****"
-                      />
-                    </div>
-                    <div className="flex gap-4">
-                      <div className="flex-1">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Expiry Date</label>
-                        <input 
-                          type="text" 
-                          className="w-full p-2 border rounded-lg"
-                          placeholder="MM/YY"
-                        />
-                      </div>
-                      <div className="flex-1">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">CVV</label>
-                        <input 
-                          type="text" 
-                          className="w-full p-2 border rounded-lg"
-                          placeholder="***"
-                        />
-                      </div>
-        </div>
-                    <div className="flex gap-3 mt-6">
-                      <button 
-                        onClick={() => setIsConnecting(false)}
-                        className="flex-1 px-4 py-2 border rounded-lg text-gray-700 hover:bg-gray-50"
-                      >
-                        Cancel
-                      </button>
-                      <button 
-                        onClick={() => setIsConnecting(false)}
-                        className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
-                      >
-                        Connect
-                      </button>
-                    </div>
                   </div>
                 </div>
+              ))}
             </div>
-            )}
+          )}
         </div>
+
+        {/* Transactions Table */}
+        <div className="backdrop-blur-md bg-white/70 border border-pink-100 rounded-2xl shadow-xl p-8">
+          <div className="font-semibold text-lg mb-4">Recent Transactions</div>
+          {txLoading ? (
+            <div className="flex justify-center py-6"><Spinner /></div>
+          ) : !transactions || transactions.length === 0 ? (
+            <div className="flex flex-col items-center py-8 text-gray-400">
+              <Loader2 className="w-10 h-10 mb-2 animate-spin" />
+              <span>No transactions yet.</span>
             </div>
-            {/* RIGHT COLUMN */}
-            <div className="flex flex-col gap-6">
-          <div className="bg-white rounded-3xl shadow-lg p-6 flex flex-col gap-6">
-            <div className="flex items-center gap-4">
-              <img src={walletData.user.avatar} alt="Profile" className="w-14 h-14 rounded-full" />
-              <div>
-                <p className="font-bold text-lg">{walletData.user.name}</p>
-                <p className="text-gray-500 text-sm">{walletData.user.email}</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="text-gray-500">
+                    <th className="px-2 py-1">Type</th>
+                    <th className="px-2 py-1">Amount</th>
+                    <th className="px-2 py-1">Status</th>
+                    <th className="px-2 py-1">Reference</th>
+                    <th className="px-2 py-1">Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {transactions.map(tx => (
+                    <tr key={tx.id} className="border-b last:border-0 hover:bg-blue-50/40 transition">
+                      <td className="px-2 py-1">{tx.transaction_type}</td>
+                      <td className={`px-2 py-1 font-mono ${tx.amount > 0 ? "text-green-600" : "text-red-500"}`}>
+                        {tx.amount > 0 ? "+" : ""}
+                        {tx.amount}
+                      </td>
+                      <td className="px-2 py-1">{tx.status}</td>
+                      <td className="px-2 py-1">{tx.reference}</td>
+                      <td className="px-2 py-1">{new Date(tx.created_at).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {/* Pagination */}
+              <div className="flex justify-end mt-2 gap-2">
+                <button
+                  className="btn-outline"
+                  disabled={page <= 1}
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                >Prev</button>
+                <span className="text-gray-500">{page} / {pages}</span>
+                <button
+                  className="btn-outline"
+                  disabled={page >= pages}
+                  onClick={() => setPage(p => Math.min(pages, p + 1))}
+                >Next</button>
               </div>
             </div>
-            {/* Total Balance */}
-            <div>
-              <p className="text-gray-500">Total balance</p>
-              <p className="text-3xl font-bold text-blue-700">R{walletData.totalBalance.toLocaleString()}</p>
-              <p className="text-xs text-blue-400 mt-1">{walletData.totalBalanceChange}</p>
-            </div>
-            {/* Send/Receive */}
-            <div className="flex gap-2">
-              <button className="flex-1 bg-black text-white py-2 rounded-lg">Send</button>
-              <button className="flex-1 bg-black text-white py-2 rounded-lg">Receive</button>
-            </div>
-            {/* Quick Transfer */}
-            <div>
-              <p className="font-semibold mb-2">Quick transfer</p>
-              <div className="flex gap-2">
-                {walletData.quickTransfer.map((person) => (
-                  <img key={person.id} src={person.avatar} alt={person.name} className="w-10 h-10 rounded-full border-2 border-white" />
-                ))}
-                <button className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-xl font-bold">+</button>
+          )}
         </div>
-            </div>
-            {/* Notifications */}
-            <div>
-              <p className="font-semibold mb-2">Notifications</p>
-              <div className="flex flex-col gap-2">
-                {walletData.notifications.map((note) => (
-                  <div key={note.id} className="flex items-center justify-between bg-yellow-50 rounded-lg p-3">
-                    <span>{note.message}</span>
-                    {note.action ? (
-                      <button className="bg-blue-500 text-white px-3 py-1 rounded-lg text-xs">{note.action}</button>
-                    ) : (
-                      <span className="text-xs text-gray-400">{note.time}</span>
-                    )}
-                  </div>
-                ))}
+      </div>
+
+      <AddCardModal
+        open={showAddCard}
+        onClose={() => setShowAddCard(false)}
+        onSave={async (card) => {
+          await addCard(card);
+          toast.success("Card added!");
+          setShowAddCard(false);
+          setCards(await getCards());
+        }}
+      />
+
+      <DepositModal
+        open={showDeposit}
+        onClose={() => setShowDeposit(false)}
+        cards={cards.map(card => ({
+          id: String(card.id),
+          label: `${card.card_type?.toUpperCase() || "Card"} •••• ${card.card_number?.slice(-4)}`,
+        }))}
+        onDeposit={async (amount, method, note) => {
+          await makeDeposit({ amount, card_id: Number(method) });
+          toast.success("Deposit successful!");
+          setShowDeposit(false);
+          setBalance(await getWalletBalance());
+        }}
+      />
+
+      {/* Transfer Modal */}
+      <TransferModal
+        open={open}
+        onClose={() => setOpen(false)}
+        walletBalance={walletBalance}
+        beneficiaries={beneficiaries}
+        onAddNewBeneficiary={() => alert("Add new beneficiary flow")}
+      />
+
+      {editingCard && (
+        <AddCardModal
+          open={!!editingCard}
+          onClose={() => setEditingCard(null)}
+          initialCard={editingCard}
+          onSave={async (updatedCard) => {
+            await updateCard(updatedCard);
+            toast.success("Card updated!");
+            setEditingCard(null);
+            setCards(await getCards());
+          }}
+        />
+      )}
+
+      {cardToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm mx-2 p-6 relative">
+            <div className="flex flex-col items-center">
+              <svg className="w-12 h-12 text-red-500 mb-2" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path d="M6 18L18 6M6 6l12 12" />
+              </svg>
+              <h2 className="text-xl font-bold mb-2 text-red-600">Delete Card?</h2>
+              <p className="text-gray-600 mb-4 text-center">
+                Are you sure you want to delete this card ending in <b>{cardToDelete.card_number.slice(-4)}</b>?<br />
+                This action cannot be undone.
+              </p>
+              <div className="flex gap-2 w-full">
+                <button
+                  className="flex-1 bg-gray-200 text-gray-700 py-2 rounded-lg font-semibold"
+                  onClick={() => setCardToDelete(null)}
+                  disabled={deleting}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="flex-1 bg-red-600 text-white py-2 rounded-lg font-semibold"
+                  onClick={async () => {
+                    setDeleting(true);
+                    try {
+                      await handleDeleteCard(cardToDelete.id);
+                      setCardToDelete(null);
+                    } finally {
+                      setDeleting(false);
+                    }
+                  }}
+                  disabled={deleting}
+                >
+                  {deleting ? "Deleting..." : "Delete"}
+                </button>
               </div>
             </div>
           </div>
         </div>
-      </div>
-        </div>
-      </div>
+      )}
     </div>
   );
 };

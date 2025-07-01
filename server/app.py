@@ -46,7 +46,7 @@ load_dotenv()
 # Config
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key')
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:stenaman@localhost:5432/dude_db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:stenaman@localhost:5432/fintech_db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['MAIL_SERVER'] = os.getenv('MAIL_SERVER')
 app.config['MAIL_PORT'] = int(os.getenv('MAIL_PORT')) if os.getenv('MAIL_PORT') else None

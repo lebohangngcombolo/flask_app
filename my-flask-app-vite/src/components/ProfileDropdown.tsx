@@ -1,8 +1,10 @@
 import { useNavigate } from 'react-router-dom';
-import { User, Bell, Settings, LogOut, Camera, X, Upload, Image, Sparkles, Wand2 } from 'lucide-react';
+import { User, Bell, Settings, LogOut, Camera, X, Upload, Image, Sparkles, Wand2, Moon, Sun } from 'lucide-react';
 import Button from './Button';
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useTheme } from 'next-themes';
+import { useAuth } from '../hooks/useAuth';
 
 interface ProfileDropdownProps {
   user: {
@@ -17,6 +19,7 @@ const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ user }) => {
     return <div>Loading...</div>;
   }
 
+  const { theme, setTheme } = useTheme();
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState({
     email: true,
@@ -30,6 +33,8 @@ const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ user }) => {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
+  const { fetchUser } = useAuth();
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   const filters = [
     { name: 'none', label: 'Original' },
@@ -60,6 +65,7 @@ const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ user }) => {
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
+      setSelectedFile(file);
       const reader = new FileReader();
       reader.onloadend = () => {
         setPreviewUrl(reader.result as string);
@@ -79,6 +85,32 @@ const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ user }) => {
   const handleLogout = () => {
     localStorage.removeItem('token');
     navigate('/');
+  };
+
+  const handleUpload = async () => {
+    if (!selectedFile) return;
+    setIsUploading(true);
+    const formData = new FormData();
+    formData.append('file', selectedFile);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('http://localhost:5001/api/user/profile-picture', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      });
+      const data = await res.json();
+      if (data.profile_picture) {
+        setUploadStep('complete');
+        await fetchUser();
+      }
+    } catch (err) {
+      // Optionally show an error message here
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const UploadModal = () => (
@@ -182,28 +214,11 @@ const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ user }) => {
                   Back
                 </button>
                 <button
-                  onClick={() => {
-                    setIsUploading(true);
-                    // Simulate upload
-                    setTimeout(() => {
-                      setIsUploading(false);
-                      setUploadStep('complete');
-                    }, 1500);
-                  }}
+                  onClick={handleUpload}
                   className="flex-1 py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2"
                   disabled={isUploading}
                 >
-                  {isUploading ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      Uploading...
-                    </>
-                  ) : (
-                    <>
-                      <Wand2 className="w-4 h-4" />
-                      Apply Changes
-                    </>
-                  )}
+                  {isUploading ? "Uploading..." : "Apply Changes"}
                 </button>
               </div>
             </motion.div>
@@ -235,6 +250,8 @@ const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ user }) => {
     </motion.div>
   );
 
+  const backendUrl = "http://localhost:5001";
+
   return (
     <div className="relative" ref={dropdownRef}>
       {/* Profile Button with Hover Effect */}
@@ -247,7 +264,7 @@ const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ user }) => {
         <>
           {user.profilePicture ? (
             <img
-              src={user.profilePicture}
+              src={user.profilePicture.startsWith('http') ? user.profilePicture : backendUrl + user.profilePicture}
               alt="Profile"
               className="w-8 h-8 rounded-full object-cover ring-2 ring-blue-500"
             />
@@ -279,7 +296,7 @@ const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ user }) => {
                   <>
                     {user.profilePicture ? (
                       <img
-                        src={user.profilePicture}
+                        src={user.profilePicture.startsWith('http') ? user.profilePicture : backendUrl + user.profilePicture}
                         alt="Profile"
                         className="w-12 h-12 rounded-full object-cover ring-2 ring-blue-500"
                       />
@@ -343,18 +360,36 @@ const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ user }) => {
               </div>
             </div>
 
+            {/* Theme Selector */}
+            <div className="px-4 py-3 border-b">
+              <h3 className="text-sm font-medium text-gray-900 mb-2">Theme</h3>
+              <div className="flex items-center justify-around p-1 rounded-lg bg-gray-100 dark:bg-dark-background">
+                <button
+                  onClick={() => setTheme('light')}
+                  className={`flex-1 flex items-center justify-center gap-2 p-2 rounded-md text-sm transition-colors ${
+                    theme === 'light' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  <Sun className="w-4 h-4" />
+                  <span>Light</span>
+                </button>
+                <button
+                  onClick={() => setTheme('dark')}
+                  className={`flex-1 flex items-center justify-center gap-2 p-2 rounded-md text-sm transition-colors ${
+                    theme === 'dark' ? 'bg-gray-700 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-500'
+                  }`}
+                >
+                  <Moon className="w-4 h-4" />
+                  <span>Dark</span>
+                </button>
+              </div>
+            </div>
+
             {/* Actions */}
             <div className="px-4 py-2">
               <button
-                onClick={() => navigate('/change-password')}
-                className="flex items-center space-x-2 w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md"
-              >
-                <Settings className="w-4 h-4" />
-                <span>Change Password</span>
-              </button>
-              <button
                 onClick={handleLogout}
-                className="flex items-center space-x-2 w-full px-3 py-2 text-sm text-red-600 hover:bg-gray-100 rounded-md"
+                className="flex items-center space-x-2 w-full px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md"
               >
                 <LogOut className="w-4 h-4" />
                 <span>Logout</span>

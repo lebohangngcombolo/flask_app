@@ -1,4 +1,5 @@
 import { authAPI } from '../services/api';
+import api from '../services/api';
 
 interface User {
   fullName: string;
@@ -7,6 +8,8 @@ interface User {
   phoneNumber?: string;
   idNumber?: string;
   role?: string;
+  is_verified?: boolean;
+  profile_picture?: string;
 }
 
 interface AuthResponse {
@@ -72,14 +75,19 @@ export const login = async (email: string, password: string) => {
 
     // Normal login branch
     const { access_token, user } = response.data;
+    // Map profile_picture to profilePicture
+    const mappedUser = {
+      ...user,
+      profilePicture: user.profile_picture,
+    };
     localStorage.setItem('token', access_token);
-    localStorage.setItem('user', JSON.stringify(user));
-    const redirectTo = user.role === 'admin' ? '/admin-dashboard' : '/dashboard';
+    localStorage.setItem('user', JSON.stringify(mappedUser));
+    const redirectTo = user.role === 'admin' ? '/admin/dashboard' : '/dashboard';
     return {
       success: true,
       message: 'Login successful',
       redirectTo,
-      user,
+      user: mappedUser,
     };
   } catch (error: any) {
     console.error('Login error:', error);
@@ -132,6 +140,15 @@ export const isAuthenticated = (): boolean => {
       return false;
     }
     
+    // SECURITY FIX: Check if user is verified
+    const user = getCurrentUser();
+    if (!user || !user.is_verified) {
+      // Clear invalid authentication data
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      return false;
+    }
+    
     return true;
   } catch (error) {
     console.error('Token validation error:', error);
@@ -145,7 +162,12 @@ export const getCurrentUser = () => {
   const userStr = localStorage.getItem('user');
   if (!userStr) return null;
   try {
-    return JSON.parse(userStr);
+    const user = JSON.parse(userStr);
+    // SECURITY FIX: Return null if user is not verified
+    if (!user.is_verified) {
+      return null;
+    }
+    return user;
   } catch {
     return null;
   }
@@ -204,10 +226,7 @@ export const resendEmailVerificationCode = async (email: string) => {
 export const verifyPhoneCode = async (phone: string, verificationCode: string) => {
   try {
     const response = await authAPI.verifyPhone(phone, verificationCode);
-    return {
-      success: true,
-      message: response.data.message || 'Phone number verified successfully'
-    };
+    return response.data; // This will include access_token and user if backend sends them
   } catch (error: any) {
     return {
       success: false,
@@ -232,9 +251,8 @@ export const resendSmsVerificationCode = async (phone: string) => {
 };
 
 export async function sendSmsVerificationCode(phone: string) {
-  // This should POST to /api/auth/send-otp (or your initial send endpoint)
-  // Example:
-  return authAPI.post('/api/auth/send-otp', { phone })
+  // Use the axios instance directly
+  return api.post('/api/auth/send-otp', { phone })
     .then(res => res.data)
     .catch(err => ({ success: false, message: err?.response?.data?.message || 'Failed to send code' }));
 }
