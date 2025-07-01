@@ -170,7 +170,7 @@ class StokvelGroup(db.Model):
     name = db.Column(db.String(100), nullable=False)
     category = db.Column(db.String(50), nullable=False)
     tier = db.Column(db.String(20), nullable=False)
-    amount = db.Column(db.Float, nullable=False)
+    amount = db.Column(db.Float, nullable=True)  # or nullable=True
     contribution_amount = db.Column(db.Float, nullable=False)  # <-- ADD THIS LINE
     rules = db.Column(db.String(255))
     benefits = db.Column(db.ARRAY(db.String))
@@ -187,7 +187,7 @@ class StokvelGroup(db.Model):
             'id': self.id,
             'name': self.name,
             'description': self.description,
-            'contribution_amount': float(self.amount),
+            'contribution_amount': float(self.contribution_amount or 0),
             'frequency': self.frequency,
             'max_members': self.max_members,
             'member_count': len(self.members),
@@ -712,19 +712,7 @@ def get_admin_groups(current_user):
     groups = StokvelGroup.query.all()
     groups_data = []
     for group in groups:
-        groups_data.append({
-            'id': group.id,
-            'name': group.name,
-            'description': group.description,
-            'tier': group.tier,
-            'contribution_amount': float(group.amount),
-            'frequency': group.frequency,
-            'max_members': group.max_members,
-            'is_active': getattr(group, 'is_active', True),
-            'created_at': group.created_at.isoformat() if group.created_at else None,
-            'member_count': len(group.members) if hasattr(group, 'members') else 0,
-            'group_code': group.group_code  # <-- ADD THIS LINE
-        })
+        groups_data.append(StokvelGroup.to_dict(group))
     return jsonify(groups_data), 200
 
 @app.route('/api/admin/stats', methods=['GET'])
@@ -757,9 +745,11 @@ def create_stokvel_group(current_user):
         new_group = StokvelGroup(
             name=data['name'],
             description=data['description'],
+            category=data['category'],  # <-- ADD THIS LINE
             contribution_amount=float(data['contribution_amount']),
             frequency=data['frequency'],
             max_members=int(data['max_members']),
+            rules=data['rules'],
             tier=data['tier'],
             group_code=group_code,  # <-- Set the generated code
             admin_id=current_user.id
@@ -771,7 +761,7 @@ def create_stokvel_group(current_user):
             'id': new_group.id,
             'name': new_group.name,
             'description': new_group.description,
-            'contribution_amount': new_group.amount,
+            'contribution_amount': new_group.contribution_amount,
             'frequency': new_group.frequency,
             'max_members': new_group.max_members,
             'tier': new_group.tier,
@@ -1083,7 +1073,7 @@ def get_dashboard_stats(current_user):
                 'id': g.id,
                 'name': g.name,
                 'role': next(m.role for m in memberships if m.group_id == g.id),
-                'contribution_amount': float(g.amount),
+                'contribution_amount': float(g.contribution_amount),
                 'frequency': g.frequency
             } for g in active_groups]
         })
@@ -1113,9 +1103,11 @@ def register_stokvel_group(current_user):
         new_group = StokvelGroup(
             name=data['name'],
             description=data['description'],
+            category=data['category'],  # <-- ADD THIS LINE
             contribution_amount=float(data['contribution_amount']),
             frequency=data['frequency'],
             max_members=int(data['max_members']),
+            rules=data['rules'],
             tier=data['tier'],
             group_code=group_code,
             admin_id=current_user.id
@@ -2735,7 +2727,7 @@ def simulate_payment_processing(amount, card):
 def process_transfer(sender_id, recipient_account_number, amount, description=""):
     recipient = User.query.filter_by(account_number=recipient_account_number).first()
     if not recipient:
-        raise ValueError("Recipient not found")
+        return jsonify({'error': 'Recipient not found'}), 404
     if sender_id == recipient.id:
         raise ValueError("Cannot transfer to yourself")
     # ... rest of logic ...
@@ -2818,12 +2810,12 @@ def make_transfer(current_user):
     amount = data.get('amount')
     recipient_account_number = data.get('recipient_account_number')
     description = data.get('description', '')
-
+    
     if not amount or amount <= 0:
         return jsonify({'error': 'Invalid amount'}), 400
     if not recipient_account_number:
         return jsonify({'error': 'Recipient account number is required'}), 400
-
+        
     result = process_transfer(current_user.id, recipient_account_number, amount, description)
     return jsonify({
         'message': 'Transfer successful',

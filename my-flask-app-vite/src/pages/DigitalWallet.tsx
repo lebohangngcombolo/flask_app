@@ -40,7 +40,7 @@ const maskCardNumber = (num: string) => {
 
 const DigitalWallet: React.FC = () => {
   // State
-  const [balance, setBalance] = useState<number | null>(null);
+  const [balance, setBalance] = useState<number>(0);
   const [currency, setCurrency] = useState<string>("ZAR");
   const [loading, setLoading] = useState(true);
 
@@ -88,10 +88,7 @@ const DigitalWallet: React.FC = () => {
   const [walletBalance, setWalletBalance] = useState(0.0);
 
   // Example beneficiaries (replace with your real data or state)
-  const beneficiaries = [
-    { id: "1", name: "Ayanda M.", account: "1234567890" },
-    { id: "2", name: "Bongiwe N.", account: "0987654321" },
-  ];
+  const [beneficiaries, setBeneficiaries] = useState([]);
 
   // Additional state for editing
   const [editingCard, setEditingCard] = useState<Card | null>(null);
@@ -100,16 +97,39 @@ const DigitalWallet: React.FC = () => {
   const [cardToDelete, setCardToDelete] = useState<Card | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  // Additional state for transaction filters
+  const [transactionFilters, setTransactionFilters] = useState({
+    type: 'all',
+    status: 'all',
+    dateRange: '30'
+  });
+
+  // AddBeneficiaryModal state
+  const [name, setName] = useState('');
+  const [accountNumber, setAccountNumber] = useState('');
+
   // Fetch wallet balance
   useEffect(() => {
     setLoading(true);
     getWalletBalance()
       .then((data) => {
-        setBalance(data.balance);
-        setCurrency(data.currency);
-        setWalletBalance(data.balance);
+        console.log('Wallet balance response:', data);
+        console.log('Balance type:', typeof data.balance);
+        console.log('Balance value:', data.balance);
+        
+        // Ensure balance is a number
+        const balanceValue = typeof data.balance === 'number' ? data.balance : parseFloat(data.balance) || 0;
+        console.log('Processed balance:', balanceValue);
+        
+        setBalance(balanceValue);
+        setCurrency(data.currency || 'ZAR');
+        setWalletBalance(balanceValue);
       })
-      .catch(() => toast.error("Failed to load balance"))
+      .catch((error) => {
+        console.error('Error fetching balance:', error);
+        toast.error("Failed to load balance");
+        setBalance(0);
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -142,6 +162,19 @@ const DigitalWallet: React.FC = () => {
       .reduce((sum, tx) => sum + tx.amount, 0);
     setSummary({ totalDeposits: deposits, totalTransfers: transfers });
   }, [transactions]);
+
+  // Fetch beneficiaries
+  useEffect(() => {
+    const fetchBeneficiaries = async () => {
+      try {
+        const res = await api.get('/api/beneficiaries');
+        setBeneficiaries(res.data);
+      } catch (err) {
+        // handle error, maybe show a toast
+      }
+    };
+    fetchBeneficiaries();
+  }, []);
 
   // Deposit handler
   const handleDeposit = async (e: React.FormEvent) => {
@@ -241,6 +274,23 @@ const DigitalWallet: React.FC = () => {
   // Additional handler for editing
   const handleEditCard = (card: Card) => setEditingCard(card);
 
+  // AddBeneficiaryModal handler
+  const handleAdd = async () => {
+    await api.post('/api/beneficiaries', { name, account_number: accountNumber });
+    // Refresh list after adding
+    const res = await api.get('/api/beneficiaries');
+    setBeneficiaries(res.data);
+    // Close modal, reset form, etc.
+  };
+
+  // Delete beneficiary handler
+  const handleDelete = async (id: number) => {
+    await api.delete(`/api/beneficiaries/${id}`);
+    // Refresh list after deleting
+    const res = await api.get('/api/beneficiaries');
+    setBeneficiaries(res.data);
+  };
+
   // UI
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-dark-background py-10 px-4 transition-colors">
@@ -250,7 +300,7 @@ const DigitalWallet: React.FC = () => {
           <div>
             <div className="text-gray-500 text-sm">Wallet Balance</div>
             <div className="text-4xl font-extrabold text-blue-700 tracking-tight">
-              {loading ? <Spinner /> : `ZAR ${(balance ?? 0).toFixed(2)}`}
+              {loading ? <Spinner /> : `ZAR ${(Number(balance) || 0).toFixed(2)}`}
             </div>
             <div className="text-xs text-gray-400 mt-1">
               <span>Total Deposits: ZAR {summary.totalDeposits.toFixed(2)}</span> |{" "}
@@ -266,7 +316,7 @@ const DigitalWallet: React.FC = () => {
             </button>
             <button
               className="btn-secondary flex items-center gap-2 shadow hover:scale-105 transition"
-              onClick={() => setOpen(true)}
+              onClick={() => setShowTransfer(true)}
             >
               <Send className="w-4 h-4" /> Transfer
             </button>
@@ -440,20 +490,46 @@ const DigitalWallet: React.FC = () => {
           label: `${card.card_type?.toUpperCase() || "Card"} •••• ${card.card_number?.slice(-4)}`,
         }))}
         onDeposit={async (amount, method, note) => {
-          await makeDeposit({ amount, card_id: Number(method) });
-          toast.success("Deposit successful!");
-          setShowDeposit(false);
-          setBalance(await getWalletBalance());
+          try {
+            const res = await makeDeposit({ 
+              amount, 
+              card_id: Number(method),
+              description: note 
+            });
+            toast.success(res.message || "Deposit successful!");
+            setShowDeposit(false);
+            // Refresh balance and transactions
+            const balanceData = await getWalletBalance();
+            setBalance(balanceData.balance);
+            setWalletBalance(balanceData.balance);
+            // Refresh transactions
+            setPage(1);
+          } catch (error: any) {
+            toast.error(error.response?.data?.error || "Deposit failed");
+            throw error; // Re-throw so the modal can handle the loading state
+          }
         }}
       />
 
       {/* Transfer Modal */}
       <TransferModal
-        open={open}
-        onClose={() => setOpen(false)}
+        open={showTransfer}
+        onClose={() => setShowTransfer(false)}
         walletBalance={walletBalance}
-        beneficiaries={beneficiaries}
-        onAddNewBeneficiary={() => alert("Add new beneficiary flow")}
+        recipients={[
+          ...cards.map(card => ({
+            id: `card-${card.id}`,
+            name: card.cardholder || card.card_holder,
+            account_number: card.card_number, // or card.account_number if available
+            type: 'card'
+          })),
+          ...beneficiaries.map(b => ({
+            id: `beneficiary-${b.id}`,
+            name: b.name,
+            account_number: b.account_number,
+            type: 'beneficiary'
+          }))
+        ]}
       />
 
       {editingCard && (
@@ -510,6 +586,13 @@ const DigitalWallet: React.FC = () => {
           </div>
         </div>
       )}
+
+      {beneficiaries.map(b => (
+        <div key={b.id}>
+          {b.name} ({b.account_number})
+          <button onClick={() => handleDelete(b.id)}>Delete</button>
+        </div>
+      ))}
     </div>
   );
 };

@@ -11,9 +11,9 @@ interface Reward {
 }
 
 const rewardImages: Record<string, string> = {
-  airtime_10: '/rewards/airtime.png',
-  voucher_50: '/rewards/voucher.png',
-  credit_100: '/rewards/credit.png',
+  airtime_10: 'https://cdn-icons-png.flaticon.com/512/724/724664.png',
+  voucher_50: 'https://img.icons8.com/ios-filled/100/4682B4/shopping-basket-2.png',
+  credit_100: 'https://img.icons8.com/ios-filled/100/4169E1/wallet-app.png',
   // Add more as needed
 };
 

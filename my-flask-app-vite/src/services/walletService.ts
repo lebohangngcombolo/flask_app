@@ -55,15 +55,18 @@ export interface TransferPayload {
 
 // --- API Service Functions ---
 
-export const getWalletBalance = async (): Promise<WalletBalance> => {
-  const { data } = await api.get('/wallet/balance');
+export const getWalletBalance = async (): Promise<{ balance: number, currency: string }> => {
+    const { data } = await api.get('/api/wallet/balance');
   return data;
 };
 
-export const getTransactions = async (page = 1, per_page = 10): Promise<TransactionsResponse> => {
-  const { data } = await api.get('/wallet/transactions', {
-    params: { page, per_page },
-  });
+export const getTransactions = async (page: number = 1, perPage: number = 10): Promise<{
+    transactions: Transaction[],
+    pages: number,
+    current_page: number,
+    total: number
+}> => {
+    const { data } = await api.get(`/api/wallet/transactions?page=${page}&per_page=${perPage}`);
   return data;
 };
 
@@ -83,12 +86,12 @@ export const deleteCard = async (cardId: number): Promise<{ message: string }> =
 };
 
 export const makeDeposit = async (depositData: DepositPayload): Promise<{ message: string, new_balance: number }> => {
-    const { data } = await api.post('/wallet/deposit', depositData);
+    const { data } = await api.post('/api/wallet/deposit', depositData);
     return data;
 };
 
 export const makeTransfer = async (transferData: TransferPayload): Promise<{ message: string, new_balance: number }> => {
-    const { data } = await api.post('/wallet/transfer', transferData);
+    const { data } = await api.post('/api/wallet/transfer', transferData);
     return data;
 };
 

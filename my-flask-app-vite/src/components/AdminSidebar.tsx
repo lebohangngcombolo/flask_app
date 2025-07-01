@@ -25,23 +25,42 @@ interface NavItem {
 const navItems: NavItem[] = [
   { name: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard, tooltip: 'Overview and platform stats' },
   { name: 'Manage Users', path: '/admin/users', icon: Users, tooltip: 'View, edit, and manage all users', subItems: [
-    { label: 'View all', path: '/admin/users' },
-    { label: 'Add new customer', path: '/admin/users/new' },
+    { label: 'View all', path: '/admin/users' }
   ] },
   { name: 'Manage Groups', path: '/admin/groups', icon: Folder, tooltip: 'Create, edit, and manage all stokvel groups', subItems: [
     { label: 'Group Management', path: '/admin/groups' }
   ] },
-  { name: 'Contribution Analytics', path: '/admin/analytics', icon: BarChart2, tooltip: 'View and analyze contributions' },
+  { name: 'Analytics', path: '/admin/analytics', icon: BarChart2, tooltip: 'View and analyze contributions', subItems: [
+    { label: 'Contributions', path: '/admin/analytics/contributions' },
+    {
+      label: 'Reports',
+      path: '/admin/analytics/reports',
+      subItems: [
+        { label: 'Monthly', path: '/admin/analytics/reports/monthly' },
+        { label: 'Yearly', path: '/admin/analytics/reports/yearly' }
+      ]
+    }
+  ] },
   { name: 'KYC Approvals', path: '/admin/kyc-management', icon: ShieldCheck, tooltip: 'Approve or reject KYC submissions', subItems: [
     { label: 'KYC Management', path: '/admin/kyc-management' },
   ] },
-  { name: 'Reports', path: '/admin/reports', icon: FileText, tooltip: 'View and download platform reports', subItems: [
-    { label: 'Monthly', path: '/admin/reports/monthly' },
-    { label: 'Annual', path: '/admin/reports/annual' },
+  { name: 'Support', path: '/admin/support', icon: FileText, tooltip: 'FAQ, customer concerns, and notifications', subItems: [
+    { label: 'FAQ', path: '/admin/support/faq' },
+    { label: 'Customer Concerns', path: '/admin/support/concerns' },
+    { label: 'Notifications', path: '/admin/support/notifications' }
   ] },
-  { name: 'Notifications', path: '/admin/notifications', icon: Bell, tooltip: 'Send and manage notifications' },
-  { name: 'Settings', path: '/admin/settings', icon: Settings, tooltip: 'Platform and admin settings' },
-  { name: 'Admin Team', path: '/admin/team', icon: UserCheck, tooltip: 'Manage admin team and roles' }
+  {
+    name: 'Admin Team',
+    path: '/admin/team',
+    icon: UserCheck,
+    tooltip: 'Manage admin team and roles',
+    subItems: [
+      { label: 'View Admins', path: '/admin/team' },
+      { label: 'Add Admin', path: '/admin/team/add' },
+      { label: 'Roles & Permissions', path: '/admin/team/roles' },
+      // { label: 'Activity Logs', path: '/admin/team/logs' }, // optional
+    ]
+  }
 ];
 
 interface AdminSidebarProps {

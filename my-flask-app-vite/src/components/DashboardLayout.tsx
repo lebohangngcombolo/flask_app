@@ -35,8 +35,8 @@ const sidebarItems = [
 
 
 const topNavItems = [
-  { label: 'Marketplace', path: '/dashboard/marketplace' },
-  { label: 'Offers', path: '/dashboard/offers' },
+  { label: 'Offers', path: '/dashboard/marketplace' },
+  { label: 'Learning', path: '/dashboard/offers' },
   { label: 'Announcements', path: '/dashboard/announcements' },
 ];
 
