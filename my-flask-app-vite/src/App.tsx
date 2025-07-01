@@ -1,10 +1,5 @@
-<<<<<<< HEAD
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, Outlet } from 'react-router-dom';
-=======
-import React, { useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
->>>>>>> origin/master
 import LandingPage from './pages/LandingPage';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
@@ -23,11 +18,11 @@ import ChatBot from './components/ChatBot';
 import ForgotPassword from './pages/ForgotPassword';
 import Programs from './pages/Programs';
 import DigitalWallet from './pages/DigitalWallet';
-<<<<<<< HEAD
 import PhoneAuth from './pages/PhoneAuth';
 import KYCPage from './pages/KYC';
 import { getCurrentUser as getCurrentUserService } from './services/auth';
 import DashboardLayout from './components/DashboardLayout';
+import { Toaster } from 'react-hot-toast';
 
 const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
@@ -39,8 +34,6 @@ const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
   
   return <>{children}</>;
 };
-=======
->>>>>>> origin/master
 
 // Protected route for regular users
 const UserRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -77,7 +70,6 @@ const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 };
 
 const App: React.FC = () => {
-<<<<<<< HEAD
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -103,79 +95,49 @@ const App: React.FC = () => {
   if (loading) {
     return <div>Loading...</div>;
   }
-=======
-  // Fetch user on app load to check authentication status
-  const { fetchUser } = useAuth();
-  useEffect(() => {
-    fetchUser();
-  }, [fetchUser]);
->>>>>>> origin/master
 
   return (
-    <Router>
-      {/* ChatBot is placed outside of Routes so it's always visible */}
-      {/* You might want to conditionally render this based on user login status */}
-      <ChatBot />
-      <Routes>
-        {/* Public routes */}
-        <Route path="/" element={<LandingPage />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<Signup />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/programs" element={<Programs />} />
-        <Route path="/about" element={<AboutUs />} />
-        <Route path="/contact" element={<Contact />} />
-        <Route path="/news" element={<News />} />
+    <>
+      <Toaster position="top-center" reverseOrder={false} />
+      <Router>
+        {/* ChatBot is placed outside of Routes so it's always visible */}
+        {/* You might want to conditionally render this based on user login status */}
+        <ChatBot />
+        <Routes>
+          {/* Public routes */}
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<Signup />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/programs" element={<Programs />} />
+          <Route path="/about" element={<AboutUs />} />
+          <Route path="/contact" element={<Contact />} />
+          <Route path="/news" element={<News />} />
 
-<<<<<<< HEAD
-        {/* User dashboard routes */}
-        <Route path="/dashboard" element={<UserRoute><DashboardLayout /></UserRoute>}>
-          <Route index element={<Dashboard />} />
-          <Route path="profile" element={<UserProfile />} />
-          <Route path="digital-wallet" element={<DigitalWallet />} />
-          <Route path="kyc" element={<KYCPage />} />
-          <Route path="marketplace" element={<Marketplace />} />
-          {/* Add more dashboard sub-pages here if needed */}
-        </Route>
+          {/* User dashboard routes */}
+          <Route path="/dashboard" element={<UserRoute><DashboardLayout /></UserRoute>}>
+            <Route index element={<Dashboard />} />
+            <Route path="profile" element={<UserProfile />} />
+            <Route path="digital-wallet" element={<DigitalWallet />} />
+            <Route path="kyc" element={<KYCPage />} />
+            <Route path="marketplace" element={<Marketplace />} />
+            {/* Add more dashboard sub-pages here if needed */}
+          </Route>
 
-        {/* Admin routes */}
-        <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
-        <Route path="/admin/dashboard" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
-        <Route path="/admin/users" element={<AdminRoute><UserManagement /></AdminRoute>} />
-        <Route path="/admin/stokvels" element={<AdminRoute><StokvelManagement /></AdminRoute>} />
+          {/* Admin routes */}
+          <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+          <Route path="/admin/dashboard" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+          <Route path="/admin/users" element={<AdminRoute><UserManagement /></AdminRoute>} />
+          <Route path="/admin/stokvels" element={<AdminRoute><StokvelManagement /></AdminRoute>} />
 
-        {/* Phone Auth route */}
-        <Route path="/phone-auth" element={<PhoneAuth />} />
-=======
-        {/* User routes */}
-        <Route path="/dashboard/*" element={
-          <UserRoute>
-            <Routes>
-              <Route index element={<Dashboard />} />
-              <Route path="profile" element={<UserProfile />} />
-              <Route path="marketplace" element={<Marketplace />} />
-              <Route path="digital-wallet" element={<DigitalWallet />} />
-            </Routes>
-          </UserRoute>
-        } />
+          {/* Phone Auth route */}
+          <Route path="/phone-auth" element={<PhoneAuth />} />
 
-        {/* Admin routes */}
-        <Route path="/admin/*" element={
-          <AdminRoute>
-            <Routes>
-              <Route path="/" element={<AdminDashboard />} />
-              <Route path="/dashboard" element={<AdminDashboard />} />
-              <Route path="/users" element={<UserManagement />} />
-              <Route path="/stokvels" element={<StokvelManagement />} />
-            </Routes>
-          </AdminRoute>
-        } />
->>>>>>> origin/master
-
-        {/* Catch all route */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </Router>
+          {/* Catch all route */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Router>
+    </>
   );
 };
 

@@ -1,10 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-<<<<<<< HEAD
 import realistic from '../assets/realistic.png';
 import stokvelHero from '../assets/stokvel-hero-section (4).png';
-=======
->>>>>>> origin/master
 import Button from '../components/Button';
 import Layout from '../components/Layout';
 import ChatBot from '../components/ChatBot';
@@ -14,7 +11,6 @@ const LandingPage: React.FC = () => {
 
   return (
     <Layout>
-<<<<<<< HEAD
       {/* Hero Section with new background image */}
       <div className="relative pt-12 md:pt-20 pb-20 md:pb-32 overflow-hidden">
         {/* Background Image */}
@@ -48,47 +44,13 @@ const LandingPage: React.FC = () => {
                   variant="secondary"
                   onClick={() => navigate('/about')}
                   className="bg-white/10 backdrop-blur-sm text-white border-2 border-white hover:bg-white/20 px-6 md:px-8 py-3 text-base md:text-lg w-full sm:w-auto shadow-lg"
-=======
-      {/* Hero Section with Image */}
-      <div className="relative bg-gradient-to-br from-blue-50 to-blue-50 pt-12 md:pt-20 pb-20 md:pb-32 overflow-hidden">
-        <div className="container mx-auto px-4 relative z-10">
-          <div className="grid md:grid-cols-2 gap-8 md:gap-12 items-center">
-            <div className="space-y-6 md:space-y-8 text-center md:text-left">
-              <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 leading-tight">
-                We make stokvels smarter,<br />
-                <span className="text-blue-600">secure and more rewarding for free</span>
-              </h1>
-              <div className="flex flex-col sm:flex-row gap-4 justify-center md:justify-start">
-                <Button 
-                  onClick={() => navigate('/signup')} 
-                  className="bg-blue-600 text-white hover:bg-blue-700 px-6 md:px-8 py-3 text-base md:text-lg w-full sm:w-auto"
-                >
-                  Get Started
-                </Button>
-                <Button 
-                  variant="secondary" 
-                  onClick={() => navigate('/about')}
-                  className="bg-white text-blue-600 border-2 border-blue-600 hover:bg-blue-50 px-6 md:px-8 py-3 text-base md:text-lg w-full sm:w-auto"
->>>>>>> origin/master
                 >
                   Learn More
                 </Button>
               </div>
             </div>
-<<<<<<< HEAD
             {/* The right half is left empty to let the image show */}
             <div className="hidden md:block w-1/2"></div>
-=======
-            
-            {/* Updated Image Visual */}
-            <div className="relative flex items-center justify-center">
-                <img 
-                src="https://www.smefinanceforum.org/sites/default/files/Shutterstock_1715290246r.png"
-                alt="Community working together towards a common financial goal"
-                className="rounded-2xl shadow-xl object-cover w-full max-w-md h-72"
-                />
-            </div>
->>>>>>> origin/master
           </div>
         </div>
       </div>

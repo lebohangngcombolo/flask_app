@@ -9,15 +9,30 @@ import {
 } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
 import { memberNavItems, marketplaceNavItem } from '../../navItems';
+import { useAuth } from '../hooks/useAuth';
+import api from '../services/api';
+import { useEffect, useState } from 'react';
 
 const MemberDashboard: React.FC = () => {
-  const [memberData, setMemberData] = useState({
-    stokvelInfo: null,
-    contributionStatus: null,
-    upcomingPayments: [],
-    announcements: [],
-    recentActivity: []
-  });
+  const { user } = useAuth();
+  const [memberData, setMemberData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchMemberData = async () => {
+      try {
+        const res = await api.get('/api/dashboard/stats');
+        setMemberData(res.data);
+      } catch (err) {
+        // Handle error
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchMemberData();
+  }, []);
+
+  if (loading) return <div>Loading...</div>;
 
   return (
     <DashboardLayout
@@ -36,7 +51,7 @@ const MemberDashboard: React.FC = () => {
           animate={{ opacity: 1, y: 0 }}
           className="mb-8"
         >
-          <h1 className="text-2xl font-bold text-gray-900">Welcome, {memberData.stokvelInfo?.name}!</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Welcome, {user?.name}!</h1>
           <p className="text-gray-600">Here's your stokvel activity overview.</p>
         </motion.div>
 

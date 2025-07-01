@@ -11,26 +11,28 @@ const ChatBot: React.FC = () => {
   ]);
   const [inputMessage, setInputMessage] = useState('');
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (inputMessage.trim()) {
-      // Add user message
       setMessages(prev => [...prev, { text: inputMessage, isUser: true }]);
-      
-      // Simulate bot response (replace with actual API call later)
-      setTimeout(() => {
-        const responses = [
-          "I can help you understand how our stokvel savings work. Would you like to know more? topics like contributions, payouts, or joining groups.",
-          "To join a savings group, you can click the 'Get Started' button on the landing page or navigate to the 'Stokvel Groups' section in the dashboard.",
-          "Our platform is secure and regulated. We use advanced encryption to protect your data and comply with financial regulations.",
-          "You can access your savings anytime through our mobile app or website, available 24/7.",
-          "We offer different types of savings groups to suit your needs, including savings, grocery, burial, business, and investment groups. Which one are you interested in?",
-          "I'm still learning! Can you please rephrase your question?" // Add a fallback
-        ];
-        const randomResponse = responses[Math.floor(Math.random() * responses.length)];
-        setMessages(prev => [...prev, { text: randomResponse, isUser: false }]);
-      }, 1000);
-      
       setInputMessage('');
+
+      try {
+        const res = await fetch('http://localhost:5001/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: inputMessage }),
+        });
+        const data = await res.json();
+        setMessages(prev => [
+          ...prev,
+          { text: data.answer || "Sorry, I couldn't get a response.", isUser: false }
+        ]);
+      } catch (err) {
+        setMessages(prev => [
+          ...prev,
+          { text: "Sorry, there was an error contacting the AI.", isUser: false }
+        ]);
+      }
     }
   };
 
