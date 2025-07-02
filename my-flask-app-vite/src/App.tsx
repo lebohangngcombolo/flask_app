@@ -30,6 +30,9 @@ import KYCManagement from './pages/KYCManagement';
 import AdminLayout from "./components/AdminLayout";
 import ReferralHistory from './pages/ReferralHistory';
 import ReferralDashboard from './pages/ReferralDashboard';
+import TierDetails from './pages/TierDetails';
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
@@ -112,6 +115,7 @@ const App: React.FC = () => {
   return (
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
       <Toaster position="top-center" reverseOrder={false} />
+      <ToastContainer />
       <Router>
         {/* ChatBot is placed outside of Routes so it's always visible */}
         {/* You might want to conditionally render this based on user login status */}
@@ -152,6 +156,9 @@ const App: React.FC = () => {
           
           {/* Phone Auth route */}
           <Route path="/phone-auth" element={<PhoneAuth />} />
+
+          {/* Tier Details route */}
+          <Route path="/tiers/:category/:tier" element={<TierDetails />} />
 
           {/* Catch all route */}
           <Route path="*" element={<Navigate to="/" replace />} />

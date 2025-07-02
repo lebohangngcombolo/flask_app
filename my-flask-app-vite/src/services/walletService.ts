@@ -48,7 +48,7 @@ export interface DepositPayload {
 
 export interface TransferPayload {
     amount: number;
-    recipient_email: string;
+    recipient_account_number: string;
     description: string;
 }
 
@@ -81,7 +81,7 @@ export const addCard = async (cardData: any) => {
 };
 
 export const deleteCard = async (cardId: number): Promise<{ message: string }> => {
-  const { data } = await api.delete(`/wallet/cards/${cardId}`);
+  const { data } = await api.delete(`/api/wallet/cards/${cardId}`);
   return data;
 };
 
@@ -99,4 +99,13 @@ export const updateCard = async (cardData: any) => {
   // Adjust the endpoint and payload as per your backend API
   const response = await api.put(`/api/wallet/cards/${cardData.id}`, cardData);
   return response.data;
+};
+
+export const withdraw = async (amount: number, bankAccount: string, note: string) => {
+  const { data } = await api.post('/api/wallet/withdraw', {
+    amount,
+    bank_account_number: bankAccount,
+    description: note,
+  });
+  return data;
 }; 

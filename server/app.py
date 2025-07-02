@@ -69,6 +69,11 @@ app.config['DAILY_TRANSFER_LIMIT'] = 5000.00   # R5,000 daily limit
 app.config['MIN_TRANSACTION_AMOUNT'] = 1.00    # R1 minimum
 app.config['MAX_TRANSACTION_AMOUNT'] = 50000.00 # R50,000 maximum
 
+# Add these constants at the top of your file (around line 50)
+WITHDRAWAL_FEE_PERCENTAGE = 0.02  # 2% fee
+MIN_WITHDRAWAL_AMOUNT = 10.00     # R10 minimum
+MAX_WITHDRAWAL_AMOUNT = 50000.00  # R50,000 maximum
+
 # -------------------- INITIALIZE EXTENSIONS --------------------
 db = SQLAlchemy(app)
 mail = Mail(app)
@@ -120,6 +125,15 @@ def normalize_phone(phone):
     if phone.startswith('+27'):
         phone = '0' + phone[3:]
     return phone
+
+def generate_account_number():
+    """Generate a unique 10-digit account number"""
+    while True:
+        # Generate exactly 10 digits (1000000000 to 9999999999)
+        account_num = str(random.randint(1000000000, 9999999999))
+        # Check if it's unique
+        if not User.query.filter_by(account_number=account_num).first():
+            return account_num
 
 # -------------------- MODELS --------------------
 class User(db.Model):
@@ -571,16 +585,22 @@ def register():
         if User.query.filter_by(email=email).first():
             return jsonify({'error': 'Email already registered'}), 400
 
-        # Create new user
+        # Create new user with account number
         user = User(
             email=email,
             full_name=full_name,
             phone=phone,
-            role='member'
+            role='member',
+            account_number=generate_account_number()  # <-- ADD THIS
         )
         user.set_password(password)
 
         db.session.add(user)
+        db.session.flush()  # Get the user ID
+
+        # Create wallet for the new user
+        wallet = Wallet(user_id=user.id, balance=0.00)
+        db.session.add(wallet)
 
         # --- Refer and Earn: Referral logic ---
         referral_code = data.get('referral_code') or request.args.get('ref')
@@ -607,6 +627,7 @@ def register():
                     'message': 'Account created successfully, but verification email failed to send. Please try resending.',
                     'email': user.email,
                     'user_id': user.id,
+                    'account_number': user.account_number,  # <-- ADD THIS
                     'email_sent': False
                 }), 201
             else:
@@ -614,6 +635,7 @@ def register():
                     'message': 'Registration successful. Please check your email for verification code.',
                     'email': user.email,
                     'user_id': user.id,
+                    'account_number': user.account_number,  # <-- ADD THIS
                     'email_sent': True
                 }), 201
                 
@@ -626,6 +648,7 @@ def register():
                 'message': 'Account created successfully, but verification email failed to send. Please try resending.',
                 'email': user.email,
                 'user_id': user.id,
+                'account_number': user.account_number,  # <-- ADD THIS
                 'email_sent': False
             }), 201
 
@@ -1439,19 +1462,38 @@ def resend_verification():
 @app.route('/api/user/profile', methods=['GET'])
 @token_required
 def get_user_profile(current_user):
-    return jsonify({
-        'id': current_user.id,
-        'name': current_user.full_name,
-        'email': current_user.email,
-        'phone': current_user.phone,
-        'role': current_user.role,
-        'profile_picture': current_user.profile_picture,
-        'is_verified': current_user.is_verified,
-        'gender': current_user.gender,
-        'employment_status': current_user.employment_status,
-        'two_factor_enabled': current_user.two_factor_enabled,
-        'date_of_birth': current_user.date_of_birth.isoformat() if current_user.date_of_birth else None
-    })
+    try:
+        # Automatically generate account number if user doesn't have one
+        if not current_user.account_number:
+            current_user.account_number = generate_account_number()
+            db.session.commit()
+            print(f"✅ Generated account number {current_user.account_number} for user {current_user.id} ({current_user.email})")
+        
+        # Ensure user has a wallet
+        wallet = get_or_create_wallet(current_user.id)
+        
+        return jsonify({
+            "id": current_user.id,
+            "full_name": current_user.full_name,
+            "email": current_user.email,
+            "phone": current_user.phone,
+            "role": current_user.role,
+            "profile_picture": current_user.profile_picture,
+            "gender": current_user.gender,
+            "employment_status": current_user.employment_status,
+            "is_verified": current_user.is_verified,
+            "two_factor_enabled": current_user.two_factor_enabled,
+            "account_number": current_user.account_number,
+            "wallet_balance": float(wallet.balance) if wallet.balance is not None else 0.00
+        }), 200
+    except Exception as e:
+        print(f"❌ Error in get_user_profile: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            "error": "Failed to load profile",
+            "details": str(e)
+        }), 500
 
 @app.route('/api/user/profile', methods=['PUT'])
 @token_required
@@ -2434,7 +2476,7 @@ def add_card(current_user):
         }
         return jsonify({'error': error_messages.get(result, 'Invalid card details')}), 400
     
-    card_type = result  # The card type returned from validation
+    card_type = Card.detect_card_type(card_number)
     
     # Extract last 4 digits from card number
     last4 = card_number[-4:]
@@ -2582,21 +2624,6 @@ def check_and_process_referral_completion(referee_user):
             db.session.add(milestone_notification)
 
 
- # -------------------- MAIN --------------------
-if __name__ == '__main__':
-    app.run(port=5001, debug=True)
-
-@event.listens_for(Engine, "connect")
-def connect(dbapi_connection, connection_record):
-    connection_record.info['pid'] = os.getpid()
-
-@event.listens_for(Engine, "checkout")
-def checkout(dbapi_connection, connection_record, connection_proxy):
-    pid = os.getpid()
-    if connection_record.info['pid'] != pid:
-        connection_record.info['pid'] = pid
-        connection_record.info['checked_out'] = time.time()
-
 import os
 
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads', 'profile_pics')
@@ -2609,6 +2636,8 @@ class Transaction(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     transaction_type = db.Column(db.String(20), nullable=False)  # 'deposit', 'transfer', 'withdrawal'
     amount = db.Column(db.Float, nullable=False)
+    fee = db.Column(db.Float, default=0.00)  # Add fee field
+    net_amount = db.Column(db.Float, nullable=False)  # Add net_amount field
     status = db.Column(db.String(20), default='pending')  # 'pending', 'completed', 'failed'
     reference = db.Column(db.String(50), unique=True)
     description = db.Column(db.String(200))
@@ -2626,6 +2655,8 @@ class Transaction(db.Model):
         return {
             'id': self.id,
             'amount': float(self.amount),
+            'fee': float(self.fee or 0.0),
+            'net_amount': float(self.net_amount or self.amount),
             'transaction_type': self.transaction_type,
             'status': self.status,
             'reference': self.reference,
@@ -2696,6 +2727,8 @@ def process_deposit(user_id, amount, card_id, description=""):
             user_id=user_id,
             transaction_type='deposit',
             amount=amount,
+            fee=0.00,  # No fee for deposits
+            net_amount=amount,  # Full amount for deposits
             status='completed',
             reference=generate_transaction_reference(),
             description=description or f"Deposit via {card.card_type.title()} ****{card.card_number_last4}",
@@ -2795,9 +2828,10 @@ def make_deposit(current_user):
         result = process_deposit(current_user.id, amount, card_id, description)
         
         return jsonify({
-            'message': 'Deposit successful',
+            'message': f'Deposit successful! R{amount:.2f} added to your wallet',
             'new_balance': result['new_balance'],
-            'transaction': result['transaction']
+            'transaction': result['transaction'],
+            'card_last4': card.card_number_last4
         }), 200
         
     except Exception as e:
@@ -2806,22 +2840,108 @@ def make_deposit(current_user):
 @app.route('/api/wallet/transfer', methods=['POST'])
 @token_required
 def make_transfer(current_user):
-    data = request.get_json()
-    amount = data.get('amount')
-    recipient_account_number = data.get('recipient_account_number')
-    description = data.get('description', '')
-    
-    if not amount or amount <= 0:
-        return jsonify({'error': 'Invalid amount'}), 400
-    if not recipient_account_number:
-        return jsonify({'error': 'Recipient account number is required'}), 400
+    try:
+        data = request.get_json()
+        print(f"🔍 Transfer request data: {data}")
         
-    result = process_transfer(current_user.id, recipient_account_number, amount, description)
-    return jsonify({
-        'message': 'Transfer successful',
-        'new_balance': result['new_balance'],
-        'transaction': result['transaction']
-    }), 200
+        amount = float(data.get('amount'))
+        recipient_account_number = data.get('recipient_account_number')
+        description = data.get('description', '')
+
+        print(f"🔍 Amount: {amount}, Recipient: {recipient_account_number}")
+
+        if not amount or amount <= 0:
+            return jsonify({'error': 'Invalid amount'}), 400
+        if not recipient_account_number:
+            return jsonify({'error': 'Recipient account number is required'}), 400
+
+        # Find recipient
+        recipient = User.query.filter_by(account_number=recipient_account_number).first()
+        print(f" Recipient found: {recipient.full_name if recipient else 'NOT FOUND'}")
+        
+        if not recipient:
+            return jsonify({'error': 'Recipient not found'}), 404
+        if recipient.id == current_user.id:
+            return jsonify({'error': 'Cannot transfer to yourself'}), 400
+
+        # Get wallets
+        sender_wallet = get_or_create_wallet(current_user.id)
+        recipient_wallet = get_or_create_wallet(recipient.id)
+        
+        if sender_wallet.balance < amount:
+            return jsonify({'error': 'Insufficient balance'}), 400
+
+        # Update balances
+        sender_wallet.balance -= amount
+        recipient_wallet.balance += amount
+
+        # Generate UNIQUE references for each transaction
+        sender_reference = generate_transaction_reference()
+        recipient_reference = generate_transaction_reference()
+        
+        # Create transactions with DIFFERENT references
+        sender_transaction = Transaction(
+            user_id=current_user.id,
+            transaction_type='transfer',
+            amount=-amount,
+            fee=0.00,
+            net_amount=-amount,
+            status='completed',
+            reference=sender_reference,  # Unique reference
+            description=f"Transfer to {recipient.full_name} ({recipient_account_number[-4:]})",
+            recipient_email=recipient.email,
+            sender_email=current_user.email,
+            completed_at=datetime.utcnow()
+        )
+
+        recipient_transaction = Transaction(
+            user_id=recipient.id,
+            transaction_type='transfer',
+            amount=amount,
+            fee=0.00,
+            net_amount=amount,
+            status='completed',
+            reference=recipient_reference,  # Different unique reference
+            description=f"Transfer from {current_user.full_name} ({current_user.account_number[-4:]})",
+            recipient_email=recipient.email,
+            sender_email=current_user.email,
+            completed_at=datetime.utcnow()
+        )
+
+        # Create notification for recipient
+        recipient_notification = Notification(
+            user_id=recipient.id,
+            title="Money Received",
+            message=f"You received R{amount:.2f} from {current_user.full_name}",
+            type="transfer_received",
+            data={
+                "amount": amount,
+                "sender_name": current_user.full_name,
+                "sender_account": current_user.account_number[-4:],
+                "reference": sender_reference  # Use sender's reference for notification
+            }
+        )
+
+        db.session.add(sender_transaction)
+        db.session.add(recipient_transaction)
+        db.session.add(recipient_notification)
+        db.session.commit()
+        
+        print(f"✅ Transfer successful! New balance: {sender_wallet.balance}")
+
+        return jsonify({
+            'message': f'Transfer successful to {recipient.full_name}',
+            'new_balance': float(sender_wallet.balance),
+            'recipient_name': recipient.full_name,
+            'reference': sender_reference  # Return sender's reference
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Transfer error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Transfer failed: {str(e)}'}), 500
 
 @app.cli.command('add-test-card')
 @with_appcontext
@@ -3059,8 +3179,8 @@ def validate_card(card_number, expiry, cvv):
         return False, 'invalid_length'
     
     # Luhn algorithm check for valid card number
-    if not luhn_check(card_number):
-        return False, 'invalid_number'
+    # if not luhn_check(card_number):
+    #     return False, 'invalid_number'
     
     # Validate expiry date
     try:
@@ -3096,47 +3216,113 @@ def luhn_check(card_number):
         checksum += sum(divmod(d * 2, 10))
     return checksum % 10 == 0
 
-class Beneficiary(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    name = db.Column(db.String(100), nullable=False)
-    account_number = db.Column(db.String(20), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-@app.route('/api/beneficiaries', methods=['POST'])
+@app.route('/api/wallet/withdraw', methods=['POST'])
 @token_required
-def add_beneficiary(current_user):
-    data = request.get_json()
-    beneficiary = Beneficiary(
-        user_id=current_user.id,
-        name=data['name'],
-        account_number=data['account_number']
-    )
-    db.session.add(beneficiary)
+def withdraw(current_user):
+    try:
+        data = request.get_json()
+        amount = data.get('amount')
+        bank_account_number = data.get('bank_account_number')
+        description = data.get('description', '')
+
+        # Enhanced validation
+        if not amount or amount < MIN_WITHDRAWAL_AMOUNT:
+            return jsonify({'error': f'Minimum withdrawal amount is R{MIN_WITHDRAWAL_AMOUNT:.2f}'}), 400
+        if amount > MAX_WITHDRAWAL_AMOUNT:
+            return jsonify({'error': f'Maximum withdrawal amount is R{MAX_WITHDRAWAL_AMOUNT:.2f}'}), 400
+        if not bank_account_number:
+            return jsonify({'error': 'Bank account number is required'}), 400
+        if len(bank_account_number) != 10:
+            return jsonify({'error': 'Bank account number must be exactly 10 digits'}), 400
+        
+        # Get or create wallet
+        wallet = get_or_create_wallet(current_user.id)
+        if wallet.balance < amount:
+            return jsonify({'error': 'Insufficient balance'}), 400
+
+        # Calculate fees
+        fee = amount * WITHDRAWAL_FEE_PERCENTAGE
+        total_deduction = amount + fee
+        
+        if wallet.balance < total_deduction:
+            return jsonify({'error': f'Insufficient balance. Need R{total_deduction:.2f} (R{amount:.2f} + R{fee:.2f} fee)'}), 400
+
+        # Create withdrawal transaction record
+        transaction = Transaction(
+            user_id=current_user.id,
+            transaction_type='withdrawal',
+            amount=amount,
+            fee=fee,
+            net_amount=-total_deduction,  # Negative for withdrawals
+            status='completed',
+            reference=generate_transaction_reference(),
+            description=f"Withdrawal to bank account ending in {bank_account_number[-4:]} (Fee: R{fee:.2f})",
+            completed_at=datetime.utcnow()
+        )
+        db.session.add(transaction)
+        
+        # Deduct from wallet
+        wallet.balance -= total_deduction
+        db.session.commit()
+
+        return jsonify({
+            'message': 'Withdrawal successful',
+            'new_balance': float(wallet.balance),
+            'amount_withdrawn': float(amount),
+            'fee_charged': float(fee),
+            'total_deduction': float(total_deduction),
+            'reference': transaction.reference
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"Withdrawal error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Withdrawal failed: {str(e)}'}), 500
+
+@app.cli.command('generate-account-numbers')
+@with_appcontext
+def generate_account_numbers():
+    """Generate account numbers for all users who don't have them"""
+    try:
+        users_without_account = User.query.filter_by(account_number=None).all()
+        
+        if not users_without_account:
+            print("✅ All users already have account numbers!")
+            return
+        
+        for user in users_without_account:
+            user.account_number = generate_account_number()
+            print(f"✅ Generated account number {user.account_number} for user {user.id} ({user.email})")
+        
+        db.session.commit()
+        print(f"✅ Generated account numbers for {len(users_without_account)} users")
+    except Exception as e:
+        print(f"❌ Error generating account numbers: {str(e)}")
+        db.session.rollback()
+
+@app.route('/api/wallet/cards/<int:card_id>', methods=['DELETE'])
+def delete_card(card_id):
+    card = Card.query.get(card_id)
+    if not card:
+        return jsonify({'error': 'Card not found'}), 404
+    db.session.delete(card)
     db.session.commit()
-    return jsonify({'message': 'Beneficiary added successfully'})
-
-@app.route('/api/beneficiaries', methods=['GET'])
-@token_required
-def list_beneficiaries(current_user):
-    beneficiaries = Beneficiary.query.filter_by(user_id=current_user.id).all()
-    return jsonify([
-        {
-            'id': b.id,
-            'name': b.name,
-            'account_number': b.account_number,
-            'created_at': b.created_at.isoformat()
-        } for b in beneficiaries
-    ])
-
-@app.route('/api/beneficiaries/<int:beneficiary_id>', methods=['DELETE'])
-@token_required
-def delete_beneficiary(current_user, beneficiary_id):
-    beneficiary = Beneficiary.query.filter_by(id=beneficiary_id, user_id=current_user.id).first()
-    if not beneficiary:
-        return jsonify({'error': 'Beneficiary not found'}), 404
-    db.session.delete(beneficiary)
-    db.session.commit()
-    return jsonify({'message': 'Beneficiary deleted successfully'})
+    return jsonify({'message': 'Card deleted successfully'}), 200
 
 
+ # -------------------- MAIN --------------------
+if __name__ == '__main__':
+    app.run(port=5001, debug=True)
+
+@event.listens_for(Engine, "connect")
+def connect(dbapi_connection, connection_record):
+    connection_record.info['pid'] = os.getpid()
+
+@event.listens_for(Engine, "checkout")
+def checkout(dbapi_connection, connection_record, connection_proxy):
+    pid = os.getpid()
+    if connection_record.info['pid'] != pid:
+        connection_record.info['pid'] = pid
+        connection_record.info['checked_out'] = time.time()

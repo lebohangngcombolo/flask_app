@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { X, Lock, CheckCircle } from "lucide-react";
+import { toast } from 'react-toastify';
 
 interface AddCardModalProps {
   open: boolean;
@@ -13,10 +14,17 @@ const initialState = {
   expiry: "",
   cvv: "",
   primary: false,
+  cardType: "",
 };
 
 const AddCardModal: React.FC<AddCardModalProps> = ({ open, onClose, onSave }) => {
-  const [form, setForm] = useState(initialState);
+  const [form, setForm] = useState({
+    cardholder: "",
+    cardNumber: "",
+    expiry: "",
+    cvv: "",
+    primary: false,
+  });
   const [touched, setTouched] = useState<{ [k: string]: boolean }>({});
   const [showSuccess, setShowSuccess] = useState(false);
   const expiryRef = useRef<HTMLInputElement>(null);
@@ -42,12 +50,33 @@ const AddCardModal: React.FC<AddCardModalProps> = ({ open, onClose, onSave }) =>
     if (isFormValid) {
       setShowSuccess(true);
       setTimeout(() => {
-        onSave(form);
+        const payload = {
+          cardholder: form.cardholder,
+          cardNumber: form.cardNumber,
+          expiry: form.expiry,
+          cvv: form.cvv,
+          primary: form.primary,
+        };
+        onSave(payload);
         setForm(initialState);
         setShowSuccess(false);
         onClose();
       }, 1200);
     }
+  };
+
+  const handleDelete = async () => {
+    try {
+      await deleteCardApi(cardId);
+      toast.success('Successfully deleted');
+      // ...other logic, like closing the modal...
+    } catch (error) {
+      toast.error('Failed to delete card');
+    }
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    setForm({ ...form, [e.target.name]: e.target.value });
   };
 
   useEffect(() => {

@@ -10,12 +10,15 @@ import {
   Card,
   Transaction,
   updateCard,
+  withdraw,
 } from "../services/walletService";
 import { toast } from "react-toastify";
-import { Plus, CreditCard, Send, Trash2, Loader2 } from "lucide-react";
+import { Plus, CreditCard, Send, Trash2, Loader2, Clipboard, Check } from "lucide-react";
 import AddCardModal from "../components/AddCardModal";
 import DepositModal from "../components/DepositModal";
 import TransferModal from "../components/TransferModal";
+import WithdrawModal from "../components/WithdrawModal";
+import api from "../services/api"; // or wherever your axios instance is
 
 const Spinner = ({ className = "h-5 w-5" }) => (
   <svg className={`animate-spin ${className}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -33,9 +36,11 @@ const cardTypeIcons: Record<string, string> = {
 };
 
 const maskCardNumber = (num: string) => {
-  const digits = num.replace(/\D/g, "");
-  if (digits.length < 4) return "••••";
-  return "•••• •••• •••• " + digits.slice(-4);
+  if (!num) return "•••• •••• •••• ••••";
+  const cleaned = num.replace(/\s/g, '');
+  const last4 = cleaned.slice(-4);
+  const masked = "•••• •••• •••• " + last4;
+  return masked;
 };
 
 const DigitalWallet: React.FC = () => {
@@ -81,14 +86,11 @@ const DigitalWallet: React.FC = () => {
   const [addCardLoading, setAddCardLoading] = useState(false);
 
   // Summary
-  const [summary, setSummary] = useState({ totalDeposits: 0, totalTransfers: 0 });
+  const [summary, setSummary] = useState({ totalDeposits: 0, totalTransfers: 0, totalWithdrawals: 0 });
 
   // Transfer modal
   const [open, setOpen] = useState(false);
   const [walletBalance, setWalletBalance] = useState(0.0);
-
-  // Example beneficiaries (replace with your real data or state)
-  const [beneficiaries, setBeneficiaries] = useState([]);
 
   // Additional state for editing
   const [editingCard, setEditingCard] = useState<Card | null>(null);
@@ -106,7 +108,11 @@ const DigitalWallet: React.FC = () => {
 
   // AddBeneficiaryModal state
   const [name, setName] = useState('');
-  const [accountNumber, setAccountNumber] = useState('');
+  const [accountNumber, setAccountNumber] = useState("");
+  const [copied, setCopied] = useState(false);
+
+  // New state for Withdraw modal
+  const [showWithdraw, setShowWithdraw] = useState(false);
 
   // Fetch wallet balance
   useEffect(() => {
@@ -134,13 +140,27 @@ const DigitalWallet: React.FC = () => {
   }, []);
 
   // Fetch cards
-  useEffect(() => {
+  const fetchCards = async () => {
     setCardsLoading(true);
-    getCards()
-      .then(setCards)
-      .catch(() => toast.error("Failed to load cards"))
-      .finally(() => setCardsLoading(false));
-  }, []);
+    try {
+      const res = await getCards();
+      console.log("Backend cards:", res);
+      const mapped = res.map((c: any) => ({
+        id: c.id,
+        card_number: c.card_number,
+        card_holder: c.cardholder,
+        expiry_date: c.expiry,
+        card_type: c.card_type,
+        is_default: c.is_primary,
+      }));
+      console.log("Mapped cards:", mapped);
+      setCards(mapped);
+    } catch (err) {
+      // handle error
+    } finally {
+      setCardsLoading(false);
+    }
+  };
 
   // Fetch transactions
   useEffect(() => {
@@ -160,20 +180,37 @@ const DigitalWallet: React.FC = () => {
       .reduce((sum, tx) => sum + tx.amount, 0);
     const transfers = transactions.filter(tx => tx.transaction_type === "transfer" && tx.status === "completed")
       .reduce((sum, tx) => sum + tx.amount, 0);
-    setSummary({ totalDeposits: deposits, totalTransfers: transfers });
+    const withdrawals = transactions.filter(tx => tx.transaction_type === "withdrawal" && tx.status === "completed")
+      .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
+    setSummary({ 
+      totalDeposits: deposits, 
+      totalTransfers: transfers,
+      totalWithdrawals: withdrawals 
+    });
   }, [transactions]);
 
-  // Fetch beneficiaries
+  // Fetch account number
   useEffect(() => {
-    const fetchBeneficiaries = async () => {
+    const fetchProfile = async () => {
       try {
-        const res = await api.get('/api/beneficiaries');
-        setBeneficiaries(res.data);
+        const { data } = await api.get('/api/user/profile');
+        console.log('Profile data:', data);
+        console.log('Account number:', data.account_number);
+        
+        if (data.account_number) {
+          setAccountNumber(data.account_number);
+        } else {
+          console.warn('No account number received from server');
+          setAccountNumber('Generating...');
+          // Retry after a short delay
+          setTimeout(() => fetchProfile(), 1000);
+        }
       } catch (err) {
-        // handle error, maybe show a toast
+        console.error('Error fetching profile:', err);
+        setAccountNumber('Error loading');
       }
     };
-    fetchBeneficiaries();
+    fetchProfile();
   }, []);
 
   // Deposit handler
@@ -185,7 +222,7 @@ const DigitalWallet: React.FC = () => {
         amount: Number(depositAmount),
         card_id: Number(depositCard),
       });
-      toast.success(res.message);
+      toast.success(res.message || "Deposit successful!");
       setBalance(res.new_balance);
       setShowDeposit(false);
       setDepositAmount("");
@@ -199,62 +236,71 @@ const DigitalWallet: React.FC = () => {
   };
 
   // Transfer handler
-  const handleTransfer = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setTransferLoading(true);
+  const handleTransfer = async ({ amount, recipient_account_number, note }) => {
     try {
+      console.log("🚀 Starting transfer with data:", { amount, recipient_account_number, note }); // Debug log
+      
       const res = await makeTransfer({
-        amount: Number(transferAmount),
-        recipient_email: recipientEmail,
-        description: transferDesc,
+        amount,
+        recipient_account_number,
+        description: note,
       });
-      toast.success(res.message);
-      setBalance(res.new_balance);
-      setShowTransfer(false);
-      setTransferAmount("");
-      setRecipientEmail("");
-      setTransferDesc("");
+      
+      console.log("✅ Transfer response:", res); // Debug log
+      
+      toast.success(res.message || "Transfer successful!");
+      
+      // Refresh balance and transactions
+      const balanceData = await getWalletBalance();
+      setBalance(balanceData.balance);
+      setWalletBalance(balanceData.balance);
       setPage(1);
-    } catch (err: any) {
-      toast.error(err.response?.data?.error || "Transfer failed");
-    } finally {
-      setTransferLoading(false);
+    } catch (error: any) {
+      console.error("❌ Transfer error:", error); // Debug log
+      console.error("❌ Error response:", error.response?.data); // Debug log
+      toast.error(error.response?.data?.error || "Transfer failed");
+      throw error;
+    }
+  };
+
+  // Withdraw handler
+  const handleWithdraw = async ({ amount, bank_account_number, note }) => {
+    try {
+      const res = await withdraw(amount, bank_account_number, note);
+      toast.success(res.message || "Withdrawal successful!");
+      
+      // Refresh balance and transactions
+      const balanceData = await getWalletBalance();
+      setBalance(balanceData.balance);
+      setWalletBalance(balanceData.balance);
+      setPage(1);
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || "Withdrawal failed");
+      throw error;
     }
   };
 
   // Add card handler
-  const handleAddCard = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleAddCard = async (cardData: any) => {
     setAddCardLoading(true);
     try {
-      await addCard(cardForm);
+      await addCard(cardData);
       toast.success("Card added!");
       setShowAddCard(false);
-      setCardForm({
-        card_number: "",
-        card_holder: "",
-        expiry_date: "",
-        cvv: "",
-        card_type: "visa",
-      });
-      setCardsLoading(true);
-      const res = await getCards();
-      setCards(res);
+      await fetchCards();
     } catch (err: any) {
       toast.error(err.response?.data?.error || "Failed to add card");
     } finally {
       setAddCardLoading(false);
-      setCardsLoading(false);
     }
   };
 
   // Delete card handler
   const handleDeleteCard = async (id: number) => {
-    if (!window.confirm("Are you sure you want to delete this card?")) return;
     try {
       await deleteCard(id);
       toast.success("Card deleted");
-      setCards(cards.filter((c) => c.id !== id));
+      await fetchCards();
     } catch (err: any) {
       toast.error(err.response?.data?.error || "Failed to delete card");
     }
@@ -274,22 +320,15 @@ const DigitalWallet: React.FC = () => {
   // Additional handler for editing
   const handleEditCard = (card: Card) => setEditingCard(card);
 
-  // AddBeneficiaryModal handler
-  const handleAdd = async () => {
-    await api.post('/api/beneficiaries', { name, account_number: accountNumber });
-    // Refresh list after adding
-    const res = await api.get('/api/beneficiaries');
-    setBeneficiaries(res.data);
-    // Close modal, reset form, etc.
+  const handleCopy = () => {
+    navigator.clipboard.writeText(accountNumber);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
   };
 
-  // Delete beneficiary handler
-  const handleDelete = async (id: number) => {
-    await api.delete(`/api/beneficiaries/${id}`);
-    // Refresh list after deleting
-    const res = await api.get('/api/beneficiaries');
-    setBeneficiaries(res.data);
-  };
+  useEffect(() => {
+    fetchCards();
+  }, []);
 
   // UI
   return (
@@ -306,6 +345,28 @@ const DigitalWallet: React.FC = () => {
               <span>Total Deposits: ZAR {summary.totalDeposits.toFixed(2)}</span> |{" "}
               <span>Total Transfers: ZAR {summary.totalTransfers.toFixed(2)}</span>
             </div>
+            <div className="flex items-center gap-2 mt-2">
+              <span className="text-xs text-gray-500">Wallet Account Number:</span>
+              <span className="font-mono text-sm bg-gray-100 px-2 py-1 rounded">
+                {accountNumber || 'Loading...'}
+              </span>
+              {accountNumber && 
+               accountNumber !== 'Loading...' && 
+               accountNumber !== 'Error loading' && 
+               accountNumber !== 'Generating...' && (
+                <>
+                  <button
+                    className="ml-1 p-1 rounded hover:bg-blue-100 transition"
+                    onClick={handleCopy}
+                    title="Copy account number"
+                    type="button"
+                  >
+                    {copied ? <Check className="w-4 h-4 text-green-500" /> : <Clipboard className="w-4 h-4 text-blue-600" />}
+                  </button>
+                  {copied && <span className="text-xs text-green-600 ml-1">Copied!</span>}
+                </>
+              )}
+            </div>
           </div>
           <div className="flex gap-3 mt-4 md:mt-0">
             <button
@@ -319,6 +380,12 @@ const DigitalWallet: React.FC = () => {
               onClick={() => setShowTransfer(true)}
             >
               <Send className="w-4 h-4" /> Transfer
+            </button>
+            <button
+              className="btn-secondary flex items-center gap-2 shadow hover:scale-105 transition"
+              onClick={() => setShowWithdraw(true)}
+            >
+              Withdraw
             </button>
           </div>
         </div>
@@ -344,71 +411,127 @@ const DigitalWallet: React.FC = () => {
               <span>No cards added yet.</span>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {cards.map(card => (
                 <div
                   key={card.id}
-                  className="relative w-full max-w-sm mx-auto my-6 rounded-2xl shadow-xl overflow-hidden group transition-transform hover:scale-105"
+                  className="relative w-full max-w-sm mx-auto rounded-2xl shadow-2xl overflow-hidden group transition-all duration-300 hover:scale-105 hover:shadow-3xl"
                   style={{
-                    background: "linear-gradient(135deg, #23295A 60%, #3B4CCA 100%)",
-                    minHeight: 180,
-                    border: "1.5px solid #e0e7ff",
+                    background: card.card_type === 'visa' 
+                      ? "linear-gradient(135deg, #1e3a8a 0%, #3b82f6 50%, #60a5fa 100%)"
+                      : card.card_type === 'mastercard'
+                      ? "linear-gradient(135deg, #dc2626 0%, #ef4444 50%, #f87171 100%)"
+                      : card.card_type === 'amex'
+                      ? "linear-gradient(135deg, #059669 0%, #10b981 50%, #34d399 100%)"
+                      : "linear-gradient(135deg, #23295A 60%, #3B4CCA 100%)",
+                    minHeight: 220, // Increased height for more realistic proportions
+                    aspectRatio: "1.586", // Standard credit card ratio (85.6mm x 53.98mm)
+                    border: "2px solid rgba(255, 255, 255, 0.1)",
                   }}
                 >
-                  {/* Edit/Delete buttons */}
-                  <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-20">
-                    <button
-                      className="bg-white/80 hover:bg-blue-100 rounded-full p-2 shadow"
-                      onClick={() => handleEditCard(card)}
-                      title="Edit Card"
-                    >
-                      <svg className="w-5 h-5 text-blue-700" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                        <path d="M15.232 5.232l3.536 3.536M9 13l6-6 3 3-6 6H9v-3z" />
-                      </svg>
-                    </button>
-                    <button
-                      className="bg-white/80 hover:bg-red-100 rounded-full p-2 shadow"
-                      onClick={() => setCardToDelete(card)}
-                      title="Delete Card"
-                    >
-                      <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                        <path d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
-                  {/* Card chip */}
-                  <div className="absolute left-6 top-12 w-10 h-7 bg-yellow-400 rounded-md shadow-inner opacity-80"></div>
-                  {/* Card details */}
-                  <div className="relative z-10 w-full h-full flex flex-col justify-between p-6 text-white">
-                    <div>
-                      <span className="font-semibold text-lg tracking-wide block mb-2">{card.cardholder || card.card_holder}</span>
-                      <span className="font-mono text-2xl tracking-widest select-none block mb-6 mt-8">
-                        {maskCardNumber(card.card_number)}
-                      </span>
+                  {/* Card Content */}
+                  <div className="absolute inset-0 p-6 flex flex-col justify-between">
+                    {/* Top Section */}
+                    <div className="flex justify-between items-start">
+                      <div className="text-white/90 text-sm font-medium">
+                        {card.card_type
+                          ? card.card_type.toLowerCase() === "visa"
+                            ? "Visa"
+                            : card.card_type.toLowerCase() === "mastercard"
+                              ? "Mastercard"
+                              : card.card_type.toUpperCase()
+                          : "Card"}
+                      </div>
+                      {card.is_default && (
+                        <div className="bg-white/20 backdrop-blur-sm px-2 py-1 rounded-full text-xs text-white font-medium">
+                          DEFAULT
+                        </div>
+                      )}
                     </div>
+
+                    {/* Middle Section - Card Number */}
+                    <div className="text-center">
+                      <div className="text-white/80 text-xs mb-2">Card Number</div>
+                      <div className="text-white text-xl font-mono tracking-wider font-bold">
+                        {maskCardNumber(card.card_number)}
+                      </div>
+                    </div>
+
+                    {/* Bottom Section */}
                     <div className="flex justify-between items-end">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm tracking-wider">Exp: {card.expiry || card.expiry_date}</span>
-                        {card.is_primary && (
-                          <span className="bg-white/30 text-white px-2 py-0.5 rounded-full text-xs font-semibold tracking-wide shadow ml-2">
-                            Primary
-                          </span>
+                      <div>
+                        <div className="text-white/60 text-xs mb-1">Cardholder</div>
+                        <div className="text-white font-semibold text-sm">
+                          {card.card_holder}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-white/60 text-xs mb-1">Expires</div>
+                        <div className="text-white font-semibold text-sm">
+                          {card.expiry_date}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Card Chip */}
+                    <div className="absolute top-1/2 left-6 transform -translate-y-1/2">
+                      <div className="w-8 h-6 bg-yellow-400/80 rounded-sm"></div>
+                    </div>
+
+                    {/* Card Logo */}
+                    <div className="absolute top-6 right-6">
+                      {card.card_type === 'visa' && (
+                        <div className="text-white font-bold text-lg">VISA</div>
+                      )}
+                      {card.card_type === 'mastercard' && (
+                        <div className="flex items-center">
+                          <div className="w-6 h-6 bg-red-500 rounded-full -mr-2"></div>
+                          <div className="w-6 h-6 bg-yellow-500 rounded-full"></div>
+                        </div>
+                      )}
+                      {card.card_type === 'amex' && (
+                        <div className="text-white font-bold text-lg">AMEX</div>
+                      )}
+                    </div>
+
+                    {/* Hover Overlay with Actions */}
+                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleEditCard(card)}
+                          className="bg-white/20 backdrop-blur-sm text-white p-2 rounded-full hover:bg-white/30 transition-colors"
+                          title="Edit card"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={() => setCardToDelete(card)}
+                          className="bg-red-500/80 backdrop-blur-sm text-white p-2 rounded-full hover:bg-red-500 transition-colors"
+                          title="Delete card"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                        {!card.is_default && (
+                          <button
+                            onClick={() => handleSetDefaultCard(card.id)}
+                            className="bg-blue-500/80 backdrop-blur-sm text-white p-2 rounded-full hover:bg-blue-500 transition-colors"
+                            title="Set as default"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          </button>
                         )}
                       </div>
-                      <img
-                        src={
-                          (card.card_type || "").toLowerCase() === "mastercard"
-                            ? "/icons/mastercard-svgrepo-com.svg"
-                            : (card.card_type || "").toLowerCase() === "visa"
-                            ? "/icons/visa-svgrepo-com.svg"
-                            : "/icons/visa-svgrepo-com.svg"
-                        }
-                        alt="Card brand"
-                        className="w-12 h-8 object-contain ml-2"
-                        style={{ background: "rgba(255,255,255,0.15)", borderRadius: "0.5rem", padding: "0.25rem" }}
-                      />
                     </div>
                   </div>
+
+                  {/* Subtle shine effect */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
                 </div>
               ))}
             </div>
@@ -474,11 +597,20 @@ const DigitalWallet: React.FC = () => {
       <AddCardModal
         open={showAddCard}
         onClose={() => setShowAddCard(false)}
-        onSave={async (card) => {
-          await addCard(card);
+        onSave={async (form) => {
+          // Map form fields to backend expected names
+          const payload = {
+            cardholder: form.cardholder,
+            cardNumber: form.cardNumber,
+            expiry: form.expiry,
+            cvv: form.cvv,
+            primary: form.primary,
+          };
+          console.log("Submitting card data:", payload);
+          await addCard(payload);
           toast.success("Card added!");
           setShowAddCard(false);
-          setCards(await getCards());
+          await fetchCards();
         }}
       />
 
@@ -515,33 +647,33 @@ const DigitalWallet: React.FC = () => {
       <TransferModal
         open={showTransfer}
         onClose={() => setShowTransfer(false)}
+        onTransfer={handleTransfer}
         walletBalance={walletBalance}
-        recipients={[
-          ...cards.map(card => ({
-            id: `card-${card.id}`,
-            name: card.cardholder || card.card_holder,
-            account_number: card.card_number, // or card.account_number if available
-            type: 'card'
-          })),
-          ...beneficiaries.map(b => ({
-            id: `beneficiary-${b.id}`,
-            name: b.name,
-            account_number: b.account_number,
-            type: 'beneficiary'
-          }))
-        ]}
       />
 
       {editingCard && (
         <AddCardModal
           open={!!editingCard}
           onClose={() => setEditingCard(null)}
-          initialCard={editingCard}
-          onSave={async (updatedCard) => {
-            await updateCard(updatedCard);
+          initialCard={{
+            cardholder: editingCard.card_holder,
+            cardNumber: editingCard.card_number,
+            expiry: editingCard.expiry_date,
+            cvv: "", // Don't prefill CVV for security
+            primary: editingCard.is_default,
+          }}
+          onSave={async (form) => {
+            const payload = {
+              cardholder: form.cardholder,
+              cardNumber: form.cardNumber,
+              expiry: form.expiry,
+              cvv: form.cvv,
+              primary: form.primary,
+            };
+            await updateCard({ ...payload, id: editingCard.id });
             toast.success("Card updated!");
             setEditingCard(null);
-            setCards(await getCards());
+            await fetchCards();
           }}
         />
       )}
@@ -587,12 +719,12 @@ const DigitalWallet: React.FC = () => {
         </div>
       )}
 
-      {beneficiaries.map(b => (
-        <div key={b.id}>
-          {b.name} ({b.account_number})
-          <button onClick={() => handleDelete(b.id)}>Delete</button>
-        </div>
-      ))}
+      <WithdrawModal
+        open={showWithdraw}
+        onClose={() => setShowWithdraw(false)}
+        onWithdraw={handleWithdraw}
+        walletBalance={walletBalance}
+      />
     </div>
   );
 };

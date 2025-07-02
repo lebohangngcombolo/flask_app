@@ -11,7 +11,8 @@ import {
   Settings,
   UserCheck,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  DollarSign
 } from 'lucide-react';
 
 interface NavItem {
@@ -60,6 +61,12 @@ const navItems: NavItem[] = [
       { label: 'Roles & Permissions', path: '/admin/team/roles' },
       // { label: 'Activity Logs', path: '/admin/team/logs' }, // optional
     ]
+  },
+  {
+    name: 'Payout Requests',
+    path: '/admin/payout-requests',
+    icon: DollarSign,
+    tooltip: 'Approve or reject payout requests'
   }
 ];
 

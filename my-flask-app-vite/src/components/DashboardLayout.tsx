@@ -9,7 +9,8 @@ import {
   Briefcase,
   ShoppingBag,
   Menu,
-  Bell
+  Bell,
+  DollarSign
 } from 'lucide-react';
 import ProfileDropdown from './ProfileDropdown';
 import { useAuth } from '../hooks/useAuth';
@@ -31,6 +32,7 @@ const sidebarItems = [
   { label: 'Beneficiaries', path: '/dashboard/beneficiaries', icon: Users },
   { label: 'Refer & Earn', path: '/dashboard/refer', icon: Gift },
   { label: 'Stokvel Groups', path: '/dashboard/stokvel-groups', icon: Briefcase },
+  { label: 'Request Payout', path: '/dashboard/request-payout', icon: DollarSign },
 ];
 
 

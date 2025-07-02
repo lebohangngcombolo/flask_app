@@ -262,95 +262,6 @@ const AdminDashboard: React.FC = () => {
         ))}
       </div>
 
-      {/* Category Tabs */}
-      <div className="flex gap-2 mb-4">
-        {categories.map((cat) => (
-          <button
-            key={cat}
-            onClick={() => setSelectedCategory(cat)}
-            className={`px-4 py-2 rounded-lg font-medium transition ${
-              selectedCategory === cat
-                ? "bg-blue-100 text-blue-700"
-                : "bg-gray-100 text-gray-500 hover:bg-blue-50"
-            }`}
-          >
-            {cat}
-          </button>
-        ))}
-      </div>
-
-      {/* Savings Tiers */}
-      <div>
-        <h2 className="font-semibold text-lg mb-3">{selectedCategory} Tiers</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
-          {categoryTiers[selectedCategory].map((tier) => {
-            const details = tierDetails[selectedCategory][tier.name];
-            return (
-              <div
-                key={tier.name}
-                className="flex flex-col items-center bg-white rounded-2xl shadow-lg border border-gray-100 p-7 min-h-[360px] w-full hover:shadow-2xl transition-all"
-              >
-                {/* Colored badge/icon at the top */}
-                <div
-                  className={`w-16 h-16 rounded-full flex items-center justify-center text-3xl font-bold mb-4 shadow
-                    ${tier.name === "Bronze" ? "bg-yellow-400 text-white" : ""}
-                    ${tier.name === "Silver" ? "bg-gray-300 text-gray-800" : ""}
-                    ${tier.name === "Gold" ? "bg-yellow-500 text-white" : ""}
-                    ${tier.name === "Platinum" ? "bg-gray-800 text-white" : ""}
-                  `}
-                >
-                  {tier.name[0]}
-                </div>
-                {/* Main info */}
-                <div className="flex-1 flex flex-col items-center text-center w-full">
-                  <div className="font-bold text-2xl mb-1 tracking-wide">{tier.name} Tier</div>
-                  <div className="text-gray-600 mb-1 text-lg font-semibold">
-                    Amount: <span className="font-bold">{details.amountRange}</span>
-                  </div>
-                  <div className="text-gray-500 text-sm mb-1">
-                    Category: {selectedCategory}
-                  </div>
-                  <div className="text-gray-400 text-xs mb-2">
-                    {details.description}
-                  </div>
-                </div>
-                {/* Divider */}
-                <div className="w-full border-t border-gray-100 my-3"></div>
-                {/* Extra info section */}
-                <div className="flex flex-col gap-2 w-full text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Interest earned</span>
-                    <span className="font-semibold text-blue-700">{details.interest}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Access to funds</span>
-                    <span className="font-semibold text-green-600">{details.access}</span>
-                  </div>
-                </div>
-                {/* Action or extra info at the bottom */}
-                <div className="mt-5 flex flex-col items-center w-full">
-                  <button className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow hover:bg-blue-700 transition text-sm w-full font-semibold">
-                    Learn More
-                  </button>
-                  <div className="mt-2 text-xs text-gray-500 text-center w-full">
-                    {details.support}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Floating Create Button */}
-      <a
-        href="/admin/groups/create"
-        className="fixed bottom-8 right-8 bg-blue-600 text-white rounded-full shadow-lg p-4 hover:bg-blue-700 transition flex items-center justify-center"
-        title="Create Group"
-      >
-        <FaPlus size={24} />
-      </a>
-
       {/* Groups Management */}
       <div className="bg-white rounded-lg shadow p-6 mb-8">
         <div className="flex justify-between items-center mb-4">
@@ -362,17 +273,64 @@ const AdminDashboard: React.FC = () => {
             + Create Group
           </button>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
           {groups.length === 0 ? (
-            <div className="text-gray-400 col-span-3 text-center py-8">No groups available.</div>
+            <div className="text-gray-400 col-span-4 text-center py-8">No groups available.</div>
           ) : (
-            groups.map(group => (
-              <div key={group.id} className="bg-gray-100 p-4 rounded-lg shadow">
-                <div className="font-bold">{group.name}</div>
-                <div className="text-sm text-gray-600">{group.description}</div>
-                <div className="text-xs text-gray-500">Tier: {group.tier}</div>
-              </div>
-            ))
+            groups.map(group => {
+              const details = tierDetails[group.category]?.[group.tier];
+              if (!details) return null;
+              return (
+                <div
+                  key={group.id}
+                  className="flex flex-col items-center bg-white rounded-2xl shadow-lg border border-gray-100 p-7 min-h-[360px] w-full hover:shadow-2xl transition-all"
+                >
+                  {/* Badge/icon */}
+                  <div
+                    className={`w-16 h-16 rounded-full flex items-center justify-center text-3xl font-bold mb-4 shadow
+                      ${group.tier === "Bronze" ? "bg-yellow-400 text-white" : ""}
+                      ${group.tier === "Silver" ? "bg-gray-300 text-gray-800" : ""}
+                      ${group.tier === "Gold" ? "bg-yellow-500 text-white" : ""}
+                      ${group.tier === "Platinum" ? "bg-gray-800 text-white" : ""}
+                    `}
+                  >
+                    {group.tier[0]}
+                  </div>
+                  {/* Main info */}
+                  <div className="flex-1 flex flex-col items-center text-center w-full">
+                    <div className="font-bold text-2xl mb-1 tracking-wide">{group.name}</div>
+                    <div className="text-gray-600 mb-1 text-lg font-semibold">
+                      Amount: <span className="font-bold">{details.amountRange}</span>
+                    </div>
+                    <div className="text-gray-500 text-sm mb-1">
+                      Category: {group.category}
+                    </div>
+                    <div className="text-gray-400 text-xs mb-2">
+                      {details.description}
+                    </div>
+                  </div>
+                  <div className="w-full border-t border-gray-100 my-3"></div>
+                  <div className="flex flex-col gap-2 w-full text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Interest earned</span>
+                      <span className="font-semibold text-blue-700">{details.interest}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Access to funds</span>
+                      <span className="font-semibold text-green-600">{details.access}</span>
+                    </div>
+                  </div>
+                  <div className="mt-5 flex flex-col items-center w-full">
+                    <button className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow hover:bg-blue-700 transition text-sm w-full font-semibold">
+                      Learn More
+                    </button>
+                    <div className="mt-2 text-xs text-gray-500 text-center w-full">
+                      {details.support}
+                    </div>
+                  </div>
+                </div>
+              );
+            })
           )}
         </div>
       </div>
