@@ -132,7 +132,7 @@ const App: React.FC = () => {
           <Route path="/news" element={<News />} />
 
           {/* User dashboard routes */}
-          <Route path="/dashboard" element={<UserRoute><DashboardLayout /></UserRoute>}>
+          <Route path="/dashboard" element={<DashboardLayout />}>
             <Route index element={<Dashboard />} />
             <Route path="profile" element={<UserProfile />} />
             <Route path="digital-wallet" element={<DigitalWallet />} />
@@ -141,6 +141,7 @@ const App: React.FC = () => {
             <Route path="stokvel-groups" element={<StokvelGroups />} />
             <Route path="refer" element={<ReferralDashboard />} />
             <Route path="referral-history" element={<ReferralHistory />} />
+            <Route path="stokvel-groups/:category/:tier" element={<TierDetails />} />
             {/* Add more dashboard sub-pages here if needed */}
           </Route>
 
@@ -157,8 +158,6 @@ const App: React.FC = () => {
           {/* Phone Auth route */}
           <Route path="/phone-auth" element={<PhoneAuth />} />
 
-          {/* Tier Details route */}
-          <Route path="/tiers/:category/:tier" element={<TierDetails />} />
 
           {/* Catch all route */}
           <Route path="*" element={<Navigate to="/" replace />} />

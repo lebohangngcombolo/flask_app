@@ -87,7 +87,8 @@ export const stokvelAPI = {
   getStokvels: () => api.get('/api/groups/available'),
   createStokvel: (data: any) => api.post('/api/stokvel/register-group', data),
   getStokvelDetails: (id: string) => api.get(`/api/groups/${id}`),
-  joinStokvel: (id: string) => api.post(`/api/stokvel/join-group`, { group_id: id })
+  joinStokvel: (category: string, tier: string, amount: number) =>
+    api.post(`/api/stokvel/join-group`, { category, tier, amount })
 };
 
 // Admin API calls

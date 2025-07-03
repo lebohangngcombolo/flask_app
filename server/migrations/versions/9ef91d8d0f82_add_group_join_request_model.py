@@ -21,7 +21,6 @@ def upgrade():
     op.create_table('group_join_request',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=False),
-    sa.Column('tier_id', sa.Integer(), nullable=False),
     sa.Column('status', sa.String(length=20), nullable=True),
     sa.Column('reason', sa.String(length=255), nullable=True),
     sa.Column('created_at', sa.DateTime(), nullable=True),

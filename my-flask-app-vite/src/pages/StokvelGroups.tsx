@@ -217,9 +217,12 @@ const StokvelGroups: React.FC = () => {
           const data = await res.json();
           setJoinRequests(
             data.map((req: any) => ({
-              groupId: req.tier_id,
+              category: req.category,
+              tier: req.tier,
+              amount: req.amount,
               status: req.status,
-              reason: req.reason
+              reason: req.reason,
+              createdAt: req.created_at,
             }))
           );
         }
@@ -237,13 +240,11 @@ const StokvelGroups: React.FC = () => {
     group.name.toLowerCase().includes(search.toLowerCase())
   );
 
-  // Handle join request
-  const handleJoin = async (groupId: number) => {
-    setLoadingTier(groupId);
+  const handleJoin = async (category: string, tier: string, amount: number) => {
+    setLoadingTier(true);
     try {
-      await groupService.joinGroup(groupId);
-      // Add to local state immediately for instant feedback
-      setJoinRequests(prev => [...prev, { groupId, status: "pending" }]);
+      // ... your join logic ...
+      fetchRequests();
       toast.success("Join request sent successfully!");
     } catch (err) {
       toast.error("Failed to submit join request.");
@@ -253,8 +254,10 @@ const StokvelGroups: React.FC = () => {
   };
 
   // Get join request status for a group
-  const getRequestStatus = (groupId: number) => {
-    return joinRequests.find(req => req.groupId === groupId);
+  const getRequestStatus = (category: string, tier: string, amount: number) => {
+    return joinRequests.find(
+      req => req.category === category && req.tier === tier && req.amount === amount
+    );
   };
 
   // Helper to generate amounts in R50 increments within a range
@@ -406,7 +409,7 @@ const StokvelGroups: React.FC = () => {
                   <div className="mt-5 flex flex-col items-center w-full">
                     <button
                       className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow hover:bg-blue-700 transition text-sm w-full font-semibold"
-                      onClick={() => navigate(`/tiers/${selectedCategory.toLowerCase()}/${tier.name.toLowerCase()}`)}
+                      onClick={() => navigate(`/dashboard/stokvel-groups/${selectedCategory.toLowerCase()}/${tier.name.toLowerCase()}`)}
                     >
                       Learn More
                     </button>
@@ -422,7 +425,7 @@ const StokvelGroups: React.FC = () => {
 
         {/* Status Table - Always visible for better UX */}
         <div className="mt-8">
-          <h2 className="text-lg font-bold mb-4 dark:text-dark-text">My Join Requests Status</h2>
+          <h2 className="text-lg font-bold mb-4 dark:text-dark-text">My Request Status</h2>
           <div className="bg-white dark:bg-dark-card rounded-lg shadow overflow-hidden">
             <table className="min-w-full divide-y divide-gray-200 dark:divide-dark-border">
               <thead className="bg-gray-50 dark:bg-gray-800">
@@ -442,11 +445,22 @@ const StokvelGroups: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-dark-card divide-y divide-gray-200 dark:divide-dark-border">
-                <tr>
-                  <td colSpan={4} className="px-6 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
-                    No join requests yet. Select a group above to get started.
-                  </td>
-                </tr>
+                {joinRequests.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-6 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
+                      No join requests yet. Select a group above to get started.
+                    </td>
+                  </tr>
+                ) : (
+                  joinRequests.map((req, idx) => (
+                    <tr key={idx}>
+                      <td className="px-6 py-4">{req.category} - {req.tier}</td>
+                      <td className="px-6 py-4">{req.status}</td>
+                      <td className="px-6 py-4">{new Date(req.createdAt).toLocaleString()}</td>
+                      <td className="px-6 py-4">{req.reason || '-'}</td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>

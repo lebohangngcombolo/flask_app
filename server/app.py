@@ -40,6 +40,7 @@ import jwt as pyjwt
 from sqlalchemy import select
 from flask_socketio import SocketIO, emit
 
+
 # Load environment variables from .env file
 load_dotenv()
 
@@ -1160,52 +1161,37 @@ def register_stokvel_group(current_user):
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/stokvel/join-group', methods=['POST'])
-@token_required
-def join_stokvel_group(current_user):
-    try:
-        data = request.get_json()
-        group_code = data.get('group_code')
-        
-        if not group_code:
-            return jsonify({'error': 'Group code is required'}), 400
-            
-        # Find group by code
-        group = StokvelGroup.query.filter_by(group_code=group_code).first()
-        if not group:
-            return jsonify({'error': 'Invalid group code'}), 404
-            
-        # Check if user is already a member
-        existing_membership = StokvelMember.query.filter_by(
-            user_id=current_user.id,
-            group_id=group.id
-        ).first()
-        
-        if existing_membership:
-            return jsonify({'error': 'You are already a member of this group'}), 400
-            
-        # Check if group is full
-        if group.max_members and len(group.members) >= group.max_members:
-            return jsonify({'error': 'Group has reached maximum member limit'}), 400
-            
-        # Create new membership
-        new_membership = StokvelMember(
-            user_id=current_user.id,
-            group_id=group.id,
-            status='active',
-            role='member'
-        )
-        
-        db.session.add(new_membership)
-        db.session.commit()
-        
-        return jsonify({
-            'message': 'Successfully joined stokvel group',
-            'group': group.to_dict()
-        }), 200
-        
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+@jwt_required()
+def join_stokvel_group():
+    data = request.get_json()
+    category = data.get('category')
+    tier = data.get('tier')
+    amount = data.get('amount')
+    user_id = get_jwt_identity()
+
+    # Validate required fields
+    if not category or not tier or not amount:
+        return jsonify({"error": "Missing required fields"}), 400
+
+    # Prevent duplicate pending requests for the same user/category/tier/amount
+    existing = GroupJoinRequest.query.filter_by(
+        user_id=user_id, category=category, tier=tier, amount=amount, status="pending"
+    ).first()
+    if existing:
+        return jsonify({"error": "You already have a pending request for this tier."}), 400
+
+    # Save the join request in the database
+    join_request = GroupJoinRequest(
+        user_id=user_id,
+        category=category,
+        tier=tier,
+        amount=amount,
+        status="pending"
+    )
+    db.session.add(join_request)
+    db.session.commit()
+
+    return jsonify({"message": "Join request submitted successfully!"}), 201
 
 def validate_email(email):
     # Add email validation
@@ -2206,19 +2192,18 @@ def delete_group(current_user, group_id):
     db.session.commit()
     return jsonify({'message': 'Group deleted successfully'}), 200
 
-@app.route('/api/groups/join', methods=['POST'])
-@jwt_required()
-def join_group():
-    data = request.get_json()
-    user_id = get_jwt_identity()
-    tier_id = data.get('tierId')
 
     # Check for existing pending request
-    existing = GroupJoinRequest.query.filter_by(user_id=user_id, tier_id=tier_id, status='pending').first()
+    existing = JoinRequest.query.filter_by(
+        user_id=user_id, category=category, tier=tier, amount=amount, status="pending"
+    ).first()
     if existing:
-        return jsonify({'error': 'You already have a pending request for this tier.'}), 400
+        return jsonify({"error": "You already have a pending request for this tier."}), 400
 
-    join_request = GroupJoinRequest(user_id=user_id, tier_id=tier_id)
+    join_request = GroupJoinRequest(
+        user_id=user_id,
+        status="pending"
+    )
     db.session.add(join_request)
     db.session.commit()
     return jsonify({"message": "Join request submitted!"}), 200
@@ -2226,7 +2211,9 @@ def join_group():
 class GroupJoinRequest(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    tier_id = db.Column(db.Integer, nullable=False)  # or group_id if you use groups
+    category = db.Column(db.String(50), nullable=False)
+    tier = db.Column(db.String(50), nullable=False)
+    amount = db.Column(db.Float, nullable=False)
     status = db.Column(db.String(20), default='pending')  # pending, approved, rejected
     reason = db.Column(db.String(255))  # Reason for rejection
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -2236,17 +2223,18 @@ class GroupJoinRequest(db.Model):
 @app.route('/api/admin/join-requests', methods=['GET'])
 @jwt_required()
 def list_join_requests():
-    # Optionally check admin role here
     requests = GroupJoinRequest.query.order_by(GroupJoinRequest.created_at.desc()).all()
     result = []
     for req in requests:
         result.append({
             'id': req.id,
             'user_id': req.user_id,
-            'tier_id': req.tier_id,
+            'category': req.category,
+            'tier': req.tier,
+            'amount': req.amount,
             'status': req.status,
             'reason': req.reason,
-            'created_at': req.created_at.isoformat(),
+            'created_at': req.created_at.isoformat() if req.created_at else None,
             'user': {
                 'id': req.user.id,
                 'name': req.user.full_name,
@@ -2271,7 +2259,6 @@ def approve_join_request(request_id):
             type="kyc_required",
             data={
                 "join_request_id": req.id,
-                "group_id": req.tier_id,
                 "action_required": "complete_kyc",
                 "kyc_url": "/dashboard/kyc"  # <-- Add this line
             }
@@ -2307,14 +2294,12 @@ def get_user_join_requests():
     requests = GroupJoinRequest.query.filter_by(user_id=user_id).all()
     result = []
     for req in requests:
-        group = StokvelGroup.query.get(req.tier_id)
         result.append({
-            'tier_id': req.tier_id,
+            'category': req.category,
+            'tier': req.tier,
+            'amount': req.amount,
             'status': req.status,
             'reason': req.reason,
-            'group_name': group.name if group else None,
-            'tier': group.tier if group else None,
-            'amount': group.amount if group else None,
             'created_at': req.created_at.isoformat() if req.created_at else None
         })
     return jsonify(result)

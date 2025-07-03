@@ -83,7 +83,18 @@ const GroupAdminManagement: React.FC = () => {
     setLoadingRequests(true);
     try {
       const res = await adminAPI.getJoinRequests();
-      setRequests(res.data);
+      setRequests(
+        res.data.map((req: any) => ({
+          id: req.id,
+          user: req.user,
+          category: req.category,
+          tier: req.tier,
+          amount: req.amount,
+          status: req.status,
+          reason: req.reason,
+          createdAt: req.created_at,
+        }))
+      );
     } catch (err) {
       toast.error("Failed to load join requests");
     } finally {
@@ -197,9 +208,8 @@ const GroupAdminManagement: React.FC = () => {
   };
 
   // Helper to get group name
-  const getGroupName = (tierId: number) => {
-    const group = groups.find(g => g.id === tierId);
-    return group ? `${group.name} (${group.tier})` : tierId;
+  const getGroupName = (category: string, tier: string) => {
+    return `${category} (${tier})`;
   };
 
   // New selection functions
@@ -618,7 +628,7 @@ const GroupAdminManagement: React.FC = () => {
                       </td>
                     <td className="p-2">{req.user?.name}</td>
                     <td className="p-2">{req.user?.email}</td>
-                    <td className="p-2">{getGroupName(req.tier_id)}</td>
+                    <td className="p-2">{getGroupName(req.category, req.tier)}</td>
                     <td className="p-2">
                       <span className={`px-2 py-1 rounded text-xs font-semibold ${
                         req.status === "pending"
@@ -631,7 +641,7 @@ const GroupAdminManagement: React.FC = () => {
                       </span>
                     </td>
                     <td className="p-2">{req.reason || "-"}</td>
-                    <td className="p-2">{new Date(req.created_at).toLocaleString()}</td>
+                    <td className="p-2">{new Date(req.createdAt).toLocaleString()}</td>
                     <td className="p-2 flex gap-2">
                       {req.status === "pending" && (
                         <>
