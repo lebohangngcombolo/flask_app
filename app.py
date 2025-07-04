@@ -184,7 +184,19 @@ def check_and_process_referral_completion(referee_user):
 
 # -------------------- MODELS Changes made here------------------
 
-
+# -------------------- iDeals Feature: Voucher Model --------------------
+# This model tracks each voucher redemption for a user and a specific store.
+# Used for the iDeals (Redeeming Points) page to generate and manage store vouchers.
+class Voucher(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    store = db.Column(db.String(50), nullable=False)
+    voucher_code = db.Column(db.String(20), unique=True, nullable=False)
+    amount = db.Column(db.Float, nullable=False)
+    points_used = db.Column(db.Integer, nullable=False)
+    status = db.Column(db.String(20), default='active')  # active, redeemed, expired
+    expires_at = db.Column(db.DateTime, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -476,9 +488,6 @@ class UserSession(db.Model):
             self.last_activity = last_activity
         self.is_active = is_active
 
-
-
-
 class Referral(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     referrer_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
@@ -497,17 +506,6 @@ class Referral(db.Model):
         self.status = status
         if created_at:
             self.created_at = created_at
-
-class Voucher(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    store = db.Column(db.String(50), nullable=False)
-    voucher_code = db.Column(db.String(20), unique=True, nullable=False)
-    amount = db.Column(db.Float, nullable=False)
-    points_used = db.Column(db.Integer, nullable=False)
-    status = db.Column(db.String(20), default='active')  # active, redeemed, expired
-    expires_at = db.Column(db.DateTime, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 # -------------------- DECORATORS --------------------
 def token_required(f):
@@ -835,18 +833,27 @@ def complete_kyc(current_user):
         logger.error(f"Error during KYC completion: {str(e)}")
         return jsonify({'error': 'An unexpected error occurred during KYC completion'}), 500
 
+# -------------------- iDeals Feature: Rewards Catalog --------------------
+# This catalog defines the available rewards and their point values.
+# Used for reference in the iDeals and redeem endpoints.
 REWARD_CATALOG = {
     'airtime_10': {'points': 100, 'description': 'R10 Airtime or Mobile Data'},
     'voucher_50': {'points': 500, 'description': 'R50 Grocery Voucher'},
     'credit_100': {'points': 1000, 'description': 'R100 Wallet Credit'},
 }
 
+# -------------------- iDeals Feature: Rewards Catalog Endpoint --------------------
+# Returns the available rewards catalog for the frontend to display.
 @app.route('/api/user/points/rewards', methods=['GET'])
 @token_required
 def get_rewards_catalog(current_user):
     """Returns the available rewards catalog."""
     return jsonify(REWARD_CATALOG)
 
+# -------------------- iDeals Feature: Store-Specific Redeem Endpoint --------------------
+# Allows users to redeem points for a store-specific voucher.
+# Generates a unique voucher code, deducts points, and creates a Voucher record.
+# Returns voucher details (code, store, amount, expiry) to the user.
 @app.route('/api/redeem', methods=['POST'])
 @token_required
 def redeem_points(current_user):
@@ -865,6 +872,7 @@ def redeem_points(current_user):
     voucher_code = f"{store[:3].upper()}-{uuid.uuid4().hex[:6].upper()}"
     expires_at = datetime.utcnow() + timedelta(days=7)
 
+    # Create a new voucher record for this redemption
     voucher = Voucher(
         user_id=current_user.id,
         store=store,
