@@ -39,6 +39,7 @@ import openai
 import jwt as pyjwt
 from sqlalchemy import select
 from flask_socketio import SocketIO, emit
+from sqlalchemy import or_
 
 
 # Load environment variables from .env file
@@ -47,7 +48,7 @@ load_dotenv()
 # Config
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key')
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:Ayanda%4023@172.20.64.1:5432/stokvel_db'
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'postgresql://postgres:property007@localhost:5432/authdb')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['MAIL_SERVER'] = os.getenv('MAIL_SERVER')
 app.config['MAIL_PORT'] = int(os.getenv('MAIL_PORT')) if os.getenv('MAIL_PORT') else None
@@ -431,6 +432,31 @@ class Card(db.Model):
         else:
             return 'unknown'
 
+# ---------------------------------------------- Customer Concern Models --------------------
+class CustomerConcern(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    name = db.Column(db.String(100), nullable=False)
+    email = db.Column(db.String(120), nullable=False)
+    subject = db.Column(db.String(200), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    status = db.Column(db.String(20), default='open')  # open, closed, etc.
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship('User', backref='concerns')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'name': self.name,
+            'email': self.email,
+            'subject': self.subject,
+            'message': self.message,
+            'status': self.status,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
 # -------------------- DECORATORS --------------------
 def token_required(f):
     @wraps(f)
@@ -562,8 +588,9 @@ def role_required(allowed_roles):
         return decorated_function
     return decorator
 
-# -------------------- ROUTES --------------------
 
+
+# -------------------- ROUTES --------------------
 
 @app.route('/api/test', methods=['GET'])
 def test():
@@ -3296,6 +3323,95 @@ def delete_card(card_id):
     db.session.commit()
     return jsonify({'message': 'Card deleted successfully'}), 200
 
+#------------------------------------Contact & Concerns Routes------------------------------------
+@app.route('/api/contact', methods=['POST'])
+def submit_contact():
+    data = request.get_json()
+    name = data.get('name')
+    email = data.get('email')
+    subject = data.get('subject')
+    message = data.get('message')
+    user_id = None
+    # Try to get user from JWT if present
+    try:
+        user_id = get_jwt_identity()
+    except Exception:
+        pass
+    if not all([name, email, subject, message]):
+        return jsonify({'error': 'All fields are required.'}), 400
+    concern = CustomerConcern(
+        user_id=user_id,
+        name=name,
+        email=email,
+        subject=subject,
+        message=message
+    )
+    db.session.add(concern)
+    db.session.commit()
+    return jsonify({'message': 'Your message has been received. Thank you for contacting us!'}), 201
+
+@app.route('/api/admin/concerns', methods=['GET'])
+@role_required(['admin'])
+def get_all_concerns():
+    # Query params
+    status = request.args.get('status')
+    search = request.args.get('search')
+    page = request.args.get('page', default=1, type=int)
+    limit = request.args.get('limit', default=20, type=int)
+
+    query = CustomerConcern.query
+
+    # Filter by status
+    if status:
+        query = query.filter(CustomerConcern.status == status)
+
+    # Search by keyword
+    if search:
+        like = f"%{search}%"
+        query = query.filter(
+            or_(
+                CustomerConcern.name.ilike(like),
+                CustomerConcern.email.ilike(like),
+                CustomerConcern.subject.ilike(like)
+            )
+        )
+
+    total = query.count()
+    concerns = query.order_by(CustomerConcern.created_at.desc()) \
+        .offset((page - 1) * limit).limit(limit).all()
+
+    return jsonify({
+        'total': total,
+        'page': page,
+        'limit': limit,
+        'concerns': [c.to_dict() for c in concerns]
+    }), 200
+
+@app.route('/api/admin/concerns/<int:id>', methods=['GET'])
+@role_required(['admin'])
+def get_concern(id):
+    concern = CustomerConcern.query.get_or_404(id)
+    return jsonify(concern.to_dict()), 200
+
+@app.route('/api/admin/concerns/<int:id>/status', methods=['PUT'])
+@role_required(['admin'])
+def update_concern_status(id):
+    concern = CustomerConcern.query.get_or_404(id)
+    data = request.get_json()
+    status = data.get('status')
+    if status not in ['open', 'closed', 'in-progress']:
+        return jsonify({'error': 'Invalid status'}), 400
+    concern.status = status
+    db.session.commit()
+    return jsonify({'message': f'Status updated to {status}'}), 200
+
+@app.route('/api/admin/concerns/<int:id>', methods=['DELETE'])
+@role_required(['admin'])
+def delete_concern(id):
+    concern = CustomerConcern.query.get_or_404(id)
+    db.session.delete(concern)
+    db.session.commit()
+    return jsonify({'message': 'Concern deleted successfully'}), 200
 
  # -------------------- MAIN --------------------
 if __name__ == '__main__':
@@ -3311,3 +3427,4 @@ def checkout(dbapi_connection, connection_record, connection_proxy):
     if connection_record.info['pid'] != pid:
         connection_record.info['pid'] = pid
         connection_record.info['checked_out'] = time.time()
+
