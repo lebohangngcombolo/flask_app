@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, Outlet } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, Outlet, Link } from 'react-router-dom';
 import LandingPage from './pages/LandingPage';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
@@ -33,6 +33,8 @@ import ReferralDashboard from './pages/ReferralDashboard';
 import TierDetails from './pages/TierDetails';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import ClaimSubmission from "./pages/ClaimSubmission";
+import Beneficiaries from './pages/Beneficiaries';
 
 const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
@@ -142,6 +144,8 @@ const App: React.FC = () => {
             <Route path="refer" element={<ReferralDashboard />} />
             <Route path="referral-history" element={<ReferralHistory />} />
             <Route path="stokvel-groups/:category/:tier" element={<TierDetails />} />
+            <Route path="claims/new" element={<ClaimSubmission />} />
+            <Route path="beneficiaries" element={<Beneficiaries />} />
             {/* Add more dashboard sub-pages here if needed */}
           </Route>
 
@@ -149,7 +153,7 @@ const App: React.FC = () => {
           <Route path="/admin" element={<AdminLayout />}>
             <Route path="dashboard" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
             <Route path="kyc-management" element={<KYCManagement />} />
-            <Route path="groups" element={<GroupAdminManagement />} />
+            <Route path="groups" element={<StokvelManagement />} />
             <Route path="group-admin-management" element={<GroupAdminManagement />} />
             <Route path="users" element={<UserManagement />} />
             <Route path="stokvels" element={<StokvelManagement />} />
@@ -157,7 +161,6 @@ const App: React.FC = () => {
           
           {/* Phone Auth route */}
           <Route path="/phone-auth" element={<PhoneAuth />} />
-
 
           {/* Catch all route */}
           <Route path="*" element={<Navigate to="/" replace />} />

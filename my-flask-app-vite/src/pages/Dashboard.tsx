@@ -1,66 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { toast } from 'react-hot-toast';
-import api from '../services/api';
 import { Line } from "react-chartjs-2";
-import { User, Star, Users } from "lucide-react";
-import {
-  Chart as ChartJS,
-  LineElement,
-  PointElement,
-  LinearScale,
-  CategoryScale,
-  Tooltip,
-  Legend,
-  Title,
-} from "chart.js";
+import { Star, Users } from "lucide-react";
+import { userAPI } from '../services/api'; // Use userAPI for clarity
+import { Chart as ChartJS, LineElement, PointElement, LinearScale, CategoryScale, Tooltip, Legend, Title } from "chart.js";
 
-ChartJS.register(
-  LineElement,
-  PointElement,
-  LinearScale,
-  CategoryScale,
-  Tooltip,
-  Legend,
-  Title
-);
-
-const summaryCards = [
-  { label: "Total Balance", value: "R12,500.00" },
-  { label: "Contributions", value: "R3,200.00" },
-  { label: "Withdrawn", value: "R1,000.00" },
-  { label: "Next Payout", value: "2024-07-15" },
-];
-
-const recentContributions = [
-  { user: "You", date: "2024-06-25", amount: 500, description: "June Contribution" },
-  { user: "You", date: "2024-05-25", amount: 400, description: "May Contribution" },
-  { user: "You", date: "2024-04-25", amount: 600, description: "April Contribution" },
-  { user: "You", date: "2024-03-25", amount: 350, description: "March Contribution" },
-  { user: "You", date: "2024-02-25", amount: 700, description: "February Contribution" },
-];
-
-const savingsGoal = { progress: 0.6, label: "Holiday Savings", target: "R5,000" };
-
-const chartData = {
-  labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
-  datasets: [
-    {
-      label: "Contributions",
-      data: [500, 700, 600, 800, 400, 500],
-      fill: false,
-      borderColor: "#6366f1",
-      tension: 0.4,
-    },
-  ],
-};
+ChartJS.register(LineElement, PointElement, LinearScale, CategoryScale, Tooltip, Legend, Title);
 
 const Dashboard = () => {
-  const [user, setUser] = useState(null);
-  const [userStats, setUserStats] = useState(null);
+  const [user, setUser] = useState<any>(null);
+  const [userStats, setUserStats] = useState<any>(null);
   const [availableGroups, setAvailableGroups] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -70,16 +22,15 @@ const Dashboard = () => {
         setError(null);
         
         const [userResponse, statsResponse, groupsResponse] = await Promise.all([
-          api.get('/api/user/profile'),
-          api.get('/api/dashboard/stats'),
-          api.get('/api/groups/available')
+          userAPI.getProfile(),
+          userAPI.getUserStats(),
+          userAPI.getAvailableGroups()
         ]);
         
         setUser(userResponse.data);
         setUserStats(statsResponse.data);
         setAvailableGroups(groupsResponse.data);
-      } catch (err) {
-        console.error('Dashboard data fetch error:', err);
+      } catch (err: any) {
         if (err.response?.status === 401) {
           setError('Your session has expired. Please log in again.');
           setTimeout(() => navigate('/login'), 2000);
@@ -94,6 +45,30 @@ const Dashboard = () => {
     fetchData();
   }, [navigate]);
 
+  // Prepare real data for widgets
+  const summaryCards = [
+    { label: "Total Balance", value: userStats?.total_balance !== undefined ? `R${userStats.total_balance.toLocaleString()}` : "-" },
+    { label: "Contributions", value: userStats?.total_contributions !== undefined ? `R${userStats.total_contributions.toLocaleString()}` : "-" },
+    { label: "Withdrawn", value: userStats?.total_withdrawn !== undefined ? `R${userStats.total_withdrawn.toLocaleString()}` : "-" },
+    { label: "Next Payout", value: userStats?.next_payout || "-" },
+  ];
+
+  const chartData = {
+    labels: userStats?.contribution_trend?.map((c: any) => c.month) || [],
+    datasets: [
+      {
+        label: "Contributions",
+        data: userStats?.contribution_trend?.map((c: any) => c.amount) || [],
+        fill: false,
+        borderColor: "#6366f1",
+        tension: 0.4,
+      },
+    ],
+  };
+
+  const recentContributions = userStats?.recent_contributions || [];
+  const savingsGoal = userStats?.savings_goal || { progress: 0, label: "", target: 0 };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-screen-minus-header">
@@ -105,7 +80,7 @@ const Dashboard = () => {
   if (error) {
     return (
       <div className="max-w-4xl mx-auto p-4 mt-8">
-        <div className="bg-red-100 border-red-400 text-red-700 dark:bg-red-900/50 dark:border-red-700 dark:text-red-300 px-4 py-3 rounded relative" role="alert">
+        <div className="bg-red-100 border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
           <strong className="font-bold">Error: </strong>
           <span className="block sm:inline">{error}</span>
         </div>
@@ -114,11 +89,11 @@ const Dashboard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-dark-background py-10 px-4 transition-colors">
+    <div className="min-h-screen bg-gray-100 py-10 px-4 transition-colors">
       <div className="max-w-6xl mx-auto space-y-8">
         {/* Welcome */}
-        <div className="text-2xl font-bold text-gray-800 dark:text-dark-text mb-4 transition-colors">
-          Welcome back, <span className="text-indigo-600 dark:text-indigo-400">User!</span>
+        <div className="text-2xl font-bold text-gray-800 mb-4">
+          Welcome back, <span className="text-indigo-600">{user?.full_name || user?.name || "User"}!</span>
         </div>
 
         {/* Summary Cards */}
@@ -126,10 +101,10 @@ const Dashboard = () => {
           {summaryCards.map((card) => (
             <div
               key={card.label}
-              className="bg-white dark:bg-dark-card rounded-xl shadow p-5 flex flex-col items-center transition-colors"
+              className="bg-white rounded-xl shadow p-5 flex flex-col items-center"
             >
-              <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">{card.label}</div>
-              <div className="text-xl font-bold text-indigo-700 dark:text-indigo-300">{card.value}</div>
+              <div className="text-xs text-gray-500 mb-1">{card.label}</div>
+              <div className="text-xl font-bold text-indigo-700">{card.value}</div>
             </div>
           ))}
         </div>
@@ -137,7 +112,7 @@ const Dashboard = () => {
         {/* Main Content Grid: Contribution Trend & Recent Contributions */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
           {/* Contribution Trend */}
-          <div className="bg-white dark:bg-dark-card rounded-xl shadow p-5 flex flex-col h-[340px] transition-colors">
+          <div className="bg-white rounded-xl shadow p-5 flex flex-col h-[340px]">
             <div className="font-semibold mb-2">Contribution Trend</div>
             <div className="flex-1 min-h-[180px]">
               <Line
@@ -154,7 +129,7 @@ const Dashboard = () => {
           </div>
 
           {/* Recent Contributions */}
-          <div className="bg-white dark:bg-dark-card rounded-xl shadow p-5 flex flex-col h-[340px] transition-colors">
+          <div className="bg-white rounded-xl shadow p-5 flex flex-col h-[340px]">
             <div className="font-semibold mb-2">Recent Contributions</div>
             <div className="flex-1 overflow-y-auto">
               <table className="w-full text-sm">
@@ -174,7 +149,7 @@ const Dashboard = () => {
                       </td>
                     </tr>
                   ) : (
-                    recentContributions.map((rc, i) => (
+                    recentContributions.map((rc: any, i: number) => (
                       <tr
                         key={i}
                         className="border-b last:border-0 hover:bg-indigo-50/40 transition group"
@@ -189,7 +164,7 @@ const Dashboard = () => {
                         <td className="py-2">
                           <span className="inline-block px-2 py-1 rounded-full text-xs font-semibold
                             bg-green-100 text-green-700">
-                            +R{rc.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            +R{rc.amount?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                           </span>
                         </td>
                         <td className="py-2">{rc.description}</td>
@@ -205,25 +180,25 @@ const Dashboard = () => {
         {/* Bottom Grid: Savings Goals & Invite Friends */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
           {/* Savings Goals */}
-          <div className="bg-white dark:bg-dark-card rounded-xl shadow p-5 flex flex-col transition-colors">
+          <div className="bg-white rounded-xl shadow p-5 flex flex-col">
             <div className="flex items-center gap-2 mb-2">
               <Star className="text-yellow-400" />
               <span className="font-semibold">Savings Goals</span>
             </div>
-            <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">{savingsGoal.label}</div>
+            <div className="text-sm text-gray-500 mb-1">{savingsGoal.label}</div>
             <div className="w-full bg-gray-200 rounded-full h-3 mb-2">
               <div
                 className="bg-indigo-500 h-3 rounded-full"
-                style={{ width: `${savingsGoal.progress * 100}%` }}
+                style={{ width: `${(savingsGoal.progress || 0) * 100}%` }}
               ></div>
             </div>
             <div className="text-xs text-gray-400">
-              {Math.round(savingsGoal.progress * 100)}% of {savingsGoal.target}
+              {Math.round((savingsGoal.progress || 0) * 100)}% of R{(savingsGoal.target || 0).toLocaleString()}
             </div>
           </div>
 
           {/* Invite Friends */}
-          <div className="bg-white dark:bg-dark-card rounded-xl shadow p-5 flex flex-col items-center justify-center transition-colors">
+          <div className="bg-white rounded-xl shadow p-5 flex flex-col items-center justify-center">
             <Users className="w-10 h-10 text-indigo-400 mb-2" />
             <div className="font-semibold mb-2">Invite Friends</div>
             <button className="btn-primary px-4 py-2 rounded-lg bg-indigo-500 text-white hover:bg-indigo-600 transition">

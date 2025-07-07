@@ -31,7 +31,6 @@ import {
 } from 'recharts';
 import { adminAPI, dashboardAPI, stokvelAPI } from '../services/api';
 import { newsAPI } from '../services/api';
-import CreateStokvelGroup from '../components/CreateStokvelGroup';
 import { toast } from 'react-toastify';
 import { FaPlus } from "react-icons/fa";
 
@@ -202,7 +201,6 @@ const tierDetails: Record<string, Record<string, {
 };
 
 const AdminDashboard: React.FC = () => {
-  const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [groups, setGroups] = useState<any[]>([]);
   const [selectedCategory, setSelectedCategory] = useState("Savings");
 
@@ -218,17 +216,6 @@ const AdminDashboard: React.FC = () => {
   useEffect(() => {
     fetchGroups();
   }, []);
-
-  const handleCreateGroup = async (data: any) => {
-    try {
-      await adminAPI.createGroup(data);
-      toast.success('Group created successfully!');
-      setShowCreateGroup(false);
-      fetchGroups();
-    } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to create group');
-    }
-  };
 
   return (
     <div className="relative min-h-screen bg-gray-50 px-4 py-6">
@@ -266,12 +253,6 @@ const AdminDashboard: React.FC = () => {
       <div className="bg-white rounded-lg shadow p-6 mb-8">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold text-gray-900">All Groups</h2>
-          <button
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg"
-            onClick={() => setShowCreateGroup(true)}
-          >
-            + Create Group
-          </button>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
           {groups.length === 0 ? (
@@ -334,12 +315,6 @@ const AdminDashboard: React.FC = () => {
           )}
         </div>
       </div>
-      {showCreateGroup && (
-        <CreateStokvelGroup
-          onSubmit={handleCreateGroup}
-          onCancel={() => setShowCreateGroup(false)}
-        />
-      )}
 
       {/* Users Management */}
       <div className="bg-white rounded-lg shadow p-6 mb-8">

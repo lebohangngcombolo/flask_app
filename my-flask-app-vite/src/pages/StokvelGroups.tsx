@@ -167,56 +167,30 @@ const StokvelGroups: React.FC = () => {
   const [activeCategory, setActiveCategory] = useState<string>("");
   const [joinRequests, setJoinRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadingTier, setLoadingTier] = useState<number | null>(null);
   const [selectedCategory, setSelectedCategory] = useState("Savings");
   const [openTier, setOpenTier] = useState<{ name: string, category: string } | null>(null);
   const [selectedAmount, setSelectedAmount] = useState<number | null>(null);
+  const [confirming, setConfirming] = useState(false);
+
   const navigate = useNavigate();
 
-  // Fetch all groups and organize by category
-  useEffect(() => {
-    const fetchGroups = async () => {
-      try {
-        const res = await groupService.getAvailableGroups();
-        const groups = res.data;
-        setAllGroups(groups);
-        
-        // Extract unique categories
-        const uniqueCategories = [...new Set(groups.map((group: any) => group.category))];
-        setCategories(uniqueCategories);
-        
-        // Set first category as active
-        if (uniqueCategories.length > 0 && !activeCategory) {
-          setActiveCategory(uniqueCategories[0]);
-        }
-      } catch (err) {
-        toast.error("Failed to load groups");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchGroups();
-  }, []);
-
-  // Fetch user's join requests - This ensures data persists after refresh/logout
-  useEffect(() => {
+  // Fetch join requests
     const fetchRequests = async () => {
       try {
         const token = localStorage.getItem('token');
         if (!token) return;
-
         const res = await fetch("/api/user/join-requests", {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
           }
         });
-        
         if (res.ok) {
           const data = await res.json();
           setJoinRequests(
             data.map((req: any) => ({
+              groupId: req.group_id,
+              groupName: req.group_name,
               category: req.category,
               tier: req.tier,
               amount: req.amount,
@@ -231,6 +205,28 @@ const StokvelGroups: React.FC = () => {
       }
     };
 
+  // Fetch all groups and organize by category
+  useEffect(() => {
+    const fetchGroups = async () => {
+      try {
+        const res = await groupService.getAvailableGroups();
+        const groups = res.data;
+        setAllGroups(groups);
+        const uniqueCategories = [...new Set(groups.map((group: any) => group.category))];
+        setCategories(uniqueCategories);
+        if (uniqueCategories.length > 0 && !activeCategory) {
+          setActiveCategory(uniqueCategories[0]);
+        }
+      } catch (err) {
+        toast.error("Failed to load groups");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchGroups();
+  }, []);
+
+  useEffect(() => {
     fetchRequests();
   }, []);
 
@@ -240,20 +236,7 @@ const StokvelGroups: React.FC = () => {
     group.name.toLowerCase().includes(search.toLowerCase())
   );
 
-  const handleJoin = async (category: string, tier: string, amount: number) => {
-    setLoadingTier(true);
-    try {
-      // ... your join logic ...
-      fetchRequests();
-      toast.success("Join request sent successfully!");
-    } catch (err) {
-      toast.error("Failed to submit join request.");
-    } finally {
-      setLoadingTier(null);
-    }
-  };
-
-  // Get join request status for a group
+  // Get join request status for a group/tier/amount
   const getRequestStatus = (category: string, tier: string, amount: number) => {
     return joinRequests.find(
       req => req.category === category && req.tier === tier && req.amount === amount
@@ -270,71 +253,77 @@ const StokvelGroups: React.FC = () => {
     for (let amt = min; amt <= max; amt += 50) {
       amounts.push(amt);
     }
+    // If range is open-ended (e.g., "R1600+"), add a few more options
+    if (!max || range.includes("+")) {
+      for (let amt = min + 50; amt <= min + 300; amt += 50) {
+        amounts.push(amt);
+      }
+    }
     return amounts;
   }
 
-  // Example: Generate unique features and benefits for each amount
-  function getFeatures(amount: number, tier: string) {
-    if (tier === "Bronze") {
-      return [
-        { icon: <Users className="w-5 h-5 text-blue-500" />, label: "Group Savings" },
-        { icon: <TrendingUp className="w-5 h-5 text-green-500" />, label: "Flexible Deposits" },
-        { icon: <ShieldCheck className="w-5 h-5 text-yellow-500" />, label: "Safe & Secure" },
-      ];
-    }
-    // ...add for other tiers
-    return [];
+  // Find groupId for a given category/tier
+  function findGroupId(category: string, tier: string) {
+    const group = allGroups.find(g => g.category === category && g.tier === tier);
+    return group ? group.id : null;
   }
 
-  function getBenefits(amount: number, tier: string) {
-    if (tier === "Bronze") {
-      if (amount <= 250) return [
-        { icon: <CheckCircle className="w-5 h-5 text-green-500" />, label: "Basic support" },
-        { icon: <Gift className="w-5 h-5 text-pink-500" />, label: "Welcome bonus" },
-      ];
-      if (amount <= 350) return [
-        { icon: <CheckCircle className="w-5 h-5 text-green-500" />, label: "Priority support" },
-        { icon: <Gift className="w-5 h-5 text-pink-500" />, label: "Monthly draw entry" },
-      ];
-      return [
-        { icon: <Star className="w-5 h-5 text-yellow-500" />, label: "VIP support" },
-        { icon: <Gift className="w-5 h-5 text-pink-500" />, label: "Exclusive rewards" },
-      ];
+  // Handle join
+  const handleJoin = async () => {
+    if (!openTier || !selectedAmount) return;
+    setConfirming(true);
+    try {
+      await fetch('/api/stokvel/join-group', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+        body: JSON.stringify({
+          category: openTier.category,
+          tier: openTier.name,
+          amount: selectedAmount,
+        }),
+      });
+      toast.success("Join request sent successfully!");
+      setOpenTier(null);
+      setSelectedAmount(null);
+      await fetchRequests();
+    } catch (err) {
+      toast.error("Failed to submit join request.");
+    } finally {
+      setConfirming(false);
     }
-    // ...add for other tiers
-    return [];
-  }
+  };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-dark-background flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600 dark:text-gray-400">Loading groups...</p>
+          <p className="mt-4 text-gray-600">Loading groups...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-dark-background p-6">
+    <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-dark-text mb-2">Stokvel Groups</h1>
-            <p className="text-gray-600 dark:text-gray-400">Join a group and start saving with others</p>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Stokvel Groups</h1>
+            <p className="text-gray-600">Join a group and start saving with others</p>
           </div>
-          {/* Search Bar - now at top right */}
           <div className="w-full md:w-80 mt-4 md:mt-0">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
               <input
                 type="text"
                 placeholder="Search groups..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 bg-white dark:bg-dark-card border border-gray-300 dark:border-dark-border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 dark:text-dark-text"
+                className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
               />
             </div>
           </div>
@@ -368,7 +357,6 @@ const StokvelGroups: React.FC = () => {
                   key={tier.name}
                   className="flex flex-col items-center bg-white rounded-2xl shadow-lg border border-gray-100 p-7 min-h-[360px] w-full hover:shadow-2xl transition-all"
                 >
-                  {/* Colored badge/icon at the top */}
                   <div
                     className={`w-16 h-16 rounded-full flex items-center justify-center text-3xl font-bold mb-4 shadow
                       ${tier.name === "Bronze" ? "bg-yellow-400 text-white" : ""}
@@ -379,7 +367,6 @@ const StokvelGroups: React.FC = () => {
                   >
                     {tier.name[0]}
                   </div>
-                  {/* Main info */}
                   <div className="flex-1 flex flex-col items-center text-center w-full">
                     <div className="font-bold text-2xl mb-1 tracking-wide">{tier.name} Tier</div>
                     <div className="text-gray-600 mb-1 text-lg font-semibold">
@@ -392,9 +379,7 @@ const StokvelGroups: React.FC = () => {
                       {details.description}
                     </div>
                   </div>
-                  {/* Divider */}
                   <div className="w-full border-t border-gray-100 my-3"></div>
-                  {/* Extra info section */}
                   <div className="flex flex-col gap-2 w-full text-sm">
                     <div className="flex justify-between">
                       <span className="text-gray-500">Interest earned</span>
@@ -405,7 +390,6 @@ const StokvelGroups: React.FC = () => {
                       <span className="font-semibold text-green-600">{details.access}</span>
                     </div>
                   </div>
-                  {/* Action or extra info at the bottom */}
                   <div className="mt-5 flex flex-col items-center w-full">
                     <button
                       className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow hover:bg-blue-700 transition text-sm w-full font-semibold"
@@ -423,40 +407,116 @@ const StokvelGroups: React.FC = () => {
           </div>
         </div>
 
-        {/* Status Table - Always visible for better UX */}
+        {/* Modal for Learn More and Join */}
+        {openTier && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+            <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full relative">
+              <button
+                className="absolute top-3 right-3 text-gray-400 hover:text-gray-700"
+                onClick={() => setOpenTier(null)}
+              >
+                ×
+              </button>
+              <h2 className="text-2xl font-bold mb-2">{openTier.name} Tier</h2>
+              <p className="text-gray-600 mb-4">{tierDetails[openTier.category][openTier.name].description}</p>
+              <div className="mb-4">
+                <div className="font-semibold mb-1">Select Amount</div>
+                <div className="flex flex-wrap gap-2">
+                  {getAmountsInRange(tierDetails[openTier.category][openTier.name].amountRange).map((amt) => {
+                    const status = getRequestStatus(openTier.category, openTier.name, amt);
+                    return (
+                      <button
+                        key={amt}
+                        className={`px-4 py-2 rounded-lg border font-semibold transition
+                          ${selectedAmount === amt ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700"}
+                          ${status && status.status === "pending" ? "bg-gray-300 text-gray-400 cursor-not-allowed" : ""}
+                        `}
+                        disabled={status && status.status === "pending"}
+                        onClick={() => setSelectedAmount(amt)}
+                      >
+                        R{amt}
+                        {status && status.status === "pending" && " (Pending)"}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <button
+                className="bg-green-600 text-white px-6 py-2 rounded-lg font-bold w-full mt-4 disabled:opacity-50"
+                disabled={!selectedAmount || confirming || (selectedAmount && getRequestStatus(openTier.category, openTier.name, selectedAmount))}
+                onClick={handleJoin}
+              >
+                {confirming ? "Joining..." : "Join"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Status Table */}
         <div className="mt-8">
-          <h2 className="text-lg font-bold mb-4 dark:text-dark-text">My Request Status</h2>
-          <div className="bg-white dark:bg-dark-card rounded-lg shadow overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-200 dark:divide-dark-border">
-              <thead className="bg-gray-50 dark:bg-gray-800">
+          <h2 className="text-lg font-bold mb-4">My Request Status</h2>
+          <div className="bg-white rounded-xl shadow-lg overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Group
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Date
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Reason
-                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Group</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Tier</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Amount</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Date</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Reason</th>
                 </tr>
               </thead>
-              <tbody className="bg-white dark:bg-dark-card divide-y divide-gray-200 dark:divide-dark-border">
+              <tbody className="bg-white divide-y divide-gray-100">
                 {joinRequests.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="px-6 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
+                    <td colSpan={6} className="px-6 py-8 text-center text-gray-400">
+                      <span className="inline-block bg-gray-100 rounded-full px-4 py-2 text-sm font-medium">
                       No join requests yet. Select a group above to get started.
+                      </span>
                     </td>
                   </tr>
                 ) : (
                   joinRequests.map((req, idx) => (
-                    <tr key={idx}>
-                      <td className="px-6 py-4">{req.category} - {req.tier}</td>
-                      <td className="px-6 py-4">{req.status}</td>
-                      <td className="px-6 py-4">{new Date(req.createdAt).toLocaleString()}</td>
+                    <tr
+                      key={idx}
+                      className={idx % 2 === 0 ? "bg-gray-50" : ""}
+                    >
+                      <td className="px-6 py-4 font-semibold">{req.groupName}</td>
+                      <td className="px-6 py-4">{req.tier}</td>
+                      <td className="px-6 py-4">{req.amount ? `R${req.amount}` : '-'}</td>
+                      <td className="px-6 py-4">
+                        <span
+                          className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold
+                            ${req.status === "approved"
+                              ? "bg-green-100 text-green-700"
+                              : req.status === "pending"
+                              ? "bg-yellow-100 text-yellow-700"
+                              : req.status === "rejected"
+                              ? "bg-red-100 text-red-700"
+                              : "bg-gray-100 text-gray-500"
+                            }`}
+                        >
+                          {req.status === "approved" && (
+                            <svg className="w-4 h-4 mr-1 text-green-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                          {req.status === "pending" && (
+                            <svg className="w-4 h-4 mr-1 text-yellow-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                              <circle cx="12" cy="12" r="10" />
+                            </svg>
+                          )}
+                          {req.status === "rejected" && (
+                            <svg className="w-4 h-4 mr-1 text-red-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                              <line x1="18" y1="6" x2="6" y2="18" />
+                              <line x1="6" y1="6" x2="18" y2="18" />
+                            </svg>
+                          )}
+                          {req.status.charAt(0).toUpperCase() + req.status.slice(1)}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-gray-500">{req.createdAt ? new Date(req.createdAt).toLocaleString() : '-'}</td>
                       <td className="px-6 py-4">{req.reason || '-'}</td>
                     </tr>
                   ))

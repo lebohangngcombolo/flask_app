@@ -88,14 +88,20 @@ export const stokvelAPI = {
   createStokvel: (data: any) => api.post('/api/stokvel/register-group', data),
   getStokvelDetails: (id: string) => api.get(`/api/groups/${id}`),
   joinStokvel: (category: string, tier: string, amount: number) =>
-    api.post(`/api/stokvel/join-group`, { category, tier, amount })
+    api.post(`/api/stokvel/join-group`, { category, tier, amount }),
+  getMyGroups: () => api.get('/api/groups/my-groups'), // or '/api/groups/available' if that's your endpoint
+  getClaimableAmount: (groupId) => api.get(`/api/groups/${groupId}/claimable-amount`),
+  getGroupRules: (groupId) => api.get(`/api/groups/${groupId}/rules`),
 };
 
 // Admin API calls
 export const adminAPI = {
   getStats: () => api.get('/api/dashboard/stats'),
   getGroups: () => api.get('/api/admin/groups'),
-  createGroup: (data: any) => api.post('/api/admin/groups', data),
+  createGroup: (data: any) => {
+    console.log("API: Creating group with data:", data);
+    return api.post('/api/admin/groups', data);
+  },
   updateGroup: (id: number, data: any) => api.put(`/api/admin/groups/${id}`, data),
   deleteGroup: (id: number) => api.delete(`/api/admin/groups/${id}`),
   getJoinRequests: () => api.get('/api/admin/join-requests'),

@@ -55,6 +55,9 @@ const GroupAdminManagement: React.FC = () => {
   const filteredRequests = requests.filter(r => statusFilter === 'all' || r.status === statusFilter);
   const allSelected = selectedRequests.length === filteredRequests.length && filteredRequests.length > 0;
 
+  // View group modal state
+  const [showView, setShowView] = useState(false);
+
   useEffect(() => {
     fetchGroups();
     // eslint-disable-next-line
@@ -174,6 +177,12 @@ const GroupAdminManagement: React.FC = () => {
   const openDelete = (group: any) => {
     setSelectedGroup(group);
     setShowDelete(true);
+  };
+
+  // View group handler
+  const openView = (group: any) => {
+    setSelectedGroup(group);
+    setShowView(true);
   };
 
   const handleApprove = async (requestId: number) => {
@@ -580,6 +589,35 @@ const GroupAdminManagement: React.FC = () => {
                     Delete
                   </button>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* View Group Modal */}
+          {showView && selectedGroup && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+              <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg mx-2 p-8 relative">
+                <button
+                  className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-2xl"
+                  onClick={() => setShowView(false)}
+                  aria-label="Close"
+                >
+                  ×
+                </button>
+                <h2 className="text-2xl font-bold mb-4">Group Details</h2>
+                <div className="mb-2"><b>Name:</b> {selectedGroup.name}</div>
+                <div className="mb-2"><b>Category:</b> {selectedGroup.category}</div>
+                <div className="mb-2"><b>Tier:</b> {selectedGroup.tier}</div>
+                <div className="mb-2"><b>Members:</b> {selectedGroup.members}</div>
+                <div className="mb-2"><b>Status:</b> {selectedGroup.status}</div>
+                <div className="mb-2"><b>Description:</b> {selectedGroup.description}</div>
+                {/* Add more fields as needed */}
+                <button
+                  className="bg-blue-600 text-white px-6 py-2 rounded-lg font-semibold shadow hover:bg-blue-700 transition mt-4"
+                  onClick={() => setShowView(false)}
+                >
+                  Close
+                </button>
               </div>
             </div>
           )}

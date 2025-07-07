@@ -32,7 +32,7 @@ const sidebarItems = [
   { label: 'Beneficiaries', path: '/dashboard/beneficiaries', icon: Users },
   { label: 'Refer & Earn', path: '/dashboard/refer', icon: Gift },
   { label: 'Stokvel Groups', path: '/dashboard/stokvel-groups', icon: Briefcase },
-  { label: 'Request Payout', path: '/dashboard/request-payout', icon: DollarSign },
+  { label: 'Request Payout', path: '/dashboard/claims/new', icon: DollarSign },
 ];
 
 
