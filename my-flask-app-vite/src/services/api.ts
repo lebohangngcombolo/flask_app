@@ -58,7 +58,9 @@ export const userAPI = {
   getProfile: () => api.get('/api/user/profile'),
   updateProfile: (data: any) => api.put('/api/user/profile', data),
   getUserStats: () => api.get('/api/dashboard/stats'),
-  getAvailableGroups: () => api.get('/api/groups/available')
+  getAvailableGroups: () => api.get('/api/groups/available'),
+  getSavingsGoal: () => api.get('/api/user/savings-goal'),
+  setSavingsGoal: (data: { label: string; target: number }) => api.post('/api/user/savings-goal', data),
 };
 
 // Communication & Privacy
@@ -156,6 +158,11 @@ export const referralAPI = {
   getReferralDetails: () => api.get('/api/user/referral-details'),
   getRewardsCatalog: () => api.get('/api/user/points/rewards'),
   redeemReward: (reward_key: string) => api.post('/api/user/points/redeem', { reward_key }),
+};
+
+export const savingsGoalAPI = {
+  get: () => api.get('/api/user/savings-goal'),
+  set: (data: { label: string; target: number }) => api.post('/api/user/savings-goal', data),
 };
 
 export default api; 

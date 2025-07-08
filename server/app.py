@@ -8,7 +8,7 @@ from functools import wraps
 import click
 from flask.cli import with_appcontext
 from datetime import datetime, timedelta
-from sqlalchemy import func
+from sqlalchemy import func, extract
 from dotenv import load_dotenv
 import os
 from flask_jwt_extended import (
@@ -39,6 +39,7 @@ import openai
 import jwt as pyjwt
 from sqlalchemy import select
 from flask_socketio import SocketIO, emit
+from sqlalchemy import or_
 
 
 
@@ -181,6 +182,22 @@ class User(db.Model):
         self.verification_code_expiry = datetime.utcnow() + timedelta(minutes=10)
         db.session.commit()
         return self.verification_code
+
+    def to_dict(self):
+        """Convert user object to dictionary for JSON serialization"""
+        return {
+            'id': self.id,
+            'full_name': self.full_name,
+            'email': self.email,
+            'phone': self.phone,
+            'role': self.role,
+            'is_verified': self.is_verified,
+            'is_suspended': getattr(self, 'is_suspended', False),  # Default to False if not exists
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'last_activity': self.updated_at.isoformat() if self.updated_at else None,
+            'total_contributions': 0,  # You can calculate this if needed
+            'engagement_level': 'medium'  # You can calculate this based on activity
+        }
 
 class StokvelGroup(db.Model):
     __tablename__ = 'stokvel_group'
@@ -686,6 +703,7 @@ def login():
     user_data = {
         "id": user.id,
         "full_name": user.full_name,
+        "name": user.full_name,  # <-- Add this line
         "email": user.email,
         "phone": user.phone,
         "role": user.role,
@@ -770,8 +788,22 @@ def create_group():
 @app.route('/api/admin/groups/<int:group_id>', methods=['GET'])
 @jwt_required()
 def get_group(group_id):
-    group = StokvelGroup.query.get_or_404(group_id)
-    # ...return group details...
+    group = StokvelGroup.query.get(group_id)
+    if not group:
+        return jsonify({'error': 'Group not found'}), 404
+
+    # Safely serialize group info
+    return jsonify({
+        "id": group.id,
+        "name": group.name,
+        "category": group.category,
+        "tier": group.tier,
+        "description": group.description,
+        "contribution_amount": group.contribution_amount,
+        "interest_rate": getattr(group, "interest_rate", None),
+        "member_count": len(group.members) if group.members else 0,
+        # Add any other fields you need
+    })
 
 @app.route('/api/admin/groups/<int:group_id>', methods=['PUT'])
 @jwt_required()
@@ -1034,16 +1066,35 @@ def get_dashboard_stats(current_user):
             .limit(5) \
             .all()
 
-        # Get monthly contribution summary
+        # Daily summary (last 30 days)
+        daily_contributions = db.session.query(
+            func.to_char(Contribution.date, 'YYYY-MM-DD').label('date'),
+            func.sum(Contribution.amount).label('total')
+        ).join(StokvelMember) \
+         .filter(StokvelMember.user_id == current_user.id) \
+         .group_by('date') \
+         .order_by('date') \
+         .all()
+
+        # Weekly summary (last 12 weeks)
+        weekly_contributions = db.session.query(
+            func.to_char(Contribution.date, 'IYYY-IW').label('week'),  # ISO week
+            func.sum(Contribution.amount).label('total')
+        ).join(StokvelMember) \
+         .filter(StokvelMember.user_id == current_user.id) \
+         .group_by('week') \
+         .order_by('week') \
+         .all()
+
+        # Monthly summary (already present)
         monthly_contributions = db.session.query(
             func.to_char(Contribution.date, 'YYYY-MM').label('month'),
             func.sum(Contribution.amount).label('total')
-        ) \
-            .join(StokvelMember) \
-            .filter(StokvelMember.user_id == current_user.id) \
-            .group_by('month') \
-            .order_by('month') \
-            .all()
+        ).join(StokvelMember) \
+         .filter(StokvelMember.user_id == current_user.id) \
+         .group_by('month') \
+         .order_by('month') \
+         .all()
 
         # Get wallet balance
         wallet_balance = current_user.wallet[0].balance if current_user.wallet else 0.0
@@ -1086,6 +1137,8 @@ def get_dashboard_stats(current_user):
                 'type': 'deposit',
                 'description': f'Contribution to {t.member.group.name}'
             } for t in recent_transactions],
+            'dailySummary': [{'date': row.date, 'total': float(row.total)} for row in daily_contributions],
+            'weeklySummary': [{'week': row.week, 'total': float(row.total)} for row in weekly_contributions],
             'monthlySummary': [{'month': row.month, 'total': float(row.total)} for row in monthly_contributions],
             'groupStats': group_stats if is_group_admin else [],
             'activeGroups': [{
@@ -1452,6 +1505,7 @@ def get_user_profile(current_user):
         return jsonify({
             "id": current_user.id,
             "full_name": current_user.full_name,
+            "name": current_user.full_name,  # <-- Add this line
             "email": current_user.email,
             "phone": current_user.phone,
             "role": current_user.role,
@@ -1461,7 +1515,9 @@ def get_user_profile(current_user):
             "is_verified": current_user.is_verified,
             "two_factor_enabled": current_user.two_factor_enabled,
             "account_number": current_user.account_number,
-            "wallet_balance": float(wallet.balance) if wallet.balance is not None else 0.00
+            "wallet_balance": float(wallet.balance) if wallet.balance is not None else 0.00,
+            # Add this line to always return date_of_birth as a string
+            "date_of_birth": current_user.date_of_birth.strftime('%Y-%m-%d') if current_user.date_of_birth else None,
         }), 200
     except Exception as e:
         print(f"❌ Error in get_user_profile: {str(e)}")
@@ -1476,8 +1532,6 @@ def get_user_profile(current_user):
 @token_required
 def update_user_profile(current_user):
     data = request.get_json()
-
-    # Update fields that are simple string assignments
     if 'name' in data:
         current_user.full_name = data['name']
     if 'phone' in data:
@@ -1486,16 +1540,11 @@ def update_user_profile(current_user):
         current_user.gender = data['gender']
     if 'employment_status' in data:
         current_user.employment_status = data['employment_status']
-
-    # Specifically handle date_of_birth: parse string to datetime object
     if 'date_of_birth' in data and data['date_of_birth']:
         try:
-            # The fromisoformat() method correctly parses 'YYYY-MM-DD'
             current_user.date_of_birth = datetime.fromisoformat(data['date_of_birth'])
         except (ValueError, TypeError):
-            # Handle cases where the date format is wrong or data is null
             return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD.'}), 400
-
     db.session.commit()
     return jsonify({'message': 'Profile updated successfully'}), 200
 
@@ -2234,6 +2283,17 @@ def approve_join_request(request_id):
     # 3. Approve the join request
     req.status = "approved"
     req.group_id = group.id
+    db.session.commit()
+
+    # After adding user to group
+    notification = Notification(
+        user_id=user_id,  # <-- Use user_id instead of approved_user.id
+        title="Group Join Approved",
+        message=f"You have been approved to join {group.name} ({tier})!",
+        type="group_join_approved",
+        data={"group_id": group.id, "tier": tier}
+    )
+    db.session.add(notification)
     db.session.commit()
 
     return jsonify({"success": True})
@@ -3283,9 +3343,15 @@ def get_group_members(group_id):
     # Assuming a relationship exists
     group = StokvelGroup.query.get_or_404(group_id)
     # Replace with your actual member fetching logic
-    members = User.query.join(GroupJoinRequest, GroupJoinRequest.user_id == User.id)\
-        .filter(GroupJoinRequest.group_id == group_id, GroupJoinRequest.status == 'approved').all()
-    return jsonify([{'id': m.id, 'name': m.name} for m in members])
+    members = User.query.join(StokvelMember).filter(StokvelMember.group_id == group_id).all()
+    return jsonify([
+        {
+            "id": m.id,
+            "full_name": getattr(m, "full_name", None) or getattr(m, "name", None),  # <-- Use full_name instead of name
+            "email": m.email,
+            # ...
+        } for m in members
+    ])
 
 @app.route('/api/admin/groups/<int:group_id>/requests', methods=['GET'])
 @jwt_required()
@@ -3446,6 +3512,241 @@ class Beneficiary(db.Model):
     phone = db.Column(db.String(20))
     email = db.Column(db.String(120))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    # --- Add these fields ---
+    id_doc_url = db.Column(db.String(255))
+    address_doc_url = db.Column(db.String(255))
+    relationship_doc_url = db.Column(db.String(255))
+    # ------------------------
     user = db.relationship('User', backref='beneficiaries')
+
+class CustomerConcern(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    name = db.Column(db.String(100), nullable=False)
+    email = db.Column(db.String(120), nullable=False)
+    subject = db.Column(db.String(200), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    status = db.Column(db.String(20), default='open')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "name": self.name,
+            "email": self.email,
+            "subject": self.subject,
+            "message": self.message,
+            "status": self.status,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+@app.route('/api/contact', methods=['POST'])
+def submit_contact():
+    data = request.get_json()
+    name = data.get('name')
+    email = data.get('email')
+    subject = data.get('subject')
+    message = data.get('message')
+    user_id = None
+    try:
+        user_id = get_jwt_identity()
+    except Exception:
+        pass
+    if not all([name, email, subject, message]):
+        return jsonify({'error': 'All fields are required.'}), 400
+    concern = CustomerConcern(
+        user_id=user_id,
+        name=name,
+        email=email,
+        subject=subject,
+        message=message
+    )
+    db.session.add(concern)
+    db.session.commit()
+    return jsonify({'message': 'Your message has been received. Thank you for contacting us!'}), 201
+
+@app.route('/api/admin/concerns', methods=['GET'])
+@role_required(['admin'])
+def get_all_concerns():
+    # Query params
+    status = request.args.get('status')
+    search = request.args.get('search')
+    page = request.args.get('page', default=1, type=int)
+    limit = request.args.get('limit', default=20, type=int)
+
+    query = CustomerConcern.query
+
+    # Filter by status
+    if status:
+        query = query.filter(CustomerConcern.status == status)
+
+    # Search by keyword
+    if search:
+        like = f"%{search}%"
+        query = query.filter(
+            or_(
+                CustomerConcern.name.ilike(like),
+                CustomerConcern.email.ilike(like),
+                CustomerConcern.subject.ilike(like)
+            )
+        )
+
+    total = query.count()
+    concerns = query.order_by(CustomerConcern.created_at.desc()) \
+        .offset((page - 1) * limit).limit(limit).all()
+
+    return jsonify({
+        'total': total,
+        'page': page,
+        'limit': limit,
+        'concerns': [c.to_dict() for c in concerns]
+    }), 200
+
+@app.route('/api/beneficiaries/<int:beneficiary_id>/documents', methods=['POST'])
+@jwt_required()
+def upload_beneficiary_document(beneficiary_id):
+    file = request.files['file']
+    doc_type = request.form.get('type')
+    if not file or not doc_type:
+        return jsonify({'error': 'File and type required'}), 400
+    filename = secure_filename(file.filename)
+    save_path = os.path.join('uploads/beneficiary_docs', f"{beneficiary_id}_{doc_type}_{filename}")
+    file.save(save_path)
+
+    # --- Add this logic to save the file path to the correct field ---
+    beneficiary = Beneficiary.query.get_or_404(beneficiary_id)
+    url = f"/uploads/beneficiary_docs/{beneficiary_id}_{doc_type}_{filename}"
+    if doc_type == "id":
+        beneficiary.id_doc_url = url
+    elif doc_type == "address":
+        beneficiary.address_doc_url = url
+    elif doc_type == "relationship":
+        beneficiary.relationship_doc_url = url
+    db.session.commit()
+    # ---------------------------------------------------------------
+
+    return jsonify({'url': url})
+
+@app.route('/api/groups/<int:group_id>/contribute', methods=['POST'])
+@jwt_required()
+def contribute_to_group(group_id):
+    user_id = get_jwt_identity()
+    data = request.get_json()
+    amount = data.get('amount')
+    method = data.get('method')  # "wallet" or "bank"
+    card_id = data.get('card_id')  # Only needed for "bank"
+
+    # 1. Check user is a member of the group
+    member = StokvelMember.query.filter_by(user_id=user_id, group_id=group_id).first()
+    if not member:
+        return jsonify({'error': 'You are not a member of this group.'}), 403
+
+    group = StokvelGroup.query.get_or_404(group_id)
+    if not amount or amount < group.contribution_amount:
+        return jsonify({'error': f'Minimum contribution is R{group.contribution_amount}.'}), 400
+
+    # 2. Handle payment
+    if method == "wallet":
+        wallet = Wallet.query.filter_by(user_id=user_id).first()
+        if not wallet or wallet.balance < amount:
+            return jsonify({'error': 'Insufficient wallet balance.'}), 400
+        wallet.balance -= amount
+    elif method == "bank":
+        # Simulate deposit to wallet first
+        if not card_id:
+            return jsonify({'error': 'Card ID required for bank payment.'}), 400
+        # You can call your process_deposit logic here
+        # For now, just add to wallet
+        wallet = Wallet.query.filter_by(user_id=user_id).first()
+        wallet.balance += amount  # Simulate deposit
+        wallet.balance -= amount  # Then deduct for contribution
+    else:
+        return jsonify({'error': 'Invalid payment method.'}), 400
+
+    # 3. Create contribution record
+    contribution = Contribution(
+        member_id=member.id,
+        amount=amount,
+        status='confirmed'
+    )
+    db.session.add(contribution)
+
+    # 4. Create transaction record for dashboard/wallet
+    from datetime import datetime
+    transaction = Transaction(
+        user_id=user_id,
+        transaction_type='stokvel_contribution',
+        amount=amount,
+        fee=0.00,
+        net_amount=amount,
+        status='completed',
+        reference=generate_transaction_reference(),
+        description=f"Contribution to {group.name}",
+        completed_at=datetime.utcnow()
+    )
+    db.session.add(transaction)
+    db.session.commit()
+
+    return jsonify({'message': 'Contribution successful!'}), 200
+
+@app.route('/api/dashboard/my-groups', methods=['GET'])
+@jwt_required()
+def get_my_groups():
+    user_id = get_jwt_identity()
+    memberships = StokvelMember.query.filter_by(user_id=user_id).all()
+    groups = []
+    for m in memberships:
+        group = StokvelGroup.query.get(m.group_id)
+        if group:
+            groups.append({
+                "id": group.id,  # <-- Ensure this is present!
+                "name": group.name,
+                "category": group.category,
+                "tier": group.tier,
+                "description": group.description,
+                "member_count": len(group.members)
+            })
+    return jsonify(groups)
+
+class SavingsGoal(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    label = db.Column(db.String(100), nullable=False)
+    target = db.Column(db.Float, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    user = db.relationship('User', backref='savings_goals')
+
+@app.route('/api/user/savings-goal', methods=['GET'])
+@token_required
+def get_savings_goal(current_user):
+    goal = SavingsGoal.query.filter_by(user_id=current_user.id).order_by(SavingsGoal.created_at.desc()).first()
+    if not goal:
+        return jsonify({'label': '', 'target': 0, 'progress': 0})
+    # Calculate progress as sum of all contributions
+    from sqlalchemy import func
+    progress = db.session.query(func.sum(Contribution.amount)) \
+        .join(StokvelMember) \
+        .filter(StokvelMember.user_id == current_user.id) \
+        .scalar() or 0.0
+    return jsonify({
+        'label': goal.label,
+        'target': goal.target,
+        'progress': float(progress)
+    })
+
+@app.route('/api/user/savings-goal', methods=['POST'])
+@token_required
+def set_savings_goal(current_user):
+    data = request.get_json()
+    label = data.get('label')
+    target = data.get('target')
+    if not label or not target:
+        return jsonify({'error': 'Label and target are required.'}), 400
+    goal = SavingsGoal(user_id=current_user.id, label=label, target=target)
+    db.session.add(goal)
+    db.session.commit()
+    return jsonify({'message': 'Savings goal set successfully.'}), 201
 
     

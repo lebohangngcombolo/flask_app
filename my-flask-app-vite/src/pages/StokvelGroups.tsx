@@ -329,6 +329,16 @@ const StokvelGroups: React.FC = () => {
           </div>
         </div>
 
+        {/* My Groups Button */}
+        <div className="flex justify-end mb-4">
+          <button
+            className="bg-indigo-600 text-white px-6 py-2 rounded-lg font-semibold shadow hover:bg-indigo-700 transition"
+            onClick={() => navigate("/dashboard/my-groups")}
+          >
+            My Groups
+          </button>
+        </div>
+
         {/* Category Tabs */}
         <div className="flex gap-2 mb-4">
           {Object.keys(categoryTiers).map((cat) => (

@@ -34,175 +34,197 @@ import { newsAPI } from '../services/api';
 import { toast } from 'react-toastify';
 import { FaPlus } from "react-icons/fa";
 
-const metrics = [
-  { label: "Total Wallet Balance", value: "R12,500" },
-  { label: "Active Groups", value: "5" },
-  { label: "Total Members", value: "38" },
-  { label: "Contributions (June)", value: "R4,200" },
-];
-
-const categories = ["Savings", "Burial", "Investment", "Business"];
-
-const categoryTiers = {
-  Savings: [
-    { name: "Bronze", amount: "R200", color: "bg-blue-100 text-blue-800" },
-    { name: "Silver", amount: "R500", color: "bg-blue-200 text-blue-900" },
-    { name: "Gold", amount: "R1000", color: "bg-blue-300 text-blue-900" },
-    { name: "Platinum", amount: "R2000", color: "bg-blue-400 text-white" },
-  ],
-  Burial: [
-    { name: "Bronze", amount: "R150", color: "bg-gray-100 text-gray-800" },
-    { name: "Silver", amount: "R400", color: "bg-gray-200 text-gray-900" },
-    { name: "Gold", amount: "R900", color: "bg-gray-300 text-gray-900" },
-    { name: "Platinum", amount: "R1800", color: "bg-gray-400 text-white" },
-  ],
-  Investment: [
-    { name: "Bronze", amount: "R300", color: "bg-green-100 text-green-800" },
-    { name: "Silver", amount: "R700", color: "bg-green-200 text-green-900" },
-    { name: "Gold", amount: "R1500", color: "bg-green-300 text-green-900" },
-    { name: "Platinum", amount: "R3000", color: "bg-green-400 text-white" },
-  ],
-  Business: [
-    { name: "Bronze", amount: "R250", color: "bg-yellow-100 text-yellow-800" },
-    { name: "Silver", amount: "R600", color: "bg-yellow-200 text-yellow-900" },
-    { name: "Gold", amount: "R1200", color: "bg-yellow-300 text-yellow-900" },
-    { name: "Platinum", amount: "R2500", color: "bg-yellow-400 text-white" },
-  ],
-};
-
-// Define personalized info for each category and tier
-const tierDetails: Record<string, Record<string, {
-  amountRange: string;
-  interest: string;
-  access: string;
-  description: string;
-  support: string;
-}>> = {
-  Savings: {
-    Bronze: {
-      amountRange: "R200–R450",
-      interest: "2.5% p.a.",
-      access: "Anytime",
-      description: "Perfect for individuals or small groups starting their savings journey. Flexible deposits and easy withdrawals.",
-      support: "Basic support"
-    },
-    Silver: {
-      amountRange: "R500–R950",
-      interest: "3.2% p.a.",
-      access: "Anytime",
-      description: "Ideal for growing savings groups looking for better rates and more flexibility.",
-      support: "Priority support"
-    },
-    Gold: {
-      amountRange: "R1000–R1950",
-      interest: "4.1% p.a.",
-      access: "Anytime",
-      description: "Best for established groups wanting higher limits and added perks.",
-      support: "Premium support"
-    },
-    Platinum: {
-      amountRange: "R2000+",
-      interest: "5.0% p.a.",
-      access: "Anytime",
-      description: "Premium tier for large groups seeking maximum benefits and exclusive features.",
-      support: "24/7 VIP support"
-    }
-  },
-  Burial: {
-    Bronze: {
-      amountRange: "R100–R300",
-      interest: "1.0% p.a.",
-      access: "On claim",
-      description: "Entry-level burial stokvel for basic funeral cover and support.",
-      support: "Basic support"
-    },
-    Silver: {
-      amountRange: "R350–R700",
-      interest: "1.5% p.a.",
-      access: "On claim",
-      description: "Enhanced cover for families and small communities.",
-      support: "Priority support"
-    },
-    Gold: {
-      amountRange: "R750–R1500",
-      interest: "2.0% p.a.",
-      access: "On claim",
-      description: "Comprehensive burial benefits for larger groups.",
-      support: "Premium support"
-    },
-    Platinum: {
-      amountRange: "R1600+",
-      interest: "2.5% p.a.",
-      access: "On claim",
-      description: "Top-tier cover with additional family and community benefits.",
-      support: "24/7 VIP support"
-    }
-  },
-  Investment: {
-    Bronze: {
-      amountRange: "R500–R1000",
-      interest: "4.0% p.a.",
-      access: "Quarterly",
-      description: "Start your investment journey with low minimums and steady returns.",
-      support: "Basic support"
-    },
-    Silver: {
-      amountRange: "R1100–R2500",
-      interest: "5.0% p.a.",
-      access: "Quarterly",
-      description: "Better rates for groups with a medium-term investment horizon.",
-      support: "Priority support"
-    },
-    Gold: {
-      amountRange: "R2600–R5000",
-      interest: "6.0% p.a.",
-      access: "Bi-Annually",
-      description: "Higher returns for committed investment stokvels.",
-      support: "Premium support"
-    },
-    Platinum: {
-      amountRange: "R5100+",
-      interest: "7.0% p.a.",
-      access: "Annually",
-      description: "Maximum growth for long-term, high-value investment groups.",
-      support: "24/7 VIP support"
-    }
-  },
-  Business: {
-    Bronze: {
-      amountRange: "R1000–R2500",
-      interest: "3.0% p.a.",
-      access: "Monthly",
-      description: "For small business stokvels pooling resources for growth.",
-      support: "Basic support"
-    },
-    Silver: {
-      amountRange: "R2600–R5000",
-      interest: "3.8% p.a.",
-      access: "Monthly",
-      description: "Ideal for growing business collectives needing flexible access.",
-      support: "Priority support"
-    },
-    Gold: {
-      amountRange: "R5100–R10000",
-      interest: "4.5% p.a.",
-      access: "Quarterly",
-      description: "Higher limits and returns for established business stokvels.",
-      support: "Premium support"
-    },
-    Platinum: {
-      amountRange: "R10100+",
-      interest: "5.5% p.a.",
-      access: "Quarterly",
-      description: "Top-tier for large business groups with exclusive benefits.",
-      support: "24/7 VIP support"
-    }
-  }
-};
-
 const AdminDashboard: React.FC = () => {
+  const [metrics, setMetrics] = useState([
+    { label: "Total Wallet Balance", value: "-" },
+    { label: "Active Groups", value: "-" },
+    { label: "Total Members", value: "-" },
+    { label: "Contributions (June)", value: "-" },
+  ]);
+
+  const fetchStats = async () => {
+    try {
+      const res = await dashboardAPI.getStats(); // or adminAPI.getStats()
+      setMetrics([
+        { label: "Total Wallet Balance", value: `R${res.data.total_wallet_balance}` },
+        { label: "Active Groups", value: res.data.active_groups },
+        { label: "Total Members", value: res.data.total_members },
+        { label: "Contributions (June)", value: `R${res.data.contributions_june}` },
+      ]);
+    } catch {
+      // handle error
+    }
+  };
+
+  useEffect(() => {
+    fetchStats();
+    fetchGroups();
+  }, []);
+
+  const categories = ["Savings", "Burial", "Investment", "Business"];
+
+  const categoryTiers = {
+    Savings: [
+      { name: "Bronze", amount: "R200", color: "bg-blue-100 text-blue-800" },
+      { name: "Silver", amount: "R500", color: "bg-blue-200 text-blue-900" },
+      { name: "Gold", amount: "R1000", color: "bg-blue-300 text-blue-900" },
+      { name: "Platinum", amount: "R2000", color: "bg-blue-400 text-white" },
+    ],
+    Burial: [
+      { name: "Bronze", amount: "R150", color: "bg-gray-100 text-gray-800" },
+      { name: "Silver", amount: "R400", color: "bg-gray-200 text-gray-900" },
+      { name: "Gold", amount: "R900", color: "bg-gray-300 text-gray-900" },
+      { name: "Platinum", amount: "R1800", color: "bg-gray-400 text-white" },
+    ],
+    Investment: [
+      { name: "Bronze", amount: "R300", color: "bg-green-100 text-green-800" },
+      { name: "Silver", amount: "R700", color: "bg-green-200 text-green-900" },
+      { name: "Gold", amount: "R1500", color: "bg-green-300 text-green-900" },
+      { name: "Platinum", amount: "R3000", color: "bg-green-400 text-white" },
+    ],
+    Business: [
+      { name: "Bronze", amount: "R250", color: "bg-yellow-100 text-yellow-800" },
+      { name: "Silver", amount: "R600", color: "bg-yellow-200 text-yellow-900" },
+      { name: "Gold", amount: "R1200", color: "bg-yellow-300 text-yellow-900" },
+      { name: "Platinum", amount: "R2500", color: "bg-yellow-400 text-white" },
+    ],
+  };
+
+  // Define personalized info for each category and tier
+  const tierDetails: Record<string, Record<string, {
+    amountRange: string;
+    interest: string;
+    access: string;
+    description: string;
+    support: string;
+  }>> = {
+    Savings: {
+      Bronze: {
+        amountRange: "R200–R450",
+        interest: "2.5% p.a.",
+        access: "Anytime",
+        description: "Perfect for individuals or small groups starting their savings journey. Flexible deposits and easy withdrawals.",
+        support: "Basic support"
+      },
+      Silver: {
+        amountRange: "R500–R950",
+        interest: "3.2% p.a.",
+        access: "Anytime",
+        description: "Ideal for growing savings groups looking for better rates and more flexibility.",
+        support: "Priority support"
+      },
+      Gold: {
+        amountRange: "R1000–R1950",
+        interest: "4.1% p.a.",
+        access: "Anytime",
+        description: "Best for established groups wanting higher limits and added perks.",
+        support: "Premium support"
+      },
+      Platinum: {
+        amountRange: "R2000+",
+        interest: "5.0% p.a.",
+        access: "Anytime",
+        description: "Premium tier for large groups seeking maximum benefits and exclusive features.",
+        support: "24/7 VIP support"
+      }
+    },
+    Burial: {
+      Bronze: {
+        amountRange: "R100–R300",
+        interest: "1.0% p.a.",
+        access: "On claim",
+        description: "Entry-level burial stokvel for basic funeral cover and support.",
+        support: "Basic support"
+      },
+      Silver: {
+        amountRange: "R350–R700",
+        interest: "1.5% p.a.",
+        access: "On claim",
+        description: "Enhanced cover for families and small communities.",
+        support: "Priority support"
+      },
+      Gold: {
+        amountRange: "R750–R1500",
+        interest: "2.0% p.a.",
+        access: "On claim",
+        description: "Comprehensive burial benefits for larger groups.",
+        support: "Premium support"
+      },
+      Platinum: {
+        amountRange: "R1600+",
+        interest: "2.5% p.a.",
+        access: "On claim",
+        description: "Top-tier cover with additional family and community benefits.",
+        support: "24/7 VIP support"
+      }
+    },
+    Investment: {
+      Bronze: {
+        amountRange: "R500–R1000",
+        interest: "4.0% p.a.",
+        access: "Quarterly",
+        description: "Start your investment journey with low minimums and steady returns.",
+        support: "Basic support"
+      },
+      Silver: {
+        amountRange: "R1100–R2500",
+        interest: "5.0% p.a.",
+        access: "Quarterly",
+        description: "Better rates for groups with a medium-term investment horizon.",
+        support: "Priority support"
+      },
+      Gold: {
+        amountRange: "R2600–R5000",
+        interest: "6.0% p.a.",
+        access: "Bi-Annually",
+        description: "Higher returns for committed investment stokvels.",
+        support: "Premium support"
+      },
+      Platinum: {
+        amountRange: "R5100+",
+        interest: "7.0% p.a.",
+        access: "Annually",
+        description: "Maximum growth for long-term, high-value investment groups.",
+        support: "24/7 VIP support"
+      }
+    },
+    Business: {
+      Bronze: {
+        amountRange: "R1000–R2500",
+        interest: "3.0% p.a.",
+        access: "Monthly",
+        description: "For small business stokvels pooling resources for growth.",
+        support: "Basic support"
+      },
+      Silver: {
+        amountRange: "R2600–R5000",
+        interest: "3.8% p.a.",
+        access: "Monthly",
+        description: "Ideal for growing business collectives needing flexible access.",
+        support: "Priority support"
+      },
+      Gold: {
+        amountRange: "R5100–R10000",
+        interest: "4.5% p.a.",
+        access: "Quarterly",
+        description: "Higher limits and returns for established business stokvels.",
+        support: "Premium support"
+      },
+      Platinum: {
+        amountRange: "R10100+",
+        interest: "5.5% p.a.",
+        access: "Quarterly",
+        description: "Top-tier for large business groups with exclusive benefits.",
+        support: "24/7 VIP support"
+      }
+    }
+  };
+
   const [groups, setGroups] = useState<any[]>([]);
   const [selectedCategory, setSelectedCategory] = useState("Savings");
+  const [users, setUsers] = useState([]);
+  const [withdrawals, setWithdrawals] = useState([]);
+  const [announcements, setAnnouncements] = useState([]);
 
   const fetchGroups = async () => {
     try {
@@ -213,8 +235,39 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
+  const fetchUsers = async () => {
+    try {
+      const res = await adminAPI.getUsers(); // or dashboardAPI.getUsers()
+      setUsers(res.data);
+    } catch {
+      setUsers([]);
+    }
+  };
+
+  const fetchWithdrawals = async () => {
+    try {
+      const res = await adminAPI.getPendingWithdrawals();
+      setWithdrawals(res.data);
+    } catch {
+      setWithdrawals([]);
+    }
+  };
+
+  const fetchAnnouncements = async () => {
+    try {
+      const res = await adminAPI.getAnnouncements();
+      setAnnouncements(res.data);
+    } catch {
+      setAnnouncements([]);
+    }
+  };
+
   useEffect(() => {
+    fetchStats();
     fetchGroups();
+    fetchUsers();
+    fetchWithdrawals();
+    fetchAnnouncements();
   }, []);
 
   return (
@@ -222,18 +275,6 @@ const AdminDashboard: React.FC = () => {
       {/* Top Bar */}
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-semibold">Welcome, Admin</h1>
-        <div className="flex items-center gap-4">
-          <button className="relative">
-            <span className="material-icons text-2xl">notifications</span>
-            <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full px-1">3</span>
-          </button>
-          <button>
-            <span className="material-icons text-2xl">person</span>
-          </button>
-          <button>
-            <span className="material-icons text-2xl">settings</span>
-          </button>
-        </div>
       </div>
 
       {/* Metrics Cards */}
@@ -281,7 +322,7 @@ const AdminDashboard: React.FC = () => {
                   <div className="flex-1 flex flex-col items-center text-center w-full">
                     <div className="font-bold text-2xl mb-1 tracking-wide">{group.name}</div>
                     <div className="text-gray-600 mb-1 text-lg font-semibold">
-                      Amount: <span className="font-bold">{details.amountRange}</span>
+                      Members: <span className="font-bold">{group.members?.length || 0}</span>
                     </div>
                     <div className="text-gray-500 text-sm mb-1">
                       Category: {group.category}
@@ -331,10 +372,21 @@ const AdminDashboard: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {/* No users to display */}
-              <tr>
-                <td colSpan={5} className="text-gray-400 text-center py-8">No users available.</td>
-              </tr>
+              {users.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="text-gray-400 text-center py-8">No users available.</td>
+                </tr>
+              ) : (
+                users.map(user => (
+                  <tr key={user.id}>
+                    <td className="px-4 py-2">{user.full_name || user.name}</td>
+                    <td className="px-4 py-2">{user.email}</td>
+                    <td className="px-4 py-2">{user.role}</td>
+                    <td className="px-4 py-2">{user.status || "Active"}</td>
+                    <td className="px-4 py-2"> {/* Actions */} </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -344,8 +396,13 @@ const AdminDashboard: React.FC = () => {
       <div className="bg-white rounded-lg shadow p-6 mb-8">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Pending Withdrawals</h2>
         <ul>
-          {/* No withdrawals to display */}
-          <li className="text-gray-400 text-center py-8">No pending withdrawals.</li>
+          {withdrawals.length === 0 ? (
+            <li className="text-gray-400 text-center py-8">No pending withdrawals.</li>
+          ) : (
+            withdrawals.map(w => (
+              <li key={w.id}>{w.user_name} - R{w.amount} - {w.status}</li>
+            ))
+          )}
         </ul>
       </div>
 
@@ -353,8 +410,13 @@ const AdminDashboard: React.FC = () => {
       <div className="bg-white rounded-lg shadow p-6 mb-8">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Announcements</h2>
         <ul>
-          {/* No announcements to display */}
-          <li className="text-gray-400 text-center py-8">No announcements available.</li>
+          {announcements.length === 0 ? (
+            <li className="text-gray-400 text-center py-8">No announcements available.</li>
+          ) : (
+            announcements.map(a => (
+              <li key={a.id}>{a.title} - {a.content}</li>
+            ))
+          )}
         </ul>
       </div>
     </div>

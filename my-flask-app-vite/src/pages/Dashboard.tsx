@@ -14,6 +14,9 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
+  const [trendTab, setTrendTab] = useState<'daily' | 'weekly' | 'monthly'>('monthly');
+  const [savingsGoal, setSavingsGoal] = useState({ label: '', target: 0, progress: 0 });
+  const [goalModalOpen, setGoalModalOpen] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -45,29 +48,56 @@ const Dashboard = () => {
     fetchData();
   }, [navigate]);
 
+  useEffect(() => {
+    const fetchSavingsGoal = async () => {
+      try {
+        const res = await userAPI.getSavingsGoal();
+        setSavingsGoal(res.data);
+      } catch (err: any) {
+        if (err.response?.status === 401) {
+          setError('Your session has expired. Please log in again.');
+          setTimeout(() => navigate('/login'), 2000);
+        } else {
+          setError(err.response?.data?.error || 'Failed to load savings goal');
+        }
+      }
+    };
+
+    fetchSavingsGoal();
+  }, []);
+
   // Prepare real data for widgets
   const summaryCards = [
-    { label: "Total Balance", value: userStats?.total_balance !== undefined ? `R${userStats.total_balance.toLocaleString()}` : "-" },
-    { label: "Contributions", value: userStats?.total_contributions !== undefined ? `R${userStats.total_contributions.toLocaleString()}` : "-" },
-    { label: "Withdrawn", value: userStats?.total_withdrawn !== undefined ? `R${userStats.total_withdrawn.toLocaleString()}` : "-" },
+    { label: "Total Balance", value: userStats?.walletBalance !== undefined ? `R${userStats.walletBalance.toLocaleString()}` : "-" },
+    { label: "Contributions", value: userStats?.totalContributions !== undefined ? `R${userStats.totalContributions.toLocaleString()}` : "-" },
+    { label: "Withdrawn", value: userStats?.totalWithdrawn !== undefined ? `R${userStats.totalWithdrawn.toLocaleString()}` : "R0" },
     { label: "Next Payout", value: userStats?.next_payout || "-" },
   ];
 
+  const dailySummary = Array.isArray(userStats?.dailySummary) ? userStats.dailySummary : [];
+  const weeklySummary = userStats?.weeklySummary ?? [];
+  const monthlySummary = userStats?.monthlySummary ?? [];
+
   const chartData = {
-    labels: userStats?.contribution_trend?.map((c: any) => c.month) || [],
-    datasets: [
-      {
-        label: "Contributions",
-        data: userStats?.contribution_trend?.map((c: any) => c.amount) || [],
-        fill: false,
-        borderColor: "#6366f1",
-        tension: 0.4,
-      },
-    ],
+    daily: {
+      labels: dailySummary.map((c: any) => c.date),
+      datasets: [{ label: "Contributions", data: dailySummary.map((c: any) => c.total), borderColor: "#6366f1", tension: 0.4 }]
+    },
+    weekly: {
+      labels: weeklySummary.map((c: any) => c.week),
+      datasets: [{ label: "Contributions", data: weeklySummary.map((c: any) => c.total), borderColor: "#6366f1", tension: 0.4 }]
+    },
+    monthly: {
+      labels: monthlySummary.map((c: any) => c.month),
+      datasets: [{ label: "Contributions", data: monthlySummary.map((c: any) => c.total), borderColor: "#6366f1", tension: 0.4 }]
+    }
   };
 
-  const recentContributions = userStats?.recent_contributions || [];
-  const savingsGoal = userStats?.savings_goal || { progress: 0, label: "", target: 0 };
+  const recentContributions = userStats?.recentTransactions ?? [];
+  const savingsGoalAPI = {
+    get: () => userAPI.getSavingsGoal(),
+    set: (data: { label: string; target: number }) => userAPI.setSavingsGoal(data),
+  };
 
   if (loading) {
     return (
@@ -114,9 +144,26 @@ const Dashboard = () => {
           {/* Contribution Trend */}
           <div className="bg-white rounded-xl shadow p-5 flex flex-col h-[340px]">
             <div className="font-semibold mb-2">Contribution Trend</div>
+            {/* Tabs */}
+            <div className="flex space-x-2 mb-4">
+              {['daily', 'weekly', 'monthly'].map((tab) => (
+                <button
+                  key={tab}
+                  className={`px-4 py-1 rounded-full text-sm font-medium transition ${
+                    trendTab === tab
+                      ? 'bg-indigo-600 text-white shadow'
+                      : 'bg-gray-200 text-gray-600 hover:bg-indigo-100'
+                  }`}
+                  onClick={() => setTrendTab(tab as 'daily' | 'weekly' | 'monthly')}
+                >
+                  {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                </button>
+              ))}
+            </div>
+            {/* Chart */}
             <div className="flex-1 min-h-[180px]">
               <Line
-                data={chartData}
+                data={chartData[trendTab]}
                 options={{
                   plugins: { legend: { display: false } },
                   scales: { y: { beginAtZero: true } },
@@ -131,7 +178,7 @@ const Dashboard = () => {
           {/* Recent Contributions */}
           <div className="bg-white rounded-xl shadow p-5 flex flex-col h-[340px]">
             <div className="font-semibold mb-2">Recent Contributions</div>
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto max-h-72">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-gray-400 border-b">
@@ -156,11 +203,11 @@ const Dashboard = () => {
                       >
                         <td className="py-2 flex items-center gap-2">
                           <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-indigo-100 text-indigo-600 font-bold">
-                            {rc.user[0]}
+                            {user?.full_name?.[0] || user?.name?.[0] || "U"}
                           </span>
-                          <span>{rc.user}</span>
+                          <span>{user?.full_name || user?.name || "You"}</span>
                         </td>
-                        <td className="py-2">{rc.date}</td>
+                        <td className="py-2">{new Date(rc.date).toLocaleDateString()}</td>
                         <td className="py-2">
                           <span className="inline-block px-2 py-1 rounded-full text-xs font-semibold
                             bg-green-100 text-green-700">
@@ -183,30 +230,95 @@ const Dashboard = () => {
           <div className="bg-white rounded-xl shadow p-5 flex flex-col">
             <div className="flex items-center gap-2 mb-2">
               <Star className="text-yellow-400" />
-              <span className="font-semibold">Savings Goals</span>
+              <span className="font-semibold">Savings Goal</span>
+              <button
+                className="ml-auto text-xs text-indigo-600 hover:underline"
+                onClick={() => setGoalModalOpen(true)}
+              >
+                {savingsGoal.label ? "Edit" : "Set Goal"}
+              </button>
             </div>
-            <div className="text-sm text-gray-500 mb-1">{savingsGoal.label}</div>
+            <div className="text-sm text-gray-500 mb-1">{savingsGoal.label || "No goal set"}</div>
             <div className="w-full bg-gray-200 rounded-full h-3 mb-2">
               <div
-                className="bg-indigo-500 h-3 rounded-full"
-                style={{ width: `${(savingsGoal.progress || 0) * 100}%` }}
+                className="bg-indigo-500 h-3 rounded-full transition-all"
+                style={{
+                  width: savingsGoal.target
+                    ? `${Math.min((savingsGoal.progress / savingsGoal.target) * 100, 100)}%`
+                    : "0%",
+                }}
               ></div>
             </div>
             <div className="text-xs text-gray-400">
-              {Math.round((savingsGoal.progress || 0) * 100)}% of R{(savingsGoal.target || 0).toLocaleString()}
+              {savingsGoal.target
+                ? `${Math.round((savingsGoal.progress / savingsGoal.target) * 100)}% of R${savingsGoal.target.toLocaleString()}`
+                : "Set a target to start saving!"}
+            </div>
+            <div className="text-xs text-gray-500 mt-1">
+              Saved: <span className="font-bold text-indigo-600">R{savingsGoal.progress.toLocaleString()}</span>
             </div>
           </div>
 
-          {/* Invite Friends */}
-          <div className="bg-white rounded-xl shadow p-5 flex flex-col items-center justify-center">
+          {/* My Groups Quick Access */}
+          <div
+            className="bg-white rounded-xl shadow p-5 flex flex-col items-center justify-center cursor-pointer hover:bg-indigo-50 transition"
+            onClick={() => navigate('/dashboard/my-groups')}
+          >
             <Users className="w-10 h-10 text-indigo-400 mb-2" />
-            <div className="font-semibold mb-2">Invite Friends</div>
-            <button className="btn-primary px-4 py-2 rounded-lg bg-indigo-500 text-white hover:bg-indigo-600 transition">
-              Invite Friends
-            </button>
+            <div className="font-semibold mb-2">My Groups</div>
+            <div className="text-xs text-gray-500 mb-2">
+              View and manage your stokvel groups
+            </div>
+            <span className="text-indigo-600 font-bold">
+              {userStats?.activeGroupsCount || 0} Active
+            </span>
           </div>
         </div>
       </div>
+
+      {goalModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-sm shadow-lg">
+            <div className="font-semibold mb-2">Set Savings Goal</div>
+            <input
+              className="w-full border rounded px-3 py-2 mb-2"
+              placeholder="Goal name (e.g. Holiday)"
+              value={savingsGoal.label}
+              onChange={e => setSavingsGoal(g => ({ ...g, label: e.target.value }))}
+            />
+            <input
+              className="w-full border rounded px-3 py-2 mb-4"
+              type="number"
+              placeholder="Target amount"
+              value={savingsGoal.target}
+              onChange={e => setSavingsGoal(g => ({ ...g, target: Number(e.target.value) }))}
+            />
+            <div className="flex gap-2">
+              <button
+                className="flex-1 bg-indigo-600 text-white rounded px-4 py-2"
+                onClick={async () => {
+                  if (!savingsGoal.label || !savingsGoal.target) {
+                    alert("Please enter a goal name and target amount.");
+                    return;
+                  }
+                  await savingsGoalAPI.set({ label: savingsGoal.label, target: savingsGoal.target });
+                  const res = await savingsGoalAPI.get();
+                  setSavingsGoal(res.data);
+                  setGoalModalOpen(false);
+                }}
+              >
+                Save
+              </button>
+              <button
+                className="flex-1 bg-gray-200 text-gray-700 rounded px-4 py-2"
+                onClick={() => setGoalModalOpen(false)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

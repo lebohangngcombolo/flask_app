@@ -190,6 +190,22 @@ const DashboardLayout = () => {
                               Complete KYC Now
                             </Link>
                           )}
+                          {/* Add this for group join approved */}
+                          {notification.type === "group_join_approved" && notification.data?.group_id && (
+                            <button
+                              className="mt-2 text-blue-600 hover:underline font-medium"
+                              onClick={() => {
+                                setIsNotificationsOpen(false);
+                                navigate(`/dashboard/stokvel-groups/${notification.data.group_id}`);
+                              }}
+                            >
+                              Go to Group
+                            </button>
+                          )}
+                          {/* Optionally, show reason for rejection */}
+                          {notification.type === "group_join_rejected" && notification.data?.reason && (
+                            <div className="mt-2 text-red-600 text-xs">Reason: {notification.data.reason}</div>
+                          )}
                         </li>
                       );
                     })

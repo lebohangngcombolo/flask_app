@@ -35,6 +35,9 @@ import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import ClaimSubmission from "./pages/ClaimSubmission";
 import Beneficiaries from './pages/Beneficiaries';
+import AdminConcerns from './pages/AdminConcerns';
+import GroupDetails from './pages/GroupDetails';
+import MyGroups from "./pages/MyGroups";
 
 const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
@@ -147,6 +150,8 @@ const App: React.FC = () => {
             <Route path="claims/new" element={<ClaimSubmission />} />
             <Route path="beneficiaries" element={<Beneficiaries />} />
             {/* Add more dashboard sub-pages here if needed */}
+            <Route path="stokvel-groups/:groupId" element={<GroupDetails />} />
+            <Route path="my-groups" element={<MyGroups />} />
           </Route>
 
           {/* Admin routes - ONLY NESTED UNDER /admin */}
@@ -157,10 +162,18 @@ const App: React.FC = () => {
             <Route path="group-admin-management" element={<GroupAdminManagement />} />
             <Route path="users" element={<UserManagement />} />
             <Route path="stokvels" element={<StokvelManagement />} />
+            <Route path="support/concerns" element={<AdminRoute><AdminConcerns /></AdminRoute>} />
+            <Route path="concerns" element={<AdminRoute><AdminConcerns /></AdminRoute>} />
           </Route>
           
           {/* Phone Auth route */}
           <Route path="/phone-auth" element={<PhoneAuth />} />
+
+          {/* Group Details route */}
+          {/* This route is now nested inside the /dashboard layout */}
+
+          {/* My Groups route */}
+          {/* This route is now nested inside the /dashboard layout */}
 
           {/* Catch all route */}
           <Route path="*" element={<Navigate to="/" replace />} />

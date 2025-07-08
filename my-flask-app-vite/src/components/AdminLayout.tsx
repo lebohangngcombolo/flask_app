@@ -19,12 +19,11 @@ const AdminLayout: React.FC = () => {
       />
 
       {/* Sidebar and Main Content */}
-      <div className="flex flex-1">
-        {/* Sidebar below navbar */}
-        {sidebarOpen && (
+      <div className="flex flex-1 overflow-hidden">
+        <aside className={`min-h-screen w-64 flex flex-col transition-all duration-300 ease-in-out ${sidebarOpen ? '' : 'hidden'}`}>
           <AdminSidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
-        )}
-        <main className="flex-1 p-6 overflow-x-hidden overflow-y-auto">
+        </aside>
+        <main className="flex-1 p-6 overflow-y-auto">
           <Outlet />
         </main>
       </div>

@@ -84,7 +84,7 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({ sidebarOpen, setSidebarOpen
   };
 
   return (
-    <aside className="bg-[#23295A] min-h-screen w-64 flex flex-col py-6 px-2">
+    <aside className="bg-[#23295A] min-h-screen w-64 flex flex-col py-6 px-2 transition-all duration-300 ease-in-out h-full">
       <nav className="flex-1 space-y-2">
         {navItems.map((item) => {
           const hasSubItems = !!item.subItems;

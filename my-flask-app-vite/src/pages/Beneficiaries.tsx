@@ -205,11 +205,36 @@ const BeneficiaryForm = ({ beneficiary, onClose }) => {
   });
   const [loading, setLoading] = useState(false);
 
+  // --- Add these states for document files and URLs ---
+  const [idFile, setIdFile] = useState(null);
+  const [addressFile, setAddressFile] = useState(null);
+  const [relationshipFile, setRelationshipFile] = useState(null);
+
+  const [idUrl, setIdUrl] = useState(beneficiary?.id_doc_url || "");
+  const [addressUrl, setAddressUrl] = useState(beneficiary?.address_doc_url || "");
+  const [relationshipUrl, setRelationshipUrl] = useState(beneficiary?.relationship_doc_url || "");
+
   const isEdit = !!beneficiary;
 
   const handleChange = (e) =>
     setForm({ ...form, [e.target.name]: e.target.value });
 
+  // --- Add this helper for uploading a document ---
+  const uploadDoc = async (beneficiaryId, file, type, setUrl) => {
+    if (!file) return;
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("type", type);
+    const res = await fetch(`/api/beneficiaries/${beneficiaryId}/documents`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      body: formData,
+    });
+    const data = await res.json();
+    if (data.url) setUrl(data.url);
+  };
+
+  // --- Update handleSubmit to upload documents after saving beneficiary ---
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -227,6 +252,19 @@ const BeneficiaryForm = ({ beneficiary, onClose }) => {
     });
     if (res.ok) {
       toast.success(isEdit ? "Beneficiary updated" : "Beneficiary added");
+      // Save beneficiary first (POST or PUT), get beneficiaryId
+      let beneficiaryId = beneficiary?.id;
+      if (!beneficiaryId) {
+        // Create new beneficiary
+        const data = await res.json();
+        beneficiaryId = data.id;
+      }
+
+      // --- Upload documents if selected ---
+      await uploadDoc(beneficiaryId, idFile, "id", setIdUrl);
+      await uploadDoc(beneficiaryId, addressFile, "address", setAddressUrl);
+      await uploadDoc(beneficiaryId, relationshipFile, "relationship", setRelationshipUrl);
+
       onClose();
     } else {
       const data = await res.json();
@@ -237,98 +275,112 @@ const BeneficiaryForm = ({ beneficiary, onClose }) => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <form
-        className="bg-white rounded-2xl shadow-xl w-full max-w-lg mx-2 p-8 relative"
-        onSubmit={handleSubmit}
-      >
-        <button
-          className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-2xl"
-          onClick={onClose}
-          type="button"
-        >
-          ×
-        </button>
-        <h2 className="text-2xl font-bold mb-6 text-center">
-          {isEdit ? "Edit Beneficiary" : "Add Beneficiary"}
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-xl max-w-2xl mx-auto p-8 space-y-6">
+        <h2 className="text-2xl font-bold mb-4 text-center">Beneficiary Details</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Personal Info */}
           <div>
-            <label className="block font-semibold mb-1">Full Name</label>
+            <label className="block font-medium mb-1">Full Name</label>
             <input
-              className="w-full border rounded-lg px-4 py-2"
+              type="text"
               name="name"
               value={form.name}
               onChange={handleChange}
+              className="w-full border rounded-lg px-3 py-2"
               required
-              placeholder="e.g. Thabo Mokoena"
             />
           </div>
           <div>
-            <label className="block font-semibold mb-1">Relationship</label>
+            <label className="block font-medium mb-1">Relationship</label>
             <select
-              className="w-full border rounded-lg px-4 py-2"
               name="relationship"
               value={form.relationship}
               onChange={handleChange}
+              className="w-full border rounded-lg px-3 py-2"
               required
             >
-              <option value="">Select relationship</option>
-              {["Spouse", "Child", "Parent", "Sibling", "Friend", "Other"].map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
+              <option value="">Select...</option>
+              {RELATIONSHIPS.map(r => (
+                <option key={r.label} value={r.label}>{r.label}</option>
               ))}
             </select>
           </div>
           <div>
-            <label className="block font-semibold mb-1">ID Number</label>
+            <label className="block font-medium mb-1">ID Number</label>
             <input
-              className="w-full border rounded-lg px-4 py-2"
+              type="text"
               name="id_number"
               value={form.id_number}
               onChange={handleChange}
-              required
-              placeholder="e.g. 9001015800087"
+              className="w-full border rounded-lg px-3 py-2"
             />
           </div>
           <div>
-            <label className="block font-semibold mb-1">Date of Birth</label>
+            <label className="block font-medium mb-1">Date of Birth</label>
             <input
               type="date"
-              className="w-full border rounded-lg px-4 py-2"
               name="date_of_birth"
               value={form.date_of_birth}
               onChange={handleChange}
+              className="w-full border rounded-lg px-3 py-2"
             />
           </div>
           <div>
-            <label className="block font-semibold mb-1">Phone</label>
+            <label className="block font-medium mb-1">Phone</label>
             <input
-              className="w-full border rounded-lg px-4 py-2"
+              type="text"
               name="phone"
               value={form.phone}
               onChange={handleChange}
-              placeholder="e.g. 0821234567"
+              className="w-full border rounded-lg px-3 py-2"
             />
           </div>
           <div>
-            <label className="block font-semibold mb-1">Email</label>
+            <label className="block font-medium mb-1">Email</label>
             <input
-              className="w-full border rounded-lg px-4 py-2"
+              type="email"
               name="email"
               value={form.email}
               onChange={handleChange}
-              placeholder="e.g. thabo@email.com"
+              className="w-full border rounded-lg px-3 py-2"
             />
           </div>
         </div>
-        <button
-          className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-3 rounded-lg font-bold hover:from-blue-700 hover:to-indigo-700 transition mt-6"
-          type="submit"
-          disabled={loading}
-        >
-          {loading ? "Saving..." : isEdit ? "Update" : "Add"}
-        </button>
+
+        {/* Document Uploads */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
+          <div>
+            <label className="block font-medium mb-1">ID Document</label>
+            <input type="file" accept="image/*,application/pdf" onChange={e => setIdFile(e.target.files[0])} />
+            {idUrl && <a href={idUrl} target="_blank" className="text-blue-600 underline ml-2">View</a>}
+          </div>
+          <div>
+            <label className="block font-medium mb-1">Proof of Address</label>
+            <input type="file" accept="image/*,application/pdf" onChange={e => setAddressFile(e.target.files[0])} />
+            {addressUrl && <a href={addressUrl} target="_blank" className="text-blue-600 underline ml-2">View</a>}
+          </div>
+          <div>
+            <label className="block font-medium mb-1">Proof of Relationship</label>
+            <input type="file" accept="image/*,application/pdf" onChange={e => setRelationshipFile(e.target.files[0])} />
+            {relationshipUrl && <a href={relationshipUrl} target="_blank" className="text-blue-600 underline ml-2">View</a>}
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-4 mt-8">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-5 py-2 rounded-lg bg-gray-200 text-gray-700 font-semibold"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            className="px-5 py-2 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 transition"
+          >
+            Save Beneficiary
+          </button>
+        </div>
       </form>
     </div>
   );
