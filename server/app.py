@@ -91,6 +91,46 @@ CORS(app, resources={r"/api/*": {"origins": "http://localhost:5173"}}, supports_
 CORS(app, resources={r"/admin/*": {"origins": "http://localhost:5173"}}, supports_credentials=True)
 
 # -------------------- UTILITY FUNCTIONS --------------------
+#-----------------------------------Admin Notifications------------------------------------
+def create_admin_notification(title, message, notification_type, data=None):
+    """Helper function to create notifications for all admin users"""
+    try:
+        admin_users = User.query.filter_by(role='admin').all()
+        for admin in admin_users:
+            notification = Notification(
+                user_id=admin.id,
+                title=title,
+                message=message,
+                type=notification_type,
+                data=data or {}
+            )
+            db.session.add(notification)
+        db.session.commit()
+        print(f"✅ Created {len(admin_users)} admin notifications for: {title}")
+    except Exception as e:
+        print(f"❌ Error creating admin notifications: {str(e)}")
+        db.session.rollback()
+
+def create_system_warning_notification(warning_type, message, severity="warning"):
+    """Create system warning/error notifications for admins"""
+    title_map = {
+        "warning": "System Warning",
+        "error": "System Error",
+        "info": "System Info"
+    }
+    
+    create_admin_notification(
+        title=title_map.get(severity, "System Alert"),
+        message=message,
+        notification_type="system",
+        data={
+            "warning_type": warning_type,
+            "severity": severity,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    )
+#-------------------------------------------------------------------------------------------------
+
 def generate_otp():
     """Generate a 6-digit OTP"""
     return ''.join([str(random.randint(0, 9)) for _ in range(6)])
@@ -313,6 +353,19 @@ class Notification(db.Model):
     
     user = db.relationship('User', backref='notifications')
 
+#----------------------------------------Admin Notifications----------------------------------------
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'title': self.title,
+            'message': self.message,
+            'type': self.type,
+            'data': self.data,
+            'is_read': self.is_read,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
 class OTP(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
@@ -455,6 +508,27 @@ class CustomerConcern(db.Model):
             'message': self.message,
             'status': self.status,
             'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+# ---------------------------------------------- FAQ Models -----------------------------------------
+class FAQ(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    question = db.Column(db.String(255), nullable=False)
+    answer = db.Column(db.Text, nullable=False)
+    category = db.Column(db.String(100))  # e.g., Payments, Account
+    is_published = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'question': self.question,
+            'answer': self.answer,
+            'category': self.category,
+            'is_published': self.is_published,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
 
 # -------------------- DECORATORS --------------------
@@ -639,6 +713,19 @@ def register():
                 db.session.add(referral)
 
         db.session.commit()
+
+        # Create notification for admin about new user signup
+        create_admin_notification(
+            title="New User Registration",
+            message=f"New user registered: {full_name} ({email})",
+            notification_type="user_activity",
+            data={
+                "user_id": user.id,
+                "user_name": full_name,
+                "user_email": email,
+                "user_phone": phone
+            }
+        )
 
         # Generate and send verification code with better error handling
         try:
@@ -1748,6 +1835,15 @@ def handle_error(error):
         return error
 
     logger.error(f"Unhandled error: {str(error)}")
+
+#-----------------------------------Admin Notifications------------------------------------
+    # Create system error notification for admins
+    create_system_warning_notification(
+        warning_type="unhandled_exception",
+        message=f"Unhandled error occurred: {str(error)}",
+        severity="error"
+    )
+    
     if isinstance(error, SQLAlchemyError):
         db.session.rollback()
         return jsonify({"error": "Database error occurred"}), 500
@@ -2338,6 +2434,11 @@ def get_user_join_requests():
 def get_user_notifications():
     user_id = get_jwt_identity()
     notifications = Notification.query.filter_by(user_id=user_id).order_by(Notification.created_at.desc()).all()
+
+#------------------------------------Print Statements------------------------------------    
+    print("DEBUG: notifications type:", type(notifications))
+    print("DEBUG: first notification type:", type(notifications[0]) if notifications else "None")
+    print("DEBUG: first notification repr:", repr(notifications[0]) if notifications else "None")
     
     return jsonify([{
         'id': n.id,
@@ -2361,43 +2462,34 @@ def mark_notification_read(notification_id):
     
     return jsonify({'message': 'Notification marked as read'})
 
-@app.route('/api/admin/notifications', methods=['GET'])
-@jwt_required()
-def get_admin_notifications():
-    user_id = get_jwt_identity()
-    user = User.query.get(user_id)
-    
-    if not user or user.role != 'admin':
-        return jsonify({'error': 'Unauthorized'}), 401
-    
-    # Get notifications for admin users
-    notifications = Notification.query.filter_by(user_id=user_id).order_by(Notification.created_at.desc()).all()
-    
-    return jsonify([{
-        'id': n.id,
-        'title': n.title,
-        'message': n.message,
-        'type': n.type,
-        'data': n.data,
-        'is_read': n.is_read,
-        'created_at': n.created_at.isoformat()
-    } for n in notifications])
+#@app.route('/api/admin/notifications', methods=['GET'])
+#@jwt_required()
+#def get_admin_notifications():
+#    user_id = get_jwt_identity()
+#    user = User.query.get(user_id)
+#    
+#    if not user or user.role != 'admin':
+#        return jsonify({'error': 'Unauthorized'}), 401
+#    
+#    # Get notifications for admin users
+#    notifications = Notification.query.filter_by(user_id=user_id).order_by(Notification.created_at.desc()).all()
+#    
+#    return jsonify([{
+#        'id': n.id,
+#        'title': n.title,
+#        'message': n.message,
+#        'type': n.type,
+#        'data': n.data,
+#        'is_read': n.is_read,
+#        'created_at': n.created_at.isoformat()
+#    } for n in notifications])
 
 @app.route('/api/admin/notifications/<int:notification_id>/read', methods=['POST'])
 @jwt_required()
 def mark_admin_notification_read(notification_id):
-    user_id = get_jwt_identity()
-    user = User.query.get(user_id)
-    
-    if not user or user.role != 'admin':
-        return jsonify({'error': 'Unauthorized'}), 401
-    
-    notification = Notification.query.filter_by(id=notification_id, user_id=user_id).first()
-    
-    if notification:
-        notification.is_read = True
-        db.session.commit()
-    
+    notification = Notification.query.get_or_404(notification_id)
+    notification.is_read = True
+    db.session.commit()
     return jsonify({'message': 'Notification marked as read'})
 
 @app.route('/api/user/notifications/mark-as-read', methods=['POST'])
@@ -3348,6 +3440,21 @@ def submit_contact():
     )
     db.session.add(concern)
     db.session.commit()
+
+ #----------------------------------------Admin Notifications----------------------------------------   
+    # Create notification for admin about new customer concern
+    create_admin_notification(
+        title="New Customer Concern",
+        message=f"New support message from {name} ({email}): {subject}",
+        notification_type="support",
+        data={
+            "concern_id": concern.id,
+            "user_name": name,
+            "user_email": email,
+            "subject": subject
+        }
+    )
+    
     return jsonify({'message': 'Your message has been received. Thank you for contacting us!'}), 201
 
 @app.route('/api/admin/concerns', methods=['GET'])
@@ -3412,6 +3519,210 @@ def delete_concern(id):
     db.session.delete(concern)
     db.session.commit()
     return jsonify({'message': 'Concern deleted successfully'}), 200
+
+# -------------------- FAQ Admin Endpoints --------------------
+
+@app.route('/api/admin/faqs', methods=['POST'])
+@role_required(['admin'])
+def create_faq():
+    data = request.get_json()
+    faq = FAQ(
+        question=data.get('question'),
+        answer=data.get('answer'),
+        category=data.get('category'),
+        is_published=data.get('is_published', True)
+    )
+    db.session.add(faq)
+    db.session.commit()
+    
+    # Create notification for admin about FAQ creation
+    create_admin_notification(
+        title="FAQ Created",
+        message=f"New FAQ created: {faq.question[:50]}...",
+        notification_type="system",
+        data={
+            "faq_id": faq.id,
+            "question": faq.question,
+            "category": faq.category,
+            "is_published": faq.is_published
+        }
+    )
+    
+    return jsonify({'message': 'FAQ created', 'faq': faq.to_dict()}), 201
+
+@app.route('/api/admin/faqs', methods=['GET'])
+@role_required(['admin'])
+def get_faqs():
+    category = request.args.get('category')
+    published = request.args.get('published')
+    search = request.args.get('search')
+    query = FAQ.query
+    if category:
+        query = query.filter(FAQ.category == category)
+    if published is not None:
+        if published.lower() == 'true':
+            query = query.filter(FAQ.is_published.is_(True))
+        elif published.lower() == 'false':
+            query = query.filter(FAQ.is_published.is_(False))
+    if search:
+        like = f"%{search}%"
+        query = query.filter(
+            or_(FAQ.question.ilike(like), FAQ.answer.ilike(like))
+        )
+    faqs = query.order_by(FAQ.created_at.desc()).all()
+    return jsonify([faq.to_dict() for faq in faqs]), 200
+
+@app.route('/api/admin/faqs/<int:id>', methods=['GET'])
+@role_required(['admin'])
+def get_faq(id):
+    faq = FAQ.query.get_or_404(id)
+    return jsonify(faq.to_dict()), 200
+
+@app.route('/api/admin/faqs/<int:id>', methods=['PUT'])
+@role_required(['admin'])
+def update_faq(id):
+    faq = FAQ.query.get_or_404(id)
+    data = request.get_json()
+    old_question = faq.question
+    old_category = faq.category
+    
+    faq.question = data.get('question', faq.question)
+    faq.answer = data.get('answer', faq.answer)
+    faq.category = data.get('category', faq.category)
+    if 'is_published' in data:
+        faq.is_published = data['is_published']
+    db.session.commit()
+    
+    # Create notification for admin about FAQ update
+    create_admin_notification(
+        title="FAQ Updated",
+        message=f"FAQ updated: {faq.question[:50]}...",
+        notification_type="system",
+        data={
+            "faq_id": faq.id,
+            "old_question": old_question,
+            "new_question": faq.question,
+            "old_category": old_category,
+            "new_category": faq.category,
+            "is_published": faq.is_published
+        }
+    )
+    
+    return jsonify({'message': 'FAQ updated', 'faq': faq.to_dict()}), 200
+
+@app.route('/api/admin/faqs/<int:id>', methods=['DELETE'])
+@role_required(['admin'])
+def delete_faq(id):
+    faq = FAQ.query.get_or_404(id)
+    question = faq.question
+    category = faq.category
+    
+    db.session.delete(faq)
+    db.session.commit()
+    
+    # Create notification for admin about FAQ deletion
+    create_admin_notification(
+        title="FAQ Deleted",
+        message=f"FAQ deleted: {question[:50]}...",
+        notification_type="system",
+        data={
+            "deleted_faq_question": question,
+            "deleted_faq_category": category
+        }
+    )
+    
+    return jsonify({'message': 'FAQ deleted'}), 200
+
+# ------------------- BULK DELETE ALL FAQS -------------------
+@app.route('/api/admin/faqs', methods=['DELETE'])
+@role_required(['admin'])
+def delete_all_faqs():
+    try:
+        num_deleted = FAQ.query.delete()
+        db.session.commit()
+        create_admin_notification(
+            title="All FAQs Deleted",
+            message=f"Admin deleted all FAQs ({num_deleted} entries).",
+            notification_type="system"
+        )
+        return jsonify({'message': f'All FAQs deleted ({num_deleted} entries).'}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/faqs/<int:id>/visibility', methods=['PATCH'])
+@role_required(['admin'])
+def toggle_faq_visibility(id):
+    faq = FAQ.query.get_or_404(id)
+    data = request.get_json()
+    if 'is_published' not in data:
+        return jsonify({'error': 'is_published required'}), 400
+    
+    old_status = faq.is_published
+    faq.is_published = data['is_published']
+    db.session.commit()
+    
+    # Create notification for admin about FAQ visibility change
+    status_text = "published" if faq.is_published else "unpublished"
+    create_admin_notification(
+        title="FAQ Visibility Changed",
+        message=f"FAQ {status_text}: {faq.question[:50]}...",
+        notification_type="system",
+        data={
+            "faq_id": faq.id,
+            "old_status": old_status,
+            "new_status": faq.is_published,
+            "question": faq.question
+        }
+    )
+    
+    return jsonify({'message': 'FAQ visibility updated', 'faq': faq.to_dict()}), 200
+
+#------------------------------------Defensive Serialization------------------------------------
+def safe_to_dict(n):
+    if hasattr(n, "to_dict"):
+        return n.to_dict()
+    else:
+        return str(n)  # fallback for debugging
+
+@app.route('/api/admin/notifications', methods=['GET'])
+@role_required(['admin'])
+def get_admin_notifications():
+    notif_type = request.args.get('type')
+    unread = request.args.get('unread')
+    page = request.args.get('page', 1, type=int)
+    limit = request.args.get('limit', 20, type=int)
+    query = Notification.query
+    if notif_type:
+        query = query.filter(Notification.type == notif_type)
+    if unread == 'true':
+        query = query.filter(Notification.is_read == False)
+    total = query.count()
+    notifications = query.order_by(Notification.created_at.desc()).offset((page-1)*limit).limit(limit).all()
+    return jsonify({
+        'total': total,
+        'page': page,
+        'limit': limit,
+#------------------------------------Defensive Serialization------------------------------------
+        'notifications': [safe_to_dict(n) for n in notifications]
+    })
+
+#----------------------------------------Admin Notifications----------------------------------------
+@app.route('/api/admin/notifications/mark-all-read', methods=['POST'])
+@role_required(['admin'])
+def mark_all_admin_notifications_read():
+    Notification.query.filter_by(is_read=False).update({'is_read': True})
+    db.session.commit()
+    return jsonify({'message': 'All notifications marked as read'})
+
+@app.route('/api/admin/notifications/<int:id>', methods=['DELETE'])
+@role_required(['admin'])
+def delete_admin_notification(id):
+    notification = Notification.query.get_or_404(id)
+    db.session.delete(notification)
+    db.session.commit()
+    return jsonify({'message': 'Notification deleted'})
 
  # -------------------- MAIN --------------------
 if __name__ == '__main__':
