@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Outlet, useLocation, useNavigate, Link } from 'react-router-dom';
 import { 
   User, 
@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import ProfileDropdown from './ProfileDropdown';
 import { useAuth } from '../hooks/useAuth';
+import notificationSound from '../assets/notification.mp3';
 
 interface Notification {
   id: number;
@@ -42,81 +43,124 @@ const topNavItems = [
   { label: 'Announcements', path: '/dashboard/announcements' },
 ];
 
+const SEEN_NOTIFICATIONS_KEY = 'seenNotificationIds';
+
+const getSeenNotificationIds = () => {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(SEEN_NOTIFICATIONS_KEY) || '[]'));
+  } catch {
+    return new Set();
+  }
+};
+
+const setSeenNotificationIds = (ids: Set<number>) => {
+  localStorage.setItem(SEEN_NOTIFICATIONS_KEY, JSON.stringify(Array.from(ids)));
+};
+
 const DashboardLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const { user } = useAuth();
   
-  // Add notification state
+  // Notification state
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const prevNotificationIds = useRef<Set<number>>(new Set());
+  const soundPlayedThisSession = useRef(false); // <-- NEW
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [tab, setTab] = useState<'unread' | 'read'>('unread');
 
-  // Fetch notifications
-  useEffect(() => {
-    const fetchNotifications = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        if (!token) return;
-
-        const res = await fetch('/api/user/notifications', {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
-        
-        if (res.ok) {
-          const data = await res.json();
-          setNotifications(data);
-          setUnreadCount(data.filter((n: any) => !n.is_read).length);
-        }
-      } catch (err) {
-        console.error('Failed to fetch notifications:', err);
-      }
-    };
-
-    fetchNotifications();
-    
-    // Refresh notifications every 30 seconds
-    const interval = setInterval(fetchNotifications, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Click outside to close notifications
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Element;
-      if (!target.closest('.notification-dropdown') && !target.closest('.notification-button')) {
-        setIsNotificationsOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const handleNotificationClick = async (notificationId: number) => {
+  // Define fetchNotifications at the top level of your component
+  const fetchNotifications = async () => {
     try {
       const token = localStorage.getItem('token');
-      await fetch(`/api/user/notifications/${notificationId}/read`, {
-        method: 'POST',
+      if (!token) return;
+      const res = await fetch('/api/user/notifications', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
-      
-      // Update local state
-      setNotifications(prev => 
-        prev.map(n => n.id === notificationId ? { ...n, is_read: true } : n)
-      );
-      setUnreadCount(prev => Math.max(0, prev - 1));
+      if (res.ok) {
+        const data = await res.json();
+        const newNotifications = Array.isArray(data) ? data : (data.notifications || []);
+        const newIds = new Set(newNotifications.map(n => n.id));
+        const unread = newNotifications.filter(n => !n.is_read);
+
+        // --- Play sound only once per session if there are unread notifications on first load ---
+        if (!soundPlayedThisSession.current) {
+          if (unread.length > 0) {
+            const audio = new Audio(notificationSound);
+            audio.volume = 0.5;
+            audio.play();
+          }
+          soundPlayedThisSession.current = true;
+        } else {
+          // On subsequent polls, play sound for truly new notifications
+          const prevIds = prevNotificationIds.current;
+          const isNew = newNotifications.some(n => !prevIds.has(n.id));
+          if (prevIds.size && isNew) {
+            const audio = new Audio(notificationSound);
+            audio.volume = 0.5;
+            audio.play();
+          }
+        }
+
+        prevNotificationIds.current = newIds;
+        setNotifications(newNotifications);
+      }
     } catch (err) {
-      console.error('Failed to mark notification as read:', err);
+      console.error('Failed to fetch notifications:', err);
     }
   };
+
+  // Use it in useEffect
+  useEffect(() => {
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Mark as read/unread
+  const markAsRead = async (id: number) => {
+    const token = localStorage.getItem('token');
+    await fetch('/api/user/notifications/mark-as-read', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ notification_ids: [id] })
+    });
+    setNotifications(prev =>
+      prev.map(n => n.id === id ? { ...n, is_read: true } : n)
+    );
+  };
+
+  const markAsUnread = async (id: number) => {
+    // You need a backend endpoint for this, or allow toggling is_read in the DB.
+    // For now, just update local state for demo:
+    setNotifications(prev =>
+      prev.map(n => n.id === id ? { ...n, is_read: false } : n)
+    );
+  };
+
+  // Now you can also use it in markAllAsRead
+  const markAllAsRead = async () => {
+    const token = localStorage.getItem('token');
+    await fetch('/api/user/notifications/mark-as-read', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({}) // empty means mark all
+    });
+    fetchNotifications(); // <-- This works now!
+  };
+
+  const unreadNotifications = (notifications ?? []).filter(n => !n.is_read);
+  const readNotifications = (notifications ?? []).filter(n => n.is_read);
 
   return (
     <div className="h-screen flex flex-col bg-gray-100 dark:bg-dark-background">
@@ -152,65 +196,82 @@ const DashboardLayout = () => {
               </button>
             ))}
           </div>
-          {/* Notifications Bell (fully functional, with dropdown) */}
+          {/* Notifications Bell (Gmail-style) */}
           <div className="relative">
             <button
-              className="relative text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white"
+              className="relative notification-button"
               onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
             >
               <Bell className="h-6 w-6" />
-              {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+              {unreadNotifications.length > 0 && (
+                <span className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full text-xs px-2 py-0.5 font-bold">
+                  {unreadNotifications.length}
                 </span>
               )}
             </button>
             {isNotificationsOpen && (
-              <div className="absolute right-0 mt-2 w-80 bg-white shadow-lg rounded-lg z-50">
-                <div className="p-4 border-b font-semibold">Notifications</div>
-                <ul className="max-h-64 overflow-y-auto">
-                  {notifications.length === 0 ? (
-                    <li className="p-4 text-gray-500">No notifications</li>
+              <div className="notification-dropdown absolute right-0 mt-2 w-96 bg-white shadow-lg rounded-lg z-50">
+                <div className="flex border-b">
+                  <button
+                    className={`flex-1 py-2 font-semibold ${tab === 'unread' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500'}`}
+                    onClick={() => setTab('unread')}
+                  >
+                    Unread ({unreadNotifications.length})
+                  </button>
+                  <button
+                    className={`flex-1 py-2 font-semibold ${tab === 'read' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500'}`}
+                    onClick={() => setTab('read')}
+                  >
+                    Read ({readNotifications.length})
+                  </button>
+                </div>
+                <ul className="max-h-80 overflow-y-auto">
+                  {(tab === 'unread' ? unreadNotifications : readNotifications).length === 0 ? (
+                    <li className="p-4 text-gray-500 text-center">
+                      {tab === 'unread' ? "No unread notifications" : "No read notifications"}
+                    </li>
                   ) : (
-                    notifications.map((notification) => {
-                      console.log('Notification data:', notification.data);
-                      console.log('KYC URL:', notification.data?.kyc_url);
-                      
-                      return (
-                        <li key={notification.id} className={`p-4 border-b last:border-0 ${!notification.is_read ? 'bg-blue-50' : ''}`}>
-                          <div className="font-medium">{notification.title}</div>
-                          <div className="text-sm text-gray-600">{notification.message}</div>
-                          <div className="text-xs text-gray-400 mt-1">{new Date(notification.created_at).toLocaleString()}</div>
-                          {notification.type === "kyc_required" && notification.data?.kyc_url && (
-                            <Link
-                              to={notification.data.kyc_url}
-                              className="text-blue-600 hover:underline font-medium"
-                            >
-                              Complete KYC Now
-                            </Link>
-                          )}
-                          {/* Add this for group join approved */}
-                          {notification.type === "group_join_approved" && notification.data?.group_id && (
+                    (tab === 'unread' ? unreadNotifications : readNotifications).map((n) => (
+                      <li
+                        key={n.id}
+                        className={`p-4 border-b last:border-0 flex items-start gap-2 ${!n.is_read ? 'bg-blue-50' : ''}`}
+                      >
+                        <div className="flex-1">
+                          <div className="font-medium">{n.title}</div>
+                          <div className="text-sm text-gray-600">{n.message}</div>
+                          <div className="text-xs text-gray-400 mt-1">{new Date(n.created_at).toLocaleString()}</div>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          {tab === 'unread' ? (
                             <button
-                              className="mt-2 text-blue-600 hover:underline font-medium"
-                              onClick={() => {
-                                setIsNotificationsOpen(false);
-                                navigate(`/dashboard/stokvel-groups/${notification.data.group_id}`);
-                              }}
+                              className="text-xs text-indigo-600 hover:underline"
+                              onClick={() => markAsRead(n.id)}
                             >
-                              Go to Group
+                              Mark as read
+                            </button>
+                          ) : (
+                            <button
+                              className="text-xs text-gray-500 hover:underline"
+                              onClick={() => markAsUnread(n.id)}
+                            >
+                              Mark as unread
                             </button>
                           )}
-                          {/* Optionally, show reason for rejection */}
-                          {notification.type === "group_join_rejected" && notification.data?.reason && (
-                            <div className="mt-2 text-red-600 text-xs">Reason: {notification.data.reason}</div>
-                          )}
-                        </li>
-                      );
-                    })
+                        </div>
+                      </li>
+                    ))
                   )}
                 </ul>
+                <div className="p-2 border-t flex justify-end">
+                  {tab === 'unread' && unreadNotifications.length > 0 && (
+                    <button
+                      className="text-xs text-indigo-600 hover:underline"
+                      onClick={markAllAsRead}
+                    >
+                      Mark all as read
+                    </button>
+                  )}
+                </div>
               </div>
             )}
           </div>

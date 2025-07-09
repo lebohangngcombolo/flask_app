@@ -1918,7 +1918,9 @@ def update_kyc(current_user):
                 
                 filename = secure_filename(f"{current_user.id}_{field_name}_{file.filename}")
                 file_path = os.path.join(KYC_UPLOAD_FOLDER, filename)
+                print("Saving file to:", file_path)
                 file.save(file_path)
+                print(f"Saved file to: {file_path}")
                 return file_path
             return None
 
@@ -1982,6 +1984,7 @@ def submit_kyc(current_user):
         if file:
             filename = secure_file(f"{current_user.id}_{field}_{file.filename}")
             file_path = os.path.join(KYC_UPLOAD_FOLDER, filename)
+            print("Saving file to:", file_path)
             file.save(file_path)
             return file_path
         return None
@@ -2033,7 +2036,8 @@ def get_kyc_status(current_user):
         'verification_date': str(kyc.verification_date) if kyc.verification_date else None,
         'rejection_reason': kyc.rejection_reason,
         'created_at': str(kyc.created_at),
-        'updated_at': str(kyc.updated_at)
+        'updated_at': str(kyc.updated_at),
+        "status": get_status(kyc)
     }), 200
 
 @app.route('/api/admin/kyc/submissions', methods=['GET'])
@@ -2226,7 +2230,7 @@ class GroupJoinRequest(db.Model):
     category = db.Column(db.String(64))
     tier = db.Column(db.String(64))
     amount = db.Column(db.Integer)
-    status = db.Column(db.String(20))
+    status = db.Column(db.String(20), default="Pending")
     reason = db.Column(db.String(255))
     created_at = db.Column(db.DateTime)
     user = db.relationship('User', backref='join_requests')
@@ -2334,7 +2338,7 @@ def get_user_notifications():
     user_id = get_jwt_identity()
     notifications = Notification.query.filter_by(user_id=user_id).order_by(Notification.created_at.desc()).all()
     
-    return jsonify([{
+    return jsonify({'notifications': [{
         'id': n.id,
         'title': n.title,
         'message': n.message,
@@ -2342,7 +2346,7 @@ def get_user_notifications():
         'data': n.data,
         'is_read': n.is_read,
         'created_at': n.created_at.isoformat()
-    } for n in notifications])
+    } for n in notifications]})
 
 @app.route('/api/user/notifications/<int:notification_id>/read', methods=['POST'])
 @jwt_required()
@@ -2396,9 +2400,18 @@ def mark_admin_notification_read(notification_id):
     return jsonify({'message': 'Notification marked as read'})
 
 @app.route('/api/user/notifications/mark-as-read', methods=['POST'])
-@token_required
-def mark_notifications_as_read(current_user):
-    return jsonify({'message': 'Not implemented'}), 501
+@jwt_required()
+def mark_notifications_as_read():
+    user_id = get_jwt_identity()
+    notification_ids = request.json.get('notification_ids', None)
+    query = Notification.query.filter_by(user_id=user_id)
+    if notification_ids:
+        query = query.filter(Notification.id.in_(notification_ids))
+    notifications = query.all()
+    for n in notifications:
+        n.is_read = True
+    db.session.commit()
+    return jsonify({'message': 'Notifications marked as read'})
 
 
 
@@ -3452,7 +3465,7 @@ def add_beneficiary():
     )
     db.session.add(beneficiary)
     db.session.commit()
-    return jsonify({"message": "Beneficiary added"}), 201
+    return jsonify({"message": "Beneficiary added", "id": beneficiary.id}), 201
 
 @app.route('/api/beneficiaries/<int:beneficiary_id>', methods=['PUT'])
 @jwt_required()
@@ -3476,19 +3489,19 @@ def edit_beneficiary(beneficiary_id):
 def get_beneficiaries():
     user_id = get_jwt_identity()
     beneficiaries = Beneficiary.query.filter_by(user_id=user_id).all()
-    result = []
-    for b in beneficiaries:
-        result.append({
-            "id": b.id,
-            "name": b.name,
-            "relationship": b.relationship,
-            "id_number": b.id_number,
-            "date_of_birth": b.date_of_birth,
-            "phone": b.phone,
-            "email": b.email,
-            "created_at": b.created_at.isoformat() if b.created_at else None,
-        })
-    return jsonify(result), 200
+    return jsonify([{
+        "id": b.id,
+        "name": b.name,
+        "id_number": b.id_number,
+        "relationship": b.relationship,
+        "phone": b.phone,
+        "email": b.email,
+        "date_of_birth": b.date_of_birth,
+        "created_at": b.created_at,
+        "id_doc_url": b.id_doc_url,
+        "address_doc_url": b.address_doc_url,
+        "relationship_doc_url": b.relationship_doc_url,
+    } for b in beneficiaries])
 
 @app.route('/api/beneficiaries/<int:beneficiary_id>', methods=['DELETE'])
 @jwt_required()
@@ -3518,6 +3531,7 @@ class Beneficiary(db.Model):
     relationship_doc_url = db.Column(db.String(255))
     # ------------------------
     user = db.relationship('User', backref='beneficiaries')
+    status = db.Column(db.String(20), default="No Documents")
 
 class CustomerConcern(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -3606,27 +3620,36 @@ def get_all_concerns():
 @app.route('/api/beneficiaries/<int:beneficiary_id>/documents', methods=['POST'])
 @jwt_required()
 def upload_beneficiary_document(beneficiary_id):
-    file = request.files['file']
+    beneficiary = Beneficiary.query.get_or_404(beneficiary_id)
+    file = request.files.get('file')
     doc_type = request.form.get('type')
     if not file or not doc_type:
-        return jsonify({'error': 'File and type required'}), 400
-    filename = secure_filename(file.filename)
-    save_path = os.path.join('uploads/beneficiary_docs', f"{beneficiary_id}_{doc_type}_{filename}")
+        return jsonify({'error': 'Missing file or type'}), 400
+
+    upload_folder = os.path.abspath(os.path.join(os.path.dirname(__file__), 'uploads', 'beneficiary_docs'))
+    os.makedirs(upload_folder, exist_ok=True)
+    filename = f"{beneficiary_id}_{doc_type}_{secure_filename(file.filename)}"
+    save_path = os.path.join(upload_folder, filename)
+    print("Saving file to:", save_path)
     file.save(save_path)
 
-    # --- Add this logic to save the file path to the correct field ---
-    beneficiary = Beneficiary.query.get_or_404(beneficiary_id)
-    url = f"/uploads/beneficiary_docs/{beneficiary_id}_{doc_type}_{filename}"
-    if doc_type == "id":
+    url = f"http://localhost:5001/uploads/beneficiary_docs/{filename}"
+    if doc_type == 'id':
         beneficiary.id_doc_url = url
-    elif doc_type == "address":
+    elif doc_type == 'address':
         beneficiary.address_doc_url = url
-    elif doc_type == "relationship":
+    elif doc_type == 'relationship':
         beneficiary.relationship_doc_url = url
-    db.session.commit()
-    # ---------------------------------------------------------------
+    else:
+        return jsonify({'error': 'Invalid document type'}), 400
 
-    return jsonify({'url': url})
+    db.session.commit()
+    return jsonify({'url': url}), 200
+
+@app.route('/uploads/beneficiary_docs/<filename>')
+def serve_beneficiary_doc(filename):
+    upload_folder = os.path.abspath(os.path.join(os.path.dirname(__file__), 'uploads', 'beneficiary_docs'))
+    return send_from_directory(upload_folder, filename)
 
 @app.route('/api/groups/<int:group_id>/contribute', methods=['POST'])
 @jwt_required()
@@ -3700,7 +3723,7 @@ def get_my_groups():
         group = StokvelGroup.query.get(m.group_id)
         if group:
             groups.append({
-                "id": group.id,  # <-- Ensure this is present!
+                "id": group.id,
                 "name": group.name,
                 "category": group.category,
                 "tier": group.tier,
@@ -3749,4 +3772,190 @@ def set_savings_goal(current_user):
     db.session.commit()
     return jsonify({'message': 'Savings goal set successfully.'}), 201
 
-    
+@app.route('/api/admin/beneficiaries', methods=['GET'])
+@jwt_required()  # Or use your admin role decorator if you have one
+def get_all_beneficiaries():
+    beneficiaries = Beneficiary.query.all()
+    return jsonify([{
+        "id": b.id,
+        "name": b.name,
+        "id_number": b.id_number,
+        "relationship": b.relationship,
+        "phone": b.phone,
+        "email": b.email,
+        "created_at": b.created_at,
+        "id_doc_url": b.id_doc_url,
+        "address_doc_url": b.address_doc_url,
+        "relationship_doc_url": b.relationship_doc_url,
+        "status": b.status,  # <-- Make sure this is included!
+        "user_id": b.user_id
+    } for b in beneficiaries])
+
+# Approve beneficiary
+@app.route('/api/admin/beneficiaries/<int:beneficiary_id>/approve', methods=['POST'])
+@jwt_required()  # Or your admin role decorator
+def approve_beneficiary(beneficiary_id):
+    beneficiary = Beneficiary.query.get_or_404(beneficiary_id)
+    beneficiary.status = "Approved"
+    db.session.commit()
+    # Send notification to user
+    notification = Notification(
+        user_id=beneficiary.user_id,
+        title="Beneficiary Approved",
+        message=f"Your beneficiary '{beneficiary.name}' has been approved.",
+        type="beneficiary"
+    )
+    db.session.add(notification)
+    db.session.commit()
+    return jsonify({"message": "Beneficiary approved"})
+
+# Reject beneficiary
+@app.route('/api/admin/beneficiaries/<int:beneficiary_id>/reject', methods=['POST'])
+@jwt_required()
+def reject_beneficiary(beneficiary_id):
+    beneficiary = Beneficiary.query.get_or_404(beneficiary_id)
+    beneficiary.status = "Rejected"
+    db.session.commit()
+    # Send notification to user
+    notification = Notification(
+        user_id=beneficiary.user_id,
+        title="Beneficiary Rejected",
+        message=f"Your beneficiary '{beneficiary.name}' has been rejected.",
+        type="beneficiary"
+    )
+    db.session.add(notification)
+    db.session.commit()
+    return jsonify({"message": "Beneficiary rejected"})
+
+# Send notification to user
+@app.route('/api/notifications/send', methods=['POST'])
+@jwt_required()
+def send_notification():
+    data = request.get_json()
+    user_id = data.get("userId")
+    message = data.get("message")
+    # You can use your Notification model or any notification logic here
+    notification = Notification(
+        user_id=user_id,
+        title="Beneficiary Status Update",
+        message=message,
+        type="beneficiary"
+    )
+    db.session.add(notification)
+    db.session.commit()
+    return jsonify({"message": "Notification sent"})
+
+def get_status(b):
+    if b.status in ["Approved", "Rejected"]:
+        return b.status
+    if not (b.id_doc_url or b.address_doc_url or b.relationship_doc_url):
+        return "No Documents"
+    return "Pending"
+
+@app.route('/api/user/groups', methods=['GET'])
+@jwt_required()
+def get_user_groups():
+    user_id = get_jwt_identity()
+    # Adjust this query to match your group membership logic
+    groups = StokvelGroup.query.join(StokvelMember).filter(StokvelMember.user_id == user_id).all()
+    return jsonify([
+        {
+            "id": g.id,
+            "name": g.name,
+            "category": g.category,
+            "rules": getattr(g, "rules", ""),
+            "claimable_amount": getattr(g, "claimable_amount", 0)
+        }
+        for g in groups
+    ])
+
+@app.route('/market/transactions', methods=['GET'])
+@jwt_required()
+def get_transactions():
+    user_id = get_jwt_identity()
+    txns = MarketTransaction.query.filter_by(user_id=user_id).order_by(MarketTransaction.timestamp.desc()).all()
+    return jsonify([{
+        "id": t.id,
+        "item_type": t.item_type,
+        "provider": t.provider,
+        "amount": t.amount,
+        "payment_method": t.payment_method,
+        "status": t.status,
+        "timestamp": t.timestamp.isoformat(),
+        "reference": t.reference
+    } for t in txns])
+
+class MarketTransaction(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, nullable=False)
+    item_type = db.Column(db.String(50), nullable=False)  # airtime, data, electricity, voucher
+    provider = db.Column(db.String(100), nullable=False)
+    amount = db.Column(db.Float, nullable=False)
+    payment_method = db.Column(db.String(50), nullable=False)  # wallet, card
+    status = db.Column(db.String(20), default='pending')  # pending, successful, failed
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    reference = db.Column(db.String(100), unique=True)
+
+@app.route('/market/purchase', methods=['POST'])
+@jwt_required()
+def purchase():
+    user_id = get_jwt_identity()
+    data = request.json
+
+    item_type = data.get('item_type')
+    provider = data.get('provider')
+    amount = data.get('amount')
+    payment_method = data.get('payment_method')
+    card_id = data.get('card_id')
+
+    if not all([item_type, provider, amount, payment_method]):
+        return jsonify({"error": "Missing required fields"}), 400
+
+    try:
+        amount = float(amount)
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid amount format"}), 400
+
+    # --- Digital Wallet ---
+    if payment_method == "wallet":
+        wallet = Wallet.query.filter_by(user_id=user_id).first()
+        if not wallet:
+            return jsonify({"error": "Wallet not found"}), 404
+        if wallet.balance < amount:
+            return jsonify({"error": "Insufficient wallet balance"}), 400
+        wallet.balance -= amount
+
+    # --- Card Payment ---
+    elif payment_method == "card":
+        card = Card.query.filter_by(id=card_id, user_id=user_id).first()
+        if not card:
+            return jsonify({"error": "Card not found"}), 404
+        # Simulate card payment
+        print(f"Charging card **** **** **** {card.card_number_last4} for R{amount}")
+    else:
+        return jsonify({"error": "Invalid payment method"}), 400
+
+    # --- Record Transaction ---
+    txn = MarketTransaction(
+        user_id=user_id,
+        item_type=item_type,
+        provider=provider,
+        amount=amount,
+        payment_method=payment_method,
+        status='successful',
+        reference=generate_reference()
+    )
+    db.session.add(txn)
+    db.session.commit()
+
+    # --- Send Notification (optional) ---
+    send_notification(user_id, f"Your purchase of {item_type} for R{amount} was successful.")
+
+    return jsonify({"message": "Purchase successful!", "reference": txn.reference}), 200
+
+def generate_reference():
+    return f"TXN-{uuid.uuid4().hex[:12]}"
+
+def send_notification(user_id, message):
+    # Replace with actual notification logic (email, SMS, push etc.)
+    print(f"Notification to user {user_id}: {message}")

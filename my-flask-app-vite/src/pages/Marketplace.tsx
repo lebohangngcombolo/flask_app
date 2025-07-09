@@ -33,6 +33,9 @@ import {
 import { toast } from 'react-hot-toast';
 import { marketplaceAPI } from '../services/api';
 import { useAuth } from '../hooks/useAuth';
+import MarketplacePurchase from "./MarketplacePurchase";
+import PartnerPortal from "./PartnerPortal";
+import IDeals from "./IDeals";
 
 
 // --- Mock Data for Offers ---
@@ -206,7 +209,7 @@ const Marketplace: React.FC = () => {
           </button>
           <button
             onClick={() => setActiveTab('my-offers')}
-            aria-label="Switch to my offers tab"
+            aria-label="Switch to i-Deals tab"
             role="tab"
             aria-selected={activeTab === 'my-offers'}
             className={`whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm transition-colors ${
@@ -216,18 +219,7 @@ const Marketplace: React.FC = () => {
             }`}
           >
              <Heart className="inline-block w-4 h-4 mr-2" />
-            My Offers
-          </button>
-           <button
-            onClick={() => setActiveTab('track-orders')}
-            className={`whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-              activeTab === 'track-orders'
-                ? 'border-blue-600 text-blue-600 dark:text-blue-400'
-                : 'border-transparent text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-            }`}
-          >
-             <Package className="inline-block w-4 h-4 mr-2" />
-            Track Orders
+            i-Deals
           </button>
            <button
             onClick={() => setActiveTab('partner-portal')}
@@ -268,6 +260,9 @@ const Marketplace: React.FC = () => {
           <OfferCard key={offer.id} offer={offer} navigate={useNavigate()} />
         ))}
       </div>
+      {activeTab === "marketplace" && <MarketplacePurchase />}
+      {activeTab === "my-offers" && <IDeals />}
+      {activeTab === "partner-portal" && <PartnerPortal />}
     </div>
   );
 };

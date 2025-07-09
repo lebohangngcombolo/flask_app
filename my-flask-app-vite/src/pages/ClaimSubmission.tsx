@@ -12,6 +12,7 @@ import {
   Users,
   PartyPopper,
 } from "lucide-react";
+import api from "../services/api";
 
 // --- MOCK DATA for groups ---
 const MOCK_GROUPS = [
@@ -81,7 +82,17 @@ const ClaimSubmission: React.FC = () => {
 
   // --- MOCK: Load groups on mount ---
   useEffect(() => {
-    setGroups(MOCK_GROUPS);
+    api.get("/api/dashboard/my-groups")
+      .then(res => {
+        const data = res.data;
+        // Only include Burial and Investments
+        const filtered = data.filter(group => {
+          const cat = group.category?.toLowerCase();
+          return cat === "burial" || cat === "investments" || cat === "investment";
+        });
+        setGroups(filtered);
+      })
+      .catch(() => setGroups([]));
   }, []);
 
   // When group is selected, update rules and amount
@@ -156,7 +167,7 @@ const ClaimSubmission: React.FC = () => {
                 <span className="font-bold text-lg">{group.name}</span>
               </div>
               <div className="text-xs text-gray-500">{group.category}</div>
-              <div className="text-xs text-gray-400 mt-2">{group.rules.slice(0, 40)}...</div>
+              <div className="text-xs text-gray-400 mt-2">{group.rules ? group.rules.slice(0, 40) : "No rules provided"}...</div>
               {selectedGroup?.id === group.id && (
                 <div className="mt-2 text-blue-600 text-xs font-bold flex items-center gap-1">
                   <CheckCircle className="w-4 h-4" /> Selected
@@ -383,11 +394,14 @@ const ClaimSubmission: React.FC = () => {
           onClick={async () => {
             setIsSubmitting(true);
             setSubmitError("");
-            // --- MOCK: Simulate API call ---
-            setTimeout(() => {
+            try {
+              // await api.post("/api/claims", ...);
+              setShowSuccess(true);
+            } catch (err) {
+              setSubmitError("Failed to submit claim.");
+            } finally {
               setIsSubmitting(false);
-              setShowSuccess(true); // <-- Show the success screen!
-            }, 1200);
+            }
           }}
           disabled={isSubmitting}
             >
@@ -417,23 +431,24 @@ const ClaimSubmission: React.FC = () => {
 
   // --- Main Render ---
   return (
-    <div className="min-h-screen bg-gray-100 py-10 px-2">
-      <div className="w-full max-w-2xl bg-white rounded-2xl shadow-xl p-8 mx-auto">
-        {showSuccess ? (
-          <SuccessScreen />
-        ) : (
-          <>
-            <Stepper />
-            <div className="mt-8">
-              {step === 0 && <StepSelectStokvel />}
-              {step === 1 && <StepTerms />}
-              {step === 2 && <StepClaimDetails />}
-              {step === 3 && <StepUploadDocs />}
-              {step === 4 && <StepReview />}
-            </div>
-          </>
-        )}
-      </div>
+    <div className="max-w-6xl mx-auto px-6 py-10">
+      {/* Breadcrumbs */}
+      {/* Stepper */}
+      {/* Step content */}
+      {showSuccess ? (
+        <SuccessScreen />
+      ) : (
+        <>
+          <Stepper />
+          <div className="mt-8">
+            {step === 0 && <StepSelectStokvel />}
+            {step === 1 && <StepTerms />}
+            {step === 2 && <StepClaimDetails />}
+            {step === 3 && <StepUploadDocs />}
+            {step === 4 && <StepReview />}
+          </div>
+        </>
+      )}
     </div>
   );
 };

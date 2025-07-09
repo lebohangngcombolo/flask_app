@@ -42,9 +42,16 @@ const navItems: NavItem[] = [
       ]
     }
   ] },
-  { name: 'KYC Approvals', path: '/admin/kyc-management', icon: ShieldCheck, tooltip: 'Approve or reject KYC submissions', subItems: [
-    { label: 'KYC Management', path: '/admin/kyc-management' },
-  ] },
+  {
+    name: 'Approvals',
+    path: '/admin/beneficiary-approvals',
+    icon: ShieldCheck,
+    tooltip: 'Approve or reject KYC and beneficiary documents',
+    subItems: [
+      { label: 'KYC', path: '/admin/kyc-management', icon: FileText },
+      { label: 'Beneficiaries', path: '/admin/beneficiary-approvals', icon: Users },
+    ],
+  },
   { name: 'Support', path: '/admin/support', icon: FileText, tooltip: 'FAQ, customer concerns, and notifications', subItems: [
     { label: 'FAQ', path: '/admin/support/faq' },
     { label: 'Customer Concerns', path: '/admin/support/concerns' },
@@ -67,7 +74,7 @@ const navItems: NavItem[] = [
     path: '/admin/payout-requests',
     icon: DollarSign,
     tooltip: 'Approve or reject payout requests'
-  }
+  },
 ];
 
 interface AdminSidebarProps {
