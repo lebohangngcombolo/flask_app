@@ -36,9 +36,10 @@ import 'react-toastify/dist/ReactToastify.css';
 import ClaimSubmission from "./pages/ClaimSubmission";
 import Beneficiaries from './pages/Beneficiaries';
 import AdminConcerns from './pages/AdminConcerns';
-import GroupDetails from './pages/GroupDetails';
 import MyGroups from "./pages/MyGroups";
 import BeneficiaryApprovals from './pages/BeneficiaryApprovals';
+import DealDetail from "./pages/DealDetail";
+import IDeals from "./pages/IDeals";
 
 const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
@@ -151,7 +152,6 @@ const App: React.FC = () => {
             <Route path="claims/new" element={<ClaimSubmission />} />
             <Route path="beneficiaries" element={<Beneficiaries />} />
             {/* Add more dashboard sub-pages here if needed */}
-            <Route path="stokvel-groups/:groupId" element={<GroupDetails />} />
             <Route path="my-groups" element={<MyGroups />} />
           </Route>
 
@@ -176,6 +176,10 @@ const App: React.FC = () => {
 
           {/* My Groups route */}
           {/* This route is now nested inside the /dashboard layout */}
+
+          {/* i-Deals routes */}
+          <Route path="/i-deals" element={<IDeals />} />
+          <Route path="/i-deals/:id" element={<DealDetail />} />
 
           {/* Catch all route */}
           <Route path="*" element={<Navigate to="/" replace />} />

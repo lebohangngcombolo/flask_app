@@ -1,7 +1,9 @@
 import React, { useState } from "react";
+import { Link } from "react-router-dom";
+import DealDetailModal from "../components/DealDetailModal";
 
 // Example deals data (add your own images to public/ideals/)
-const IDEALS = [
+export const IDEALS = [
   {
     id: 1,
     category: "Travel",
@@ -16,7 +18,7 @@ const IDEALS = [
     id: 2,
     category: "Groceries",
     title: "Bulk Grocery Combo",
-    image: "/ideals/groceries.jpg",
+    image: "/ideals/groceries.png",
     description: "R200 OFF when your stokvel buys in bulk at Makro.",
     price: "Save R200",
     partner: "Makro",
@@ -41,18 +43,8 @@ const IDEALS = [
     price: "From R99/month",
     partner: "AVBOB",
     link: "/i-deals/4"
-  },
-  {
-    id: 5,
-    category: "Electronics",
-    title: "Group Tablet Deal",
-    image: "/ideals/tablet.jpg",
-    description: "Buy 5+ tablets and get 20% off for your stokvel.",
-    price: "Save 20%",
-    partner: "Incredible Connection",
-    link: "/i-deals/5"
-  },
-  // Add more deals as needed
+  }
+  // ...more deals if you have them
 ];
 
 // Get unique categories
@@ -60,6 +52,7 @@ const categories = ["All", ...Array.from(new Set(IDEALS.map(d => d.category)))];
 
 const IDeals: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState("All");
+  const [selectedDeal, setSelectedDeal] = useState(null);
 
   const filteredDeals =
     selectedCategory === "All"
@@ -102,15 +95,18 @@ const IDeals: React.FC = () => {
               <span className="text-blue-700 font-semibold">{deal.price}</span>
               <span className="text-xs text-gray-500">by {deal.partner}</span>
             </div>
-            <a
-              href={deal.link}
+            <button
+              onClick={() => setSelectedDeal(deal)}
               className="mt-auto px-6 py-2 bg-blue-600 text-white rounded-lg font-semibold text-center"
             >
               View Details
-            </a>
+            </button>
           </div>
         ))}
       </div>
+      {selectedDeal && (
+        <DealDetailModal deal={selectedDeal} onClose={() => setSelectedDeal(null)} />
+      )}
     </div>
   );
 };
