@@ -53,9 +53,8 @@ const navItems: NavItem[] = [
     ],
   },
   { name: 'Support', path: '/admin/support', icon: FileText, tooltip: 'FAQ, customer concerns, and notifications', subItems: [
-    { label: 'FAQ', path: '/admin/support/faq' },
-    { label: 'Customer Concerns', path: '/admin/support/concerns' },
-    { label: 'Notifications', path: '/admin/support/notifications' }
+    { label: 'FAQ', path: '/admin/faqs' },
+    { label: 'Customer Concerns', path: '/admin/support/concerns' }
   ] },
   {
     name: 'Admin Team',

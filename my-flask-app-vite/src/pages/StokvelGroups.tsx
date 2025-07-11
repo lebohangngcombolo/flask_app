@@ -467,14 +467,14 @@ const StokvelGroups: React.FC = () => {
           <h2 className="text-lg font-bold mb-4">My Request Status</h2>
           <div className="bg-white rounded-xl shadow-lg overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+              <thead className="bg-[#3B4CCA]">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Group</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Tier</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Amount</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Date</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Reason</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-white uppercase">Group</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-white uppercase">Tier</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-white uppercase">Amount</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-white uppercase">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-white uppercase">Date</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-white uppercase">Reason</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-100">

@@ -280,11 +280,11 @@ const KYCManagement: React.FC = () => {
           />
         </div>
         <table className="w-full text-left rounded-lg overflow-hidden">
-          <thead>
-            <tr className="bg-[#e8eaf6] text-[#1a237e]">
-              <th className="py-3 px-4">Status</th>
-              <th className="py-3 px-4">Documents</th>
-              <th className="py-3 px-4">Submitted</th>
+          <thead className="bg-[#3B4CCA]">
+            <tr>
+              <th className="py-3 px-4 text-white">Status</th>
+              <th className="py-3 px-4 text-white">Documents</th>
+              <th className="py-3 px-4 text-white">Submitted</th>
             </tr>
           </thead>
           <tbody>

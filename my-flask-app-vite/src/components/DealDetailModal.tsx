@@ -53,14 +53,9 @@ const DealDetailModal: React.FC<DealDetailModalProps> = ({ deal, onClose }) => {
             <ul className="list-disc list-inside text-gray-600">
               <li>
                 Contact the partner:{" "}
-                <a
-                  href={deal.link}
-                  className="text-blue-600 underline"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
+                <span className="text-gray-400 underline cursor-not-allowed" title="Coming soon">
                   {deal.partner}
-                </a>
+                </span>
               </li>
               <li>Show your stokvel membership or use your group code at checkout.</li>
               <li>Follow any instructions provided by the partner.</li>

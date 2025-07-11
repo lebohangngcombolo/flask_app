@@ -40,6 +40,7 @@ import MyGroups from "./pages/MyGroups";
 import BeneficiaryApprovals from './pages/BeneficiaryApprovals';
 import DealDetail from "./pages/DealDetail";
 import IDeals from "./pages/IDeals";
+import AdminFAQs from './pages/AdminFAQs';
 
 const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
@@ -166,6 +167,7 @@ const App: React.FC = () => {
             <Route path="support/concerns" element={<AdminRoute><AdminConcerns /></AdminRoute>} />
             <Route path="concerns" element={<AdminRoute><AdminConcerns /></AdminRoute>} />
             <Route path="beneficiary-approvals" element={<BeneficiaryApprovals />} />
+            <Route path="faqs" element={<AdminRoute><AdminFAQs /></AdminRoute>} />
           </Route>
           
           {/* Phone Auth route */}

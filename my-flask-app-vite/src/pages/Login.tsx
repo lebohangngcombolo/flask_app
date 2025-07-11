@@ -4,6 +4,9 @@ import { login } from '../utils/auth';
 import PageTransition from '../components/PageTransition';
 import { toast } from 'react-hot-toast';
 import api from '../services/api';
+import GoogleLoginButton from '../components/GoogleLoginButton';
+
+const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
@@ -247,6 +250,7 @@ const Login: React.FC = () => {
           </div>
 
           {/* <GoogleLoginButton /> */}
+          <GoogleLoginButton />
         </div>
       </div>
 

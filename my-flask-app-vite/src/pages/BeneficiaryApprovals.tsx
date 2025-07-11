@@ -81,14 +81,14 @@ const BeneficiaryApprovals = () => {
       </div>
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-[#f4f6fb]">
+          <thead className="bg-[#3B4CCA]">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Name</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Relationship</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">ID Number</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Email</th>
-              <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 uppercase">Status</th>
-              <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 uppercase">Actions</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-white uppercase">Name</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-white uppercase">Relationship</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-white uppercase">ID Number</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-white uppercase">Email</th>
+              <th className="px-4 py-3 text-center text-xs font-semibold text-white uppercase">Status</th>
+              <th className="px-4 py-3 text-center text-xs font-semibold text-white uppercase">Actions</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-100">

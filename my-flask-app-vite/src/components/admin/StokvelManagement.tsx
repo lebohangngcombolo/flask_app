@@ -519,14 +519,14 @@ const GroupsTable: React.FC<{
   return (
     <div className="overflow-x-auto rounded-lg shadow-sm border border-gray-200 bg-white">
       <table className="min-w-full text-sm">
-        <thead className="bg-gray-50">
+        <thead className="bg-[#3B4CCA]">
           <tr>
-            <th className="px-4 py-3 text-left font-semibold text-gray-700">Group Name</th>
-            <th className="px-4 py-3 text-left font-semibold text-gray-700">Category</th>
-            <th className="px-4 py-3 text-left font-semibold text-gray-700">Tier</th>
-            <th className="px-4 py-3 text-center font-semibold text-gray-700">Members</th>
-            <th className="px-4 py-3 text-center font-semibold text-gray-700">Status</th>
-            <th className="px-4 py-3 text-center font-semibold text-gray-700">Actions</th>
+            <th className="px-4 py-3 text-left font-semibold text-white">Group Name</th>
+            <th className="px-4 py-3 text-left font-semibold text-white">Category</th>
+            <th className="px-4 py-3 text-left font-semibold text-white">Tier</th>
+            <th className="px-4 py-3 text-center font-semibold text-white">Members</th>
+            <th className="px-4 py-3 text-center font-semibold text-white">Status</th>
+            <th className="px-4 py-3 text-center font-semibold text-white">Actions</th>
           </tr>
         </thead>
         <tbody>

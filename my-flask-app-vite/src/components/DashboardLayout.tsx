@@ -15,6 +15,7 @@ import {
 import ProfileDropdown from './ProfileDropdown';
 import { useAuth } from '../hooks/useAuth';
 import notificationSound from '../assets/notification.mp3';
+import logo2 from '../assets/iSTOKVEL2.png';
 
 interface Notification {
   id: number;
@@ -175,8 +176,8 @@ const DashboardLayout = () => {
             <Menu size={20} />
           </button>
           <div className="w-px h-6 bg-gray-200 dark:bg-dark-border mx-4"></div>
-          <div className="cursor-pointer" onClick={() => navigate('/dashboard')}>
-            <span className="text-xl font-bold text-gray-800 dark:text-dark-text">i-STOKVEL</span>
+          <div className="cursor-pointer flex items-center" onClick={() => navigate('/dashboard')}>
+            <img src={logo2} alt="i-STOKVEL Logo" className="h-10 w-auto" />
           </div>
         </div>
         <div className="flex items-center gap-4 relative">

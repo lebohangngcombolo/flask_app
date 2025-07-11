@@ -1,6 +1,6 @@
 from flask import Flask, request, jsonify, Response, make_response, send_file, Blueprint, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
-from flask_cors import CORS
+from flask_cors import CORS, cross_origin
 from werkzeug.security import generate_password_hash, check_password_hash
 import jwt
 import datetime
@@ -40,7 +40,8 @@ import jwt as pyjwt
 from sqlalchemy import select
 from flask_socketio import SocketIO, emit
 from sqlalchemy import or_
-
+from google.oauth2 import id_token
+from google.auth.transport import requests as grequests
 
 
 
@@ -59,7 +60,8 @@ app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME')
 app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD')
 app.config['SENDGRID_API_KEY'] = os.getenv('SENDGRID_API_KEY')
 app.config['SENDGRID_FROM_EMAIL'] = os.getenv('SENDGRID_FROM_EMAIL')
-
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 # Add JWT configuration
 app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'your-jwt-secret-key')  # Change this in production
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=1)  # Token expires in 1 hour
@@ -1827,6 +1829,92 @@ def verify_2fa_login():
     db.session.commit()
     access_token = create_access_token(identity=str(user.id))
     return jsonify({'message': '2FA login successful', 'access_token': access_token}), 200
+
+@app.route("/api/auth/google", methods=["POST", "OPTIONS"])
+@cross_origin(origin="http://localhost:5173", supports_credentials=True)
+def google_login():
+    if request.method == "OPTIONS":
+        return '', 200
+    token = request.json.get("token")
+    logger.debug("Received Google token")  # Using your existing logger instead of print
+    
+    if not token:
+        return jsonify({"error": "Missing Google token"}), 400
+
+    try:
+        # Verify the Google token
+        idinfo = id_token.verify_oauth2_token(token, grequests.Request(), GOOGLE_CLIENT_ID)
+        
+        # Validate that the token is for your app
+        if idinfo['aud'] != GOOGLE_CLIENT_ID:
+            raise ValueError("Invalid client ID")
+
+        google_id = idinfo["sub"]
+        email = idinfo.get("email")
+        full_name = idinfo.get("name")
+        profile_picture = idinfo.get("picture")
+
+        # Check if user exists by email (since not all users may have google_id)
+        user = User.query.filter_by(email=email).first()
+        
+        if not user:
+            # Create new user with Google auth
+            user = User(
+                email=email,
+                full_name=full_name,
+                profile_picture=profile_picture,
+                is_verified=True,  # Google verified the email
+                google_id=google_id
+            )
+            db.session.add(user)
+            db.session.commit()
+        elif not user.google_id:
+            # Existing user without google_id - update it
+            user.google_id = google_id
+            if not user.profile_picture:
+                user.profile_picture = profile_picture
+            db.session.commit()
+
+        # Create JWT token (using your existing JWT setup)
+        access_token = create_access_token(identity=str(user.id))
+
+        # Track the login session
+        user_agent = request.headers.get('User-Agent', 'Unknown')
+        ip_address = request.remote_addr or 'Unknown'
+        session = UserSession(
+            user_id=user.id,
+            user_agent=user_agent,
+            ip_address=ip_address
+        )
+        db.session.add(session)
+        db.session.commit()
+
+        # Return user data in the same format as your regular login
+        user_data = {
+            "id": user.id,
+            "full_name": user.full_name,
+            "email": user.email,
+            "phone": user.phone,
+            "role": user.role,
+            "profile_picture": user.profile_picture,
+            "is_verified": user.is_verified
+        }
+        
+        return jsonify({
+            "success": True,
+            "message": "Google login successful",
+            "access_token": access_token,
+            "user": user_data
+        }), 200
+
+    except ValueError as e:
+        logger.error(f"Google token validation failed: {str(e)}")
+        return jsonify({"error": "Invalid Google token", "details": str(e)}), 401
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Google login error: {str(e)}")
+        return jsonify({"error": "Server error during Google login"}), 500
+
 
 @app.route('/api/user/security/2fa/disable', methods=['POST'])
 @token_required
@@ -3959,3 +4047,63 @@ def generate_reference():
 def send_notification(user_id, message):
     # Replace with actual notification logic (email, SMS, push etc.)
     print(f"Notification to user {user_id}: {message}")
+
+app.url_map.strict_slashes = False
+
+class FAQ(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    question = db.Column(db.String(500), nullable=False)
+    answer = db.Column(db.Text, nullable=False)
+    category = db.Column(db.String(100), nullable=True)
+    is_published = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "question": self.question,
+            "answer": self.answer,
+            "category": self.category,
+            "is_published": self.is_published,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+@app.route('/api/admin/faqs', methods=['GET'])
+@role_required(['admin'])
+def get_faqs():
+    category = request.args.get('category')
+    published = request.args.get('published')
+    search = request.args.get('search')
+    query = FAQ.query
+    if category:
+        query = query.filter(FAQ.category == category)
+    if published is not None:
+        if published.lower() == 'true':
+            query = query.filter(FAQ.is_published.is_(True))
+        elif published.lower() == 'false':
+            query = query.filter(FAQ.is_published.is_(False))
+    if search:
+        like = f"%{search}%"
+        query = query.filter(
+            or_(FAQ.question.ilike(like), FAQ.answer.ilike(like))
+        )
+    faqs = query.order_by(FAQ.created_at.desc()).all()
+    return jsonify([faq.to_dict() for faq in faqs]), 200
+
+@app.route('/api/admin/faqs', methods=['POST'])
+@role_required(['admin'])
+def create_faq():
+    data = request.get_json()
+    faq = FAQ(
+        question=data.get('question'),
+        answer=data.get('answer'),
+        category=data.get('category'),
+        is_published=data.get('is_published', True)
+    )
+    db.session.add(faq)
+    db.session.commit()
+    return jsonify({'message': 'FAQ created', 'faq': faq.to_dict()}), 201
+
+# Add the other FAQ endpoints (POST, PUT, DELETE) as needed

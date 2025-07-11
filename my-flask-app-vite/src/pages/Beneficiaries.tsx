@@ -131,15 +131,15 @@ const Beneficiaries = () => {
 
         {/* Table */}
         <div className="rounded-2xl bg-white shadow border border-gray-200 overflow-hidden">
-          <table className="w-full">
-            <thead className="bg-[#f4f6fb]">
+          <table className="w-full min-w-[700px]">
+            <thead className="bg-[#3B4CCA]">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Beneficiary ID</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Name</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Phone Number</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Relationship</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Email</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 uppercase">Actions</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-white uppercase">Beneficiary ID</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-white uppercase">Name</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-white uppercase">Phone Number</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-white uppercase">Relationship</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-white uppercase">Email</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold text-white uppercase">Actions</th>
               </tr>
             </thead>
             <tbody>
