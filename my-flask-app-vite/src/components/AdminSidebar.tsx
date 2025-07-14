@@ -26,7 +26,8 @@ interface NavItem {
 const navItems: NavItem[] = [
   { name: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard, tooltip: 'Overview and platform stats' },
   { name: 'Manage Users', path: '/admin/users', icon: Users, tooltip: 'View, edit, and manage all users', subItems: [
-    { label: 'View all', path: '/admin/users' }
+    { label: 'View all', path: '/admin/users' },
+    { label: 'Transactions', path: '/admin/users/transactions' }
   ] },
   { name: 'Manage Groups', path: '/admin/groups', icon: Folder, tooltip: 'Create, edit, and manage all stokvel groups', subItems: [
     { label: 'Group Management', path: '/admin/groups' }

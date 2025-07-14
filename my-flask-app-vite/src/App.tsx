@@ -41,6 +41,8 @@ import BeneficiaryApprovals from './pages/BeneficiaryApprovals';
 import DealDetail from "./pages/DealDetail";
 import IDeals from "./pages/IDeals";
 import AdminFAQs from './pages/AdminFAQs';
+import GroupDetails from './pages/GroupDetails';
+import Transactions from './pages/Transactions';
 
 const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
@@ -147,6 +149,7 @@ const App: React.FC = () => {
             <Route path="kyc" element={<KYCPage />} />
             <Route path="marketplace" element={<Marketplace />} />
             <Route path="stokvel-groups" element={<StokvelGroups />} />
+            <Route path="stokvel-groups/:groupId" element={<GroupDetails />} />
             <Route path="refer" element={<ReferralDashboard />} />
             <Route path="referral-history" element={<ReferralHistory />} />
             <Route path="stokvel-groups/:category/:tier" element={<TierDetails />} />
@@ -163,6 +166,7 @@ const App: React.FC = () => {
             <Route path="groups" element={<StokvelManagement />} />
             <Route path="group-admin-management" element={<GroupAdminManagement />} />
             <Route path="users" element={<UserManagement />} />
+            <Route path="/admin/users/transactions" element={<Transactions />} />
             <Route path="stokvels" element={<StokvelManagement />} />
             <Route path="support/concerns" element={<AdminRoute><AdminConcerns /></AdminRoute>} />
             <Route path="concerns" element={<AdminRoute><AdminConcerns /></AdminRoute>} />

@@ -232,6 +232,8 @@ class Contribution(db.Model):
     date = db.Column(db.DateTime, default=datetime.utcnow)
     status = db.Column(db.String(50), default='pending')  # pending, confirmed, rejected
     member = db.relationship('StokvelMember', backref='contributions')
+    transaction_id = db.Column(db.Integer, db.ForeignKey('transaction.id'), nullable=True)
+    transaction = db.relationship('Transaction', backref='contributions')
 
 class Poll(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -945,57 +947,6 @@ def get_polls(current_user):
         } for option in poll.options]
     } for poll in polls])
 
-@app.route('/api/polls', methods=['POST'])
-@token_required
-def create_poll(current_user):
-    data = request.get_json()
-    poll = Poll(
-        group_id=current_user.group_id,
-        title=data['title'],
-        description=data.get('description'),
-        end_date=datetime.fromisoformat(data['end_date']) if data.get('end_date') else None
-    )
-    db.session.add(poll)
-    db.session.commit()
-    
-    for option_text in data['options']:
-        option = PollOption(poll_id=poll.id, text=option_text)
-        db.session.add(option)
-    
-    try:
-        db.session.commit()
-        return jsonify({'message': 'Poll created successfully', 'poll_id': poll.id})
-    except SQLAlchemyError as e:
-        db.session.rollback()
-        return jsonify({'error': 'Database error occurred'}), 500
-
-@app.route('/api/meetings', methods=['GET'])
-@token_required
-def get_meetings(current_user):
-    meetings = Meeting.query.filter_by(group_id=current_user.group_id).all()
-    return jsonify([{
-        'id': meeting.id,
-        'title': meeting.title,
-        'description': meeting.description,
-        'date': meeting.date.isoformat(),
-        'location': meeting.location,
-        'status': meeting.status
-    } for meeting in meetings])
-
-@app.route('/api/meetings', methods=['POST'])
-@token_required
-def create_meeting(current_user):
-    data = request.get_json()
-    meeting = Meeting(
-        group_id=current_user.group_id,
-        title=data['title'],
-        description=data.get('description'),
-        date=datetime.fromisoformat(data['date']),
-        location=data.get('location')
-    )
-    db.session.add(meeting)
-    db.session.commit()
-    return jsonify({'message': 'Meeting created successfully', 'meeting_id': meeting.id})
 
 @app.route('/api/withdrawals', methods=['GET'])
 @token_required
@@ -2754,6 +2705,7 @@ class Transaction(db.Model):
     card_id = db.Column(db.Integer, db.ForeignKey('card.id'))  # For deposits
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     completed_at = db.Column(db.DateTime)
+    payment_method = db.Column(db.String(20))  # 'wallet' or 'bank'
     
     # Relationships
     user = db.relationship('User', backref='transactions')
@@ -2772,7 +2724,8 @@ class Transaction(db.Model):
             'recipient_email': self.recipient_email,
             'sender_email': self.sender_email,
             'created_at': self.created_at.isoformat(),
-            'completed_at': self.completed_at.isoformat() if self.completed_at else None
+            'completed_at': self.completed_at.isoformat() if self.completed_at else None,
+            'payment_method': self.payment_method
         }
 
 def get_or_create_wallet(user_id):
@@ -2841,7 +2794,8 @@ def process_deposit(user_id, amount, card_id, description=""):
             reference=generate_transaction_reference(),
             description=description or f"Deposit via {card.card_type.title()} ****{card.card_number_last4}",
             card_id=card_id,
-            completed_at=datetime.utcnow()
+            completed_at=datetime.utcnow(),
+            payment_method='wallet'  # Add this if you want to track wallet/bank
         )
         
         # Update wallet balance
@@ -2999,7 +2953,8 @@ def make_transfer(current_user):
             description=f"Transfer to {recipient.full_name} ({recipient_account_number[-4:]})",
             recipient_email=recipient.email,
             sender_email=current_user.email,
-            completed_at=datetime.utcnow()
+            completed_at=datetime.utcnow(),
+            payment_method='wallet'  # Add this if you want to track wallet/bank
         )
 
         recipient_transaction = Transaction(
@@ -3013,7 +2968,8 @@ def make_transfer(current_user):
             description=f"Transfer from {current_user.full_name} ({current_user.account_number[-4:]})",
             recipient_email=recipient.email,
             sender_email=current_user.email,
-            completed_at=datetime.utcnow()
+            completed_at=datetime.utcnow(),
+            payment_method='wallet'  # Add this if you want to track wallet/bank
         )
 
         # Create notification for recipient
@@ -3365,7 +3321,8 @@ def withdraw(current_user):
             status='completed',
             reference=generate_transaction_reference(),
             description=f"Withdrawal to bank account ending in {bank_account_number[-4:]} (Fee: R{fee:.2f})",
-            completed_at=datetime.utcnow()
+            completed_at=datetime.utcnow(),
+            payment_method='wallet'  # Add this if you want to track wallet/bank
         )
         db.session.add(transaction)
         
@@ -3794,9 +3751,20 @@ def contribute_to_group(group_id):
         status='completed',
         reference=generate_transaction_reference(),
         description=f"Contribution to {group.name}",
-        completed_at=datetime.utcnow()
+        completed_at=datetime.utcnow(),
+        payment_method=method  # <-- Add this
     )
     db.session.add(transaction)
+    db.session.flush()  # Get transaction.id before commit
+
+    # 3. Create contribution record and link to transaction
+    contribution = Contribution(
+        member_id=member.id,
+        amount=amount,
+        status='confirmed',
+        transaction_id=transaction.id  # Link to transaction
+    )
+    db.session.add(contribution)
     db.session.commit()
 
     return jsonify({'message': 'Contribution successful!'}), 200
@@ -4107,3 +4075,56 @@ def create_faq():
     return jsonify({'message': 'FAQ created', 'faq': faq.to_dict()}), 201
 
 # Add the other FAQ endpoints (POST, PUT, DELETE) as needed
+
+@app.route('/api/admin/contributions', methods=['GET'])
+@role_required(['admin'])
+def get_all_contributions():
+    contributions = db.session.query(
+        Contribution.id,
+        Contribution.amount,
+        Contribution.date,
+        Contribution.status,
+        User.full_name.label('contributor'),
+        StokvelGroup.name.label('group'),
+        StokvelGroup.id.label('group_id'),
+        Transaction.description,
+        Transaction.reference,
+        Transaction.payment_method,
+        Card.cardholder,
+        Card.card_number_last4
+    ).join(StokvelMember, Contribution.member_id == StokvelMember.id) \
+     .join(User, StokvelMember.user_id == User.id) \
+     .join(StokvelGroup, StokvelMember.group_id == StokvelGroup.id) \
+     .join(Transaction, Contribution.transaction_id == Transaction.id) \
+     .join(Card, Transaction.card_id == Card.id, isouter=True) \
+     .all()
+
+    result = []
+    for c in contributions:
+        result.append({
+            "id": c.id,
+            "amount": c.amount,
+            "date": c.date.isoformat(),
+            "status": c.status,
+            "contributor": c.contributor,
+            "group": c.group,
+            "group_id": c.group_id,
+            "description": c.description,
+            "payment_method": c.payment_method,
+            "reference": c.reference,
+            "cardholder": c.cardholder,
+            "card_number_last4": c.card_number_last4
+        })
+    return jsonify(result)
+
+@app.route('/api/admin/group-categories', methods=['GET'])
+@jwt_required()
+def get_group_categories():
+    categories = db.session.query(StokvelGroup.category).distinct().all()
+    return jsonify([c[0] for c in categories])
+
+@app.route('/api/admin/group-names', methods=['GET'])
+@jwt_required()
+def get_group_names():
+    groups = StokvelGroup.query.all()
+    return jsonify([g.name for g in groups])
