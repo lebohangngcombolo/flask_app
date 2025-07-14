@@ -206,6 +206,9 @@ class User(db.Model):
     points = db.Column(db.Integer, default=0)
     valid_referrals = db.Column(db.Integer, default=0)
     account_number = db.Column(db.String(20), unique=True, nullable=True)
+    
+    #---------------------------------Admin Team Role ---------------------------------
+    role_id = db.Column(db.Integer, db.ForeignKey('admin_role.id'), nullable=True)
 
     def set_password(self, password):
         self.password = generate_password_hash(password)
@@ -352,6 +355,15 @@ class Notification(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     user = db.relationship('User', backref='notifications')
+
+
+#----------------------------------------Admin Team Models----------------------------------------
+class AdminRole(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(50), unique=True, nullable=False)
+    permissions = db.Column(db.JSON, nullable=False)  # e.g., {"canAddAdmin": True, ...}
+    admins = db.relationship('User', backref='admin_role', lazy=True)
+
 
 #----------------------------------------Admin Notifications----------------------------------------
     def to_dict(self):
@@ -659,6 +671,21 @@ def role_required(allowed_roles):
             except Exception as e:
                 print("DEBUG: Unhandled exception in role_required:", repr(e))
                 return jsonify({'error': 'Unknown error'}), 401
+        return decorated_function
+    return decorator
+
+#----------------------------------------Admin Team Decorators Permissions----------------------------------------
+def permission_required(permission):
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            current_user_id = get_jwt_identity()
+            user = User.query.get(current_user_id)
+            if not user or not user.admin_role:
+                return jsonify({'error': 'Unauthorized'}), 403
+            if not user.admin_role.permissions.get(permission, False):
+                return jsonify({'error': 'Insufficient permissions'}), 403
+            return f(*args, **kwargs)
         return decorated_function
     return decorator
 
@@ -3724,6 +3751,121 @@ def delete_admin_notification(id):
     db.session.commit()
     return jsonify({'message': 'Notification deleted'})
 
+#----------------------------------------Admin Team Routes----------------------------------------
+@app.route('/api/admin/team', methods=['GET'])
+@role_required(['admin', 'super_admin', 'manager'])  # Only certain roles can view
+def list_admins():
+    page = request.args.get('page', 1, type=int)
+    limit = request.args.get('limit', 20, type=int)
+    search = request.args.get('search', '')
+
+    query = User.query.filter(User.role == 'admin')
+    if search:
+        like = f"%{search}%"
+        query = query.filter(or_(User.full_name.ilike(like), User.email.ilike(like)))
+    total = query.count()
+    admins = query.order_by(User.created_at.desc()).offset((page-1)*limit).limit(limit).all()
+    return jsonify({
+        'total': total,
+        'page': page,
+        'limit': limit,
+        'admins': [{
+            'id': a.id,
+            'name': a.full_name,
+            'email': a.email,
+            'role': a.admin_role.name if a.admin_role else None,
+            'created_at': a.created_at.isoformat()
+        } for a in admins]
+    })
+
+@app.route('/api/admin/roles', methods=['POST'])
+@role_required(['super_admin'])
+def create_role():
+    data = request.get_json()
+    name = data.get('name')
+    permissions = data.get('permissions', {})
+    if not name or not isinstance(permissions, dict):
+        return jsonify({'error': 'Name and permissions required'}), 400
+    if AdminRole.query.filter_by(name=name).first():
+        return jsonify({'error': 'Role already exists'}), 400
+    role = AdminRole(name=name, permissions=permissions)
+    db.session.add(role)
+    db.session.commit()
+    return jsonify({'message': 'Role created', 'role_id': role.id}), 201
+
+@app.route('/api/admin/team', methods=['POST'])
+@role_required(['super_admin', 'manager'])  # Only certain roles can add
+def add_admin():
+    data = request.get_json()
+    name = data.get('name')
+    email = data.get('email')
+    password = data.get('password')
+    phone = data.get('phone')
+    role_id = data.get('role_id')
+
+    # Validations
+    if not all([name, email, password, phone, role_id]):
+        return jsonify({'error': 'All fields (name, email, password, phone, role_id) are required'}), 400
+    if User.query.filter_by(email=email).first():
+        return jsonify({'error': 'Email already exists'}), 400
+    if len(password) < 8:
+        return jsonify({'error': 'Password must be at least 8 characters'}), 400
+
+    admin_role = AdminRole.query.get(role_id)
+    if not admin_role:
+        return jsonify({'error': 'Invalid role'}), 400
+
+    user = User(
+        full_name=name,
+        email=email,
+        password=generate_password_hash(password),
+        phone=phone,  # <-- ADD THIS LINE!
+        role='admin',
+        role_id=role_id,
+        is_verified=True
+    )
+    db.session.add(user)
+    db.session.commit()
+    return jsonify({'message': 'Admin created', 'admin_id': user.id}), 201
+
+@app.route('/api/admin/roles/<int:role_id>', methods=['PUT'])
+@role_required(['super_admin'])
+def update_role(role_id):
+    role = AdminRole.query.get_or_404(role_id)
+    data = request.get_json()
+    role.name = data.get('name', role.name)
+    if 'permissions' in data:
+        role.permissions = data['permissions']
+    db.session.commit()
+    return jsonify({'message': 'Role updated'})
+
+@app.route('/api/admin/roles/<int:role_id>', methods=['DELETE'])
+@role_required(['super_admin'])
+def delete_role(role_id):
+    role = AdminRole.query.get_or_404(role_id)
+    db.session.delete(role)
+    db.session.commit()
+    return jsonify({'message': 'Role deleted'})
+
+@app.route('/api/admin/team/<int:admin_id>/role', methods=['PUT'])
+@role_required(['super_admin', 'manager'])
+def change_admin_role(admin_id):
+    user = User.query.get_or_404(admin_id)
+    data = request.get_json()
+    role_id = data.get('role_id')
+    role = AdminRole.query.get(role_id)
+    if not role:
+        return jsonify({'error': 'Invalid role'}), 400
+    user.role_id = role_id
+    db.session.commit()
+    return jsonify({'message': 'Admin role updated'})
+
+@app.route('/api/admin/roles', methods=['GET'])
+@role_required(['super_admin'])
+def list_roles():
+    roles = AdminRole.query.all()
+    return jsonify([{"id": r.id, "name": r.name, "permissions": r.permissions} for r in roles])
+
  # -------------------- MAIN --------------------
 if __name__ == '__main__':
     app.run(port=5001, debug=True)
@@ -3739,3 +3881,15 @@ def checkout(dbapi_connection, connection_record, connection_proxy):
         connection_record.info['pid'] = pid
         connection_record.info['checked_out'] = time.time()
 
+@app.cli.command('delete-admin')
+@with_appcontext
+def delete_admin():
+    """Delete an admin user by email."""
+    email = click.prompt('Enter admin email to delete', type=str)
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        click.echo(click.style(f"Error: User with email '{email}' not found.", fg='red'))
+        return
+    db.session.delete(user)
+    db.session.commit()
+    click.echo(click.style(f"Admin user '{email}' deleted successfully.", fg='green'))
