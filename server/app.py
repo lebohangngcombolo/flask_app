@@ -1,4 +1,5 @@
-from flask import Flask, request, jsonify, Response, make_response, send_file, Blueprint, send_from_directory
+from flask import Flask, request, jsonify, send_file, current_app, send_from_directory
+from flask import Flask, request, jsonify, send_file, current_app, Blueprint
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS, cross_origin
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -42,8 +43,157 @@ from flask_socketio import SocketIO, emit
 from sqlalchemy import or_
 from google.oauth2 import id_token
 from google.auth.transport import requests as grequests
+import re
+import secrets
+import pyotp
+from flask import Blueprint
 
 
+# Add this right after line 50 (after the imports and before the models)
+from flask import Flask, request, jsonify, send_file, current_app
+from flask_sqlalchemy import SQLAlchemy
+from flask_cors import CORS, cross_origin
+from werkzeug.security import generate_password_hash, check_password_hash
+import jwt
+import datetime
+from functools import wraps
+import click
+from flask.cli import with_appcontext
+from datetime import datetime, timedelta
+from sqlalchemy import func, extract
+from dotenv import load_dotenv
+import os
+from flask_jwt_extended import (
+    JWTManager, 
+    jwt_required, 
+    create_access_token, 
+    get_jwt_identity,
+)
+from sqlalchemy.exc import SQLAlchemyError
+from flask_mail import Mail, Message
+import random
+import requests
+import logging
+import string
+import time
+from iStokvel.utils.email_utils import send_verification_email
+from flask_migrate import Migrate
+from twilio.rest import Client
+import phonenumbers
+from werkzeug.utils import secure_filename
+from werkzeug.exceptions import HTTPException
+from sqlalchemy import event
+from sqlalchemy.engine import Engine
+from jwt import ExpiredSignatureError, InvalidTokenError
+from openai import OpenAI
+import uuid
+import openai
+import jwt as pyjwt
+from sqlalchemy import select
+from flask_socketio import SocketIO, emit
+from sqlalchemy import or_
+from google.oauth2 import id_token
+from google.auth.transport import requests as grequests
+import re
+import secrets
+import pyotp
+
+
+# Add this right after line 50 (after the imports and before the models)
+
+# -------------------- SECURITY DECORATORS --------------------
+def super_admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        try:
+            token = request.headers.get('Authorization')
+            if not token:
+                return jsonify({'error': 'No token provided'}), 401
+
+            token = token.split(' ')[1]
+            payload = pyjwt.decode(token, app.config['JWT_SECRET_KEY'], algorithms=['HS256'])
+            user_id = payload.get('user_id')
+            user = User.query.get(user_id)
+
+            if not user or not user.is_verified:
+                return jsonify({'error': 'Unauthorized'}), 401
+
+            # Check if user has super_admin role
+            if not user.admin_role or user.admin_role.name != 'super_admin':
+                return jsonify({'error': 'Super admin access required'}), 403
+
+            return f(*args, **kwargs)
+        except Exception as e:
+            return jsonify({'error': 'Authentication failed'}), 401
+    return decorated_function
+
+def mfa_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        try:
+            token = request.headers.get('Authorization')
+            if not token:
+                return jsonify({'error': 'No token provided'}), 401
+
+            token = token.split(' ')[1]
+            payload = pyjwt.decode(token, app.config['JWT_SECRET_KEY'], algorithms=['HS256'])
+            user_id = payload.get('user_id')
+            user = User.query.get(user_id)
+
+            if not user or not user.is_verified:
+                return jsonify({'error': 'Unauthorized'}), 401
+
+            # Check if MFA is enabled and verified for this session
+            session_token = payload.get('session_token')
+            if session_token:
+                session = AdminSession.query.filter_by(
+                    session_token=session_token,
+                    user_id=user_id
+                ).first()
+                
+                if not session or not session.mfa_verified:
+                    return jsonify({'error': 'MFA verification required'}), 403
+
+            return f(*args, **kwargs)
+        except Exception as e:
+            return jsonify({'error': 'Authentication failed'}), 401
+    return decorated_function
+
+def audit_log(action, resource_type=None, resource_id=None):
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            try:
+                # Get admin info from token
+                token = request.headers.get('Authorization')
+                if token:
+                    token = token.split(' ')[1]
+                    payload = pyjwt.decode(token, app.config['JWT_SECRET_KEY'], algorithms=['HS256'])
+                    admin_id = payload.get('user_id')
+                    
+                    # Create audit log
+                    audit_entry = AdminAuditLog(
+                        admin_id=admin_id,
+                        action=action,
+                        resource_type=resource_type,
+                        resource_id=str(resource_id) if resource_id else None,
+                        details={
+                            'method': request.method,
+                            'endpoint': request.endpoint,
+                            'ip_address': request.remote_addr,
+                            'user_agent': request.headers.get('User-Agent')
+                        },
+                        ip_address=request.remote_addr,
+                        user_agent=request.headers.get('User-Agent')
+                    )
+                    db.session.add(audit_entry)
+                    db.session.commit()
+                
+                return f(*args, **kwargs)
+            except Exception as e:
+                return f(*args, **kwargs)  # Continue even if audit fails
+        return decorated_function
+    return decorator
 
 # Load environment variables from .env file
 load_dotenv()
@@ -170,6 +320,15 @@ class User(db.Model):
     points = db.Column(db.Integer, default=0)
     valid_referrals = db.Column(db.Integer, default=0)
     account_number = db.Column(db.String(20), unique=True, nullable=True)
+    role_id = db.Column(db.Integer, db.ForeignKey('admin_role.id'))
+    mfa_enabled = db.Column(db.Boolean, default=False)
+    mfa_secret = db.Column(db.String(32))
+    mfa_backup_codes = db.Column(db.JSON)
+    last_password_change = db.Column(db.DateTime, default=datetime.utcnow)
+    password_attempts = db.Column(db.Integer, default=0)
+    locked_until = db.Column(db.DateTime)
+    force_password_change = db.Column(db.Boolean, default=False)
+    admin_role = db.relationship('AdminRole', backref='users')
 
     def set_password(self, password):
         self.password = generate_password_hash(password)
@@ -755,8 +914,23 @@ def get_admin_groups():
 @app.route('/api/admin/stats', methods=['GET'])
 @token_required
 def get_admin_stats(current_user):
-    # Your implementation here
-    pass
+    total_funds = db.session.query(func.sum(Wallet.balance)).scalar() or 0
+    active_groups = StokvelGroup.query.filter_by(status='active').count()
+    this_month = datetime.utcnow().replace(day=1)
+    new_members = User.query.filter(User.created_at >= this_month).count()
+    payouts_due = WithdrawalRequest.query.filter_by(status='pending').count()
+    total_users = User.query.count()
+    total_transactions = Transaction.query.count()
+    total_contributions = Contribution.query.count()
+    return jsonify({
+        "totalFunds": total_funds,
+        "activeGroups": active_groups,
+        "newMembers": new_members,
+        "payoutsDue": payouts_due,
+        "totalUsers": total_users,
+        "totalTransactions": total_transactions,
+        "totalContributions": total_contributions
+    })
 
 @app.route('/api/admin/groups', methods=['POST'])
 @jwt_required()
@@ -3453,21 +3627,6 @@ def join_request_to_dict(jr):
         # ... other fields ...
     }
 
-     # -------------------- MAIN --------------------
-if __name__ == '__main__':
-    app.run(port=5001, debug=True)
-
-@event.listens_for(Engine, "connect")
-def connect(dbapi_connection, connection_record):
-    connection_record.info['pid'] = os.getpid()
-
-@event.listens_for(Engine, "checkout")
-def checkout(dbapi_connection, connection_record, connection_proxy):
-    pid = os.getpid()
-    if connection_record.info['pid'] != pid:
-        connection_record.info['pid'] = pid
-        connection_record.info['checked_out'] = time.time()
-
 @app.cli.command('create-default-groups')
 def create_default_groups():
     default_groups = [
@@ -4128,3 +4287,1030 @@ def get_group_categories():
 def get_group_names():
     groups = StokvelGroup.query.all()
     return jsonify([g.name for g in groups])
+
+@app.route('/admin/analytics/overview', methods=['GET'])
+@admin_required
+def admin_analytics_overview():
+    now = datetime.utcnow()
+    thirty_days_ago = now - timedelta(days=30)
+
+    # Optional filters
+    start_date_str = request.args.get('start_date')  # format: YYYY-MM-DD
+    end_date_str = request.args.get('end_date')
+    user_id = request.args.get('user_id')
+    group_id = request.args.get('group_id')
+
+    # Parse date filters
+    try:
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d') if start_date_str else thirty_days_ago
+        end_date = datetime.strptime(end_date_str, '%Y-%m-%d') if end_date_str else now
+    except ValueError:
+        return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD.'}), 400
+
+    # User Stats (global only)
+    total_users = db.session.query(func.count(User.id)).scalar()
+    verified_users = db.session.query(func.count(User.id)).filter(User.is_verified == True).scalar()
+    recent_users = db.session.query(func.count(User.id)).filter(User.created_at >= (now - timedelta(days=7))).scalar()
+
+    # Sessions (only count active sessions in the last 24 hours)
+    recent_window = datetime.utcnow() - timedelta(hours=24)
+    session_query = db.session.query(UserSession).filter(UserSession.login_time.between(start_date, end_date))
+    if user_id:
+        session_query = session_query.filter(UserSession.user_id == user_id)
+    total_sessions = session_query.count()
+    active_sessions = session_query.filter(
+        UserSession.is_active == True,
+        UserSession.last_activity >= recent_window
+    ).count()
+
+    # Transactions
+    txn_query = db.session.query(Transaction).filter(Transaction.created_at.between(start_date, end_date))
+    if user_id:
+        txn_query = txn_query.filter(Transaction.user_id == user_id)
+    total_transactions = txn_query.count()
+    completed_txns = txn_query.filter(Transaction.status == 'completed')
+    completed_count = completed_txns.count()
+    total_volume = completed_txns.with_entities(func.sum(Transaction.amount)).scalar() or 0
+
+    txn_volume_by_type = completed_txns.with_entities(
+        Transaction.transaction_type,
+        func.sum(Transaction.amount)
+    ).group_by(Transaction.transaction_type).all()
+
+    txn_daily_volume = completed_txns.with_entities(
+        func.date(Transaction.created_at),
+        func.sum(Transaction.amount)
+    ).group_by(func.date(Transaction.created_at)).order_by(func.date(Transaction.created_at)).all()
+
+    # Contributions
+    contrib_query = db.session.query(Contribution).join(StokvelMember)
+    if group_id:
+        contrib_query = contrib_query.filter(StokvelMember.group_id == group_id)
+    if user_id:
+        contrib_query = contrib_query.filter(StokvelMember.user_id == user_id)
+    contrib_query = contrib_query.filter(Contribution.date.between(start_date, end_date))
+    total_contributions = contrib_query.count()
+    contribution_volume = contrib_query.with_entities(func.sum(Contribution.amount)).scalar() or 0
+
+    # Referrals
+    referral_query = db.session.query(Referral).filter(Referral.created_at.between(start_date, end_date))
+    if user_id:
+        referral_query = referral_query.filter((Referral.referrer_id == user_id) | (Referral.referee_id == user_id))
+    total_referrals = referral_query.count()
+    completed_referrals = referral_query.filter(Referral.status == 'completed').count()
+
+    # Chat
+    message_query = db.session.query(Message).filter(Message.created_at.between(start_date, end_date))
+    if user_id:
+        message_query = message_query.join(Conversation).filter(Conversation.user_id == user_id)
+    total_messages = message_query.count()
+    assistant_messages = message_query.filter(Message.role == 'assistant').count()
+    user_messages = total_messages - assistant_messages
+
+    # Notifications
+    notif_query = db.session.query(Notification).filter(Notification.created_at.between(start_date, end_date))
+    if user_id:
+        notif_query = notif_query.filter(Notification.user_id == user_id)
+    unread_notifications = notif_query.filter(Notification.is_read == False).count()
+
+    # Top stokvel groups (not affected by filters)
+    top_groups = db.session.query(
+        StokvelGroup.name,
+        func.count(StokvelGroup.members)
+    ).group_by(StokvelGroup.id).order_by(func.count(StokvelGroup.members).desc()).limit(5).all()
+
+    return jsonify({
+        "filters": {
+            "start_date": start_date.strftime('%Y-%m-%d'),
+            "end_date": end_date.strftime('%Y-%m-%d'),
+            "user_id": user_id,
+            "group_id": group_id
+        },
+        "user_stats": {
+            "total": total_users,
+            "verified": verified_users,
+            "recent_last_7_days": recent_users
+        },
+        "sessions": {
+            "total": total_sessions,
+            "active": active_sessions
+        },
+        "transactions": {
+            "total": total_transactions,
+            "completed": completed_count,
+            "volume": float(total_volume),
+            "volume_by_type": {t[0]: float(t[1]) for t in txn_volume_by_type},
+            "daily_volume": [{"date": str(t[0]), "amount": float(t[1])} for t in txn_daily_volume]
+        },
+        "contributions": {
+            "total": total_contributions,
+            "volume": float(contribution_volume)
+        },
+        "referrals": {
+            "total": total_referrals,
+            "completed": completed_referrals
+        },
+        "chat": {
+            "total_messages": total_messages,
+            "user": user_messages,
+            "assistant": assistant_messages
+        },
+        "notifications": {
+            "unread": unread_notifications
+        },
+        "top_stokvel_groups": [
+            {"name": g[0], "members": g[1]} for g in top_groups
+        ]
+    }), 200
+
+@app.route('/logout', methods=['POST'])
+@token_required
+def logout(current_user):
+    session = UserSession.query.filter_by(user_id=current_user.id, is_active=True).first()
+    if session:
+        session.is_active = False
+        db.session.commit()
+    return jsonify({'message': 'Logged out successfully'})
+
+@app.cli.command('cleanup-sessions')
+@with_appcontext
+def cleanup_sessions_command():
+    cleanup_old_sessions()
+    print("Old sessions cleaned up.")
+
+def cleanup_old_sessions():
+    expiry_window = datetime.utcnow() - timedelta(days=7)  # or whatever makes sense
+    old_sessions = UserSession.query.filter(
+        UserSession.is_active == True,
+        UserSession.last_activity < expiry_window
+    ).all()
+    for session in old_sessions:
+        session.is_active = False
+    db.session.commit()
+
+# Add these endpoints after line 4119 (after the get_all_contributions function)
+
+@app.route('/api/admin/withdrawals', methods=['GET'])
+@role_required(['admin'])
+def get_all_withdrawals():
+    """Get all withdrawal requests for admin reports"""
+    try:
+        withdrawals = db.session.query(
+            WithdrawalRequest.id,
+            WithdrawalRequest.amount,
+            WithdrawalRequest.reason,
+            WithdrawalRequest.created_at,
+            WithdrawalRequest.status,
+            WithdrawalRequest.approvals_needed,
+            WithdrawalRequest.approvals_received,
+            User.full_name.label('user_name'),
+            User.email.label('user_email'),
+            StokvelGroup.name.label('group_name')
+        ).join(StokvelMember, WithdrawalRequest.member_id == StokvelMember.id) \
+         .join(User, StokvelMember.user_id == User.id) \
+         .join(StokvelGroup, StokvelMember.group_id == StokvelGroup.id) \
+         .order_by(WithdrawalRequest.created_at.desc()) \
+         .all()
+
+        result = []
+        for w in withdrawals:
+            result.append({
+                "id": w.id,
+                "amount": float(w.amount),
+                "reason": w.reason,
+                "created_at": w.created_at.isoformat(),
+                "status": w.status,
+                "user_name": w.user_name,
+                "user_email": w.user_email,
+                "group_name": w.group_name,
+                "approvals_needed": w.approvals_needed,
+                "approvals_received": w.approvals_received
+            })
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/transactions', methods=['GET'])
+@role_required(['admin'])
+def get_all_transactions():
+    """Get all transactions for admin reports"""
+    try:
+        transactions = db.session.query(
+            Transaction.id,
+            Transaction.transaction_type,
+            Transaction.amount,
+            Transaction.fee,
+            Transaction.net_amount,
+            Transaction.status,
+            Transaction.reference,
+            Transaction.description,
+            Transaction.created_at,
+            Transaction.completed_at,
+            Transaction.payment_method,
+            User.full_name.label('user_name'),
+            User.email.label('user_email'),
+            Card.cardholder,
+            Card.card_number_last4
+        ).join(User, Transaction.user_id == User.id) \
+         .join(Card, Transaction.card_id == Card.id, isouter=True) \
+         .order_by(Transaction.created_at.desc()) \
+         .all()
+
+        result = []
+        for t in transactions:
+            result.append({
+                "id": t.id,
+                "transaction_type": t.transaction_type,
+                "amount": float(t.amount),
+                "fee": float(t.fee) if t.fee else 0,
+                "net_amount": float(t.net_amount),
+                "status": t.status,
+                "reference": t.reference,
+                "description": t.description,
+                "created_at": t.created_at.isoformat(),
+                "completed_at": t.completed_at.isoformat() if t.completed_at else None,
+                "payment_method": t.payment_method,
+                "user_name": t.user_name,
+                "user_email": t.user_email,
+                "cardholder": t.cardholder,
+                "card_number_last4": t.card_number_last4
+            })
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/referrals', methods=['GET'])
+@role_required(['admin'])
+def get_all_referrals():
+    """Get all referrals for admin reports"""
+    try:
+        referrals = db.session.query(
+            Referral.id,
+            Referral.status,
+            Referral.created_at,
+            User.full_name.label('referrer_name'),
+            User.email.label('referrer_email'),
+            User.full_name.label('referee_name'),
+            User.email.label('referee_email')
+        ).join(User, Referral.referrer_id == User.id) \
+         .join(User, Referral.referee_id == User.id) \
+         .order_by(Referral.created_at.desc()) \
+         .all()
+
+        result = []
+        for r in referrals:
+            result.append({
+                "id": r.id,
+                "status": r.status,
+                "created_at": r.created_at.isoformat(),
+                "referrer_name": r.referrer_name,
+                "referrer_email": r.referrer_email,
+                "referee_name": r.referee_name,
+                "referee_email": r.referee_email
+            })
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/users', methods=['GET'])
+@role_required(['admin'])
+def get_all_users():
+    """Get all users for admin reports"""
+    try:
+        users = User.query.order_by(User.created_at.desc()).all()
+        result = []
+        for user in users:
+            # Get user's group memberships
+            memberships = StokvelMember.query.filter_by(user_id=user.id).all()
+            groups = [m.group.name for m in memberships if m.group]
+            
+            result.append({
+                "id": user.id,
+                "full_name": user.full_name,
+                "email": user.email,
+                "phone": user.phone,
+                "role": user.role,
+                "is_verified": user.is_verified,
+                "created_at": user.created_at.isoformat(),
+                "groups": groups,
+                "points": user.points,
+                "valid_referrals": user.valid_referrals
+            })
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/groups-detailed', methods=['GET'])
+@role_required(['admin'])
+def get_all_groups_detailed():
+    """Get all groups with detailed information for admin reports"""
+    try:
+        groups = StokvelGroup.query.order_by(StokvelGroup.created_at.desc()).all()
+        result = []
+        for group in groups:
+            # Get member count
+            member_count = StokvelMember.query.filter_by(group_id=group.id).count()
+            active_members = StokvelMember.query.filter_by(group_id=group.id, status='active').count()
+            
+            # Get total contributions
+            total_contributions = db.session.query(func.sum(Contribution.amount)) \
+                .join(StokvelMember) \
+                .filter(StokvelMember.group_id == group.id) \
+                .scalar() or 0
+            
+            result.append({
+                "id": group.id,
+                "name": group.name,
+                "category": group.category,
+                "tier": group.tier,
+                "status": group.status,
+                "contribution_amount": float(group.contribution_amount),
+                "frequency": group.frequency,
+                "max_members": group.max_members,
+                "created_at": group.created_at.isoformat(),
+                "description": group.description,
+                "member_count": member_count,
+                "active_members": active_members,
+                "total_contributions": float(total_contributions)
+            })
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+class AdminRole(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(50), unique=True, nullable=False)
+    description = db.Column(db.Text)
+    permissions = db.Column(db.JSON, default={})
+    is_system_role = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'description': self.description,
+            'permissions': self.permissions,
+            'is_system_role': self.is_system_role,
+            'created_at': self.created_at.isoformat(),
+            'updated_at': self.updated_at.isoformat()
+        }
+
+class AdminSession(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    session_token = db.Column(db.String(255), unique=True, nullable=False)
+    ip_address = db.Column(db.String(45))
+    user_agent = db.Column(db.Text)
+    mfa_verified = db.Column(db.Boolean, default=False)
+    last_activity = db.Column(db.DateTime, default=datetime.utcnow)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    user = db.relationship('User', backref='admin_sessions')
+
+class AdminAuditLog(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    admin_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    action = db.Column(db.String(100), nullable=False)
+    resource_type = db.Column(db.String(50))
+    resource_id = db.Column(db.String(50))
+    details = db.Column(db.JSON)
+    ip_address = db.Column(db.String(45))
+    user_agent = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    admin = db.relationship('User', backref='audit_logs')
+
+@app.route('/api/admin/team', methods=['GET'])
+@role_required(['admin', 'super_admin', 'manager'])
+# @mfa_required
+def list_admins():
+    page = request.args.get('page', 1, type=int)
+    limit = request.args.get('limit', 20, type=int)
+    search = request.args.get('search', '')
+    role_filter = request.args.get('role', '')
+
+    query = User.query.filter(User.role == 'admin')
+    if search:
+        like = f"%{search}%"
+        query = query.filter(or_(
+            User.full_name.ilike(like), 
+            User.email.ilike(like)
+        ))
+    if role_filter:
+        query = query.join(AdminRole).filter(AdminRole.name == role_filter)
+    total = query.count()
+    admins = query.order_by(User.created_at.desc()).offset((page-1)*limit).limit(limit).all()
+    return jsonify({
+        'total': total,
+        'page': page,
+        'limit': limit,
+        'admins': [{
+            'id': a.id,
+            'name': a.full_name,
+            'email': a.email,
+            'role': a.admin_role.name if a.admin_role else None,
+            'mfa_enabled': a.mfa_enabled,
+            'is_locked': a.locked_until and a.locked_until > datetime.utcnow(),
+            'created_at': a.created_at.isoformat(),
+            'last_activity': a.admin_sessions[-1].last_activity.isoformat() if a.admin_sessions else None
+        } for a in admins]
+    })
+
+@app.route('/api/admin/team', methods=['POST'])
+@role_required(['admin', 'super_admin'])
+# @mfa_required
+@audit_log('CREATE_ADMIN', 'USER')
+def add_admin():
+    data = request.get_json()
+    
+    # Validate required fields
+    required_fields = ['name', 'email', 'password', 'phone', 'role_id']
+    if not all(field in data for field in required_fields):
+        return jsonify({'error': 'All fields are required'}), 400
+    
+    # Validate email format
+    if not re.match(r"[^@]+@[^@]+\.[^@]+", data['email']):
+        return jsonify({'error': 'Invalid email format'}), 400
+    
+    # Validate password strength
+    if len(data['password']) < 12:
+        return jsonify({'error': 'Password must be at least 12 characters'}), 400
+    
+    if not re.search(r"[A-Z]", data['password']):
+        return jsonify({'error': 'Password must contain at least one uppercase letter'}), 400
+    
+    if not re.search(r"[a-z]", data['password']):
+        return jsonify({'error': 'Password must contain at least one lowercase letter'}), 400
+    
+    if not re.search(r"\d", data['password']):
+        return jsonify({'error': 'Password must contain at least one number'}), 400
+    
+    if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", data['password']):
+        return jsonify({'error': 'Password must contain at least one special character'}), 400
+    
+    # Check if email already exists
+    if User.query.filter_by(email=data['email']).first():
+        return jsonify({'error': 'Email already exists'}), 400
+    
+    # Validate role exists
+    role = AdminRole.query.get(data['role_id'])
+    if not role:
+        return jsonify({'error': 'Invalid role'}), 400
+    
+    # Create user with enhanced security
+    user = User(
+        full_name=data['name'],
+        email=data['email'],
+        password=generate_password_hash(data['password']),
+        phone=data['phone'],
+        role='admin',
+        role_id=data['role_id'],
+        is_verified=True,
+        force_password_change=True,
+        last_password_change=datetime.utcnow()
+    )
+    
+    db.session.add(user)
+    db.session.commit()
+    
+    return jsonify({
+        'message': 'Admin created successfully',
+        'admin_id': user.id,
+        'force_password_change': True
+    }), 201
+
+@app.route('/api/admin/roles', methods=['GET'])
+@role_required(['admin', 'super_admin'])
+# @mfa_required
+def list_roles():
+    roles = AdminRole.query.all()
+    return jsonify([r.to_dict() for r in roles])
+
+@app.route('/api/admin/roles', methods=['POST'])
+@role_required(['admin', 'super_admin'])
+# @mfa_required
+@audit_log('CREATE_ROLE', 'ROLE')
+def create_role():
+    data = request.get_json()
+    
+    if not data.get('name') or not isinstance(data.get('permissions', {}), dict):
+        return jsonify({'error': 'Name and permissions required'}), 400
+    
+    # Validate role name
+    if AdminRole.query.filter_by(name=data['name']).first():
+        return jsonify({'error': 'Role already exists'}), 400
+    
+    # Validate permissions structure
+    valid_permissions = {
+        'users': ['read', 'write', 'delete'],
+        'groups': ['read', 'write', 'delete'],
+        'analytics': ['read', 'export'],
+        'approvals': ['read', 'approve', 'reject'],
+        'support': ['read', 'respond'],
+        'team': ['read', 'write', 'delete'],
+        'payouts': ['read', 'approve', 'reject'],
+        'audit': ['read'],
+        'settings': ['read', 'write']
+    }
+    
+    permissions = data.get('permissions', {})
+    validated_permissions = {}
+    
+    for resource, actions in permissions.items():
+        if resource in valid_permissions:
+            validated_permissions[resource] = {
+                action: actions.get(action, False) 
+                for action in valid_permissions[resource]
+            }
+    
+    role = AdminRole(
+        name=data['name'],
+        description=data.get('description', ''),
+        permissions=validated_permissions
+    )
+    
+    db.session.add(role)
+    db.session.commit()
+    
+    return jsonify({
+        'message': 'Role created successfully',
+        'role': role.to_dict()
+    }), 201
+
+@app.route('/api/admin/mfa/setup', methods=['POST'])
+@role_required(['admin', 'super_admin', 'manager'])
+def setup_mfa():
+    try:
+        token = request.headers.get('Authorization').split(' ')[1]
+        payload = pyjwt.decode(token, app.config['JWT_SECRET_KEY'], algorithms=['HS256'])
+        user_id = payload.get('user_id')
+        user = User.query.get(user_id)
+        
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        # Generate TOTP secret
+        import pyotp
+        secret = pyotp.random_base32()
+        
+        # Generate backup codes
+        import secrets
+        backup_codes = [secrets.token_hex(4).upper() for _ in range(10)]
+        
+        user.mfa_secret = secret
+        user.mfa_backup_codes = backup_codes
+        
+        db.session.commit()
+        
+        # Generate QR code URL
+        totp = pyotp.TOTP(secret)
+        qr_url = totp.provisioning_uri(
+            name=user.email,
+            issuer_name="iStokvel Admin"
+        )
+        
+        return jsonify({
+            'secret': secret,
+            'qr_url': qr_url,
+            'backup_codes': backup_codes
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/mfa/verify', methods=['POST'])
+@role_required(['admin', 'super_admin', 'manager'])
+def verify_mfa():
+    try:
+        data = request.get_json()
+        token = request.headers.get('Authorization').split(' ')[1]
+        payload = pyjwt.decode(token, app.config['JWT_SECRET_KEY'], algorithms=['HS256'])
+        user_id = payload.get('user_id')
+        user = User.query.get(user_id)
+        
+        if not user or not user.mfa_enabled:
+            return jsonify({'error': 'MFA not enabled'}), 400
+        
+        # Verify TOTP token
+        import pyotp
+        totp = pyotp.TOTP(user.mfa_secret)
+        
+        if not totp.verify(data.get('token')):
+            return jsonify({'error': 'Invalid MFA token'}), 400
+        
+        # Create secure admin session
+        session_token = secrets.token_urlsafe(32)
+        session = AdminSession(
+            user_id=user.id,
+            session_token=session_token,
+            ip_address=request.remote_addr,
+            user_agent=request.headers.get('User-Agent'),
+            mfa_verified=True,
+            expires_at=datetime.utcnow() + timedelta(hours=8)
+        )
+        
+        db.session.add(session)
+        db.session.commit()
+        
+        # Generate new JWT with session info
+        new_payload = {
+            'user_id': user.id,
+            'session_token': session_token,
+            'exp': datetime.utcnow() + timedelta(hours=8)
+        }
+        
+        new_token = pyjwt.encode(new_payload, app.config['JWT_SECRET_KEY'], algorithm='HS256')
+        
+        return jsonify({
+            'token': new_token,
+            'expires_at': session.expires_at.isoformat()
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/audit-logs', methods=['GET'])
+@role_required(['admin', 'super_admin'])
+# @mfa_required
+def get_audit_logs():
+    page = request.args.get('page', 1, type=int)
+    limit = request.args.get('limit', 50, type=int)
+    admin_id = request.args.get('admin_id')
+    action = request.args.get('action')
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    
+    query = AdminAuditLog.query
+    
+    if admin_id:
+        query = query.filter(AdminAuditLog.admin_id == admin_id)
+    if action:
+        query = query.filter(AdminAuditLog.action == action)
+    if start_date:
+        query = query.filter(AdminAuditLog.created_at >= start_date)
+    if end_date:
+        query = query.filter(AdminAuditLog.created_at <= end_date)
+    
+    total = query.count()
+    logs = query.order_by(AdminAuditLog.created_at.desc()).offset((page-1)*limit).limit(limit).all()
+    
+    return jsonify({
+        'total': total,
+        'page': page,
+        'limit': limit,
+        'logs': [{
+            'id': log.id,
+            'admin_name': log.admin.full_name if log.admin else 'Unknown',
+            'action': log.action,
+            'resource_type': log.resource_type,
+            'resource_id': log.resource_id,
+            'details': log.details,
+            'ip_address': log.ip_address,
+            'created_at': log.created_at.isoformat()
+        } for log in logs]
+    })
+
+def super_admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        try:
+            token = request.headers.get('Authorization')
+            if not token:
+                return jsonify({'error': 'No token provided'}), 401
+
+            token = token.split(' ')[1]
+            payload = pyjwt.decode(token, app.config['JWT_SECRET_KEY'], algorithms=['HS256'])
+            user_id = payload.get('user_id')
+            user = User.query.get(user_id)
+
+            if not user or not user.is_verified:
+                return jsonify({'error': 'Unauthorized'}), 401
+
+            # Check if user has super_admin role
+            if not user.admin_role or user.admin_role.name != 'super_admin':
+                return jsonify({'error': 'Super admin access required'}), 403
+
+            return f(*args, **kwargs)
+        except Exception as e:
+            return jsonify({'error': 'Authentication failed'}), 401
+    return decorated_function
+
+def mfa_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        try:
+            token = request.headers.get('Authorization')
+            if not token:
+                return jsonify({'error': 'No token provided'}), 401
+
+            token = token.split(' ')[1]
+            payload = pyjwt.decode(token, app.config['JWT_SECRET_KEY'], algorithms=['HS256'])
+            user_id = payload.get('user_id')
+            user = User.query.get(user_id)
+
+            if not user or not user.is_verified:
+                return jsonify({'error': 'Unauthorized'}), 401
+
+            # Check if MFA is enabled and verified for this session
+            session_token = payload.get('session_token')
+            if session_token:
+                session = AdminSession.query.filter_by(
+                    session_token=session_token,
+                    user_id=user_id
+                ).first()
+                
+                if not session or not session.mfa_verified:
+                    return jsonify({'error': 'MFA verification required'}), 403
+
+            return f(*args, **kwargs)
+        except Exception as e:
+            return jsonify({'error': 'Authentication failed'}), 401
+    return decorated_function
+
+def audit_log(action, resource_type=None, resource_id=None):
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            try:
+                # Get admin info from token
+                token = request.headers.get('Authorization')
+                if token:
+                    token = token.split(' ')[1]
+                    payload = pyjwt.decode(token, app.config['JWT_SECRET_KEY'], algorithms=['HS256'])
+                    admin_id = payload.get('user_id')
+                    
+                    # Create audit log
+                    audit_entry = AdminAuditLog(
+                        admin_id=admin_id,
+                        action=action,
+                        resource_type=resource_type,
+                        resource_id=str(resource_id) if resource_id else None,
+                        details={
+                            'method': request.method,
+                            'endpoint': request.endpoint,
+                            'ip_address': request.remote_addr,
+                            'user_agent': request.headers.get('User-Agent')
+                        },
+                        ip_address=request.remote_addr,
+                        user_agent=request.headers.get('User-Agent')
+                    )
+                    db.session.add(audit_entry)
+                    db.session.commit()
+                
+                return f(*args, **kwargs)
+            except Exception as e:
+                return f(*args, **kwargs)  # Continue even if audit fails
+        return decorated_function
+    return decorator
+
+# Add these endpoints after the existing ones
+
+@app.route('/api/admin/roles/<int:role_id>', methods=['PUT'])
+@role_required(['admin', 'super_admin'])
+# @mfa_required
+@audit_log('UPDATE_ROLE', 'ROLE')
+def update_role(role_id):
+    role = AdminRole.query.get_or_404(role_id)
+    data = request.get_json()
+    role.name = data.get('name', role.name)
+    if 'permissions' in data:
+        role.permissions = data['permissions']
+    db.session.commit()
+    return jsonify({'message': 'Role updated'})
+
+@app.route('/api/admin/roles/<int:role_id>', methods=['DELETE'])
+@role_required(['admin', 'super_admin'])
+# @mfa_required
+@audit_log('DELETE_ROLE', 'ROLE')
+def delete_role(role_id):
+    role = AdminRole.query.get_or_404(role_id)
+    if role.is_system_role:
+        return jsonify({'error': 'Cannot delete system role'}), 400
+    db.session.delete(role)
+    db.session.commit()
+    return jsonify({'message': 'Role deleted'})
+
+@app.route('/api/admin/team/<int:admin_id>/role', methods=['PUT'])
+@role_required(['admin', 'super_admin'])
+# @mfa_required
+@audit_log('UPDATE_ADMIN_ROLE', 'USER')
+def change_admin_role(admin_id):
+    user = User.query.get_or_404(admin_id)
+    data = request.get_json()
+    role_id = data.get('role_id')
+    role = AdminRole.query.get(role_id)
+    if not role:
+        return jsonify({'error': 'Invalid role'}), 400
+    user.role_id = role_id
+    db.session.commit()
+    return jsonify({'message': 'Admin role updated'})
+
+@app.cli.command('create-default-roles')
+@with_appcontext
+def create_default_roles():
+    """Create default admin roles for the stokvel platform"""
+    
+    # Check if roles already exist
+    if AdminRole.query.first():
+        print("Roles already exist. Skipping creation.")
+        return
+    
+    roles_data = [
+        {
+            'name': 'super_admin',
+            'description': 'Full system access with ability to manage all admins and roles',
+            'is_system_role': True,
+            'permissions': {
+                'users': {'read': True, 'write': True, 'delete': True},
+                'groups': {'read': True, 'write': True, 'delete': True},
+                'analytics': {'read': True, 'export': True},
+                'approvals': {'read': True, 'approve': True, 'reject': True},
+                'support': {'read': True, 'respond': True},
+                'team': {'read': True, 'write': True, 'delete': True},
+                'payouts': {'read': True, 'approve': True, 'reject': True},
+                'audit': {'read': True},
+                'settings': {'read': True, 'write': True},
+                'financial': {'read': True, 'write': True, 'approve': True},
+                'content': {'read': True, 'write': True, 'delete': True},
+                'security': {'read': True, 'write': True, 'configure': True}
+            }
+        },
+        {
+            'name': 'group_manager',
+            'description': 'Manages stokvel groups, members, and group-specific operations',
+            'is_system_role': False,
+            'permissions': {
+                'users': {'read': True, 'write': False, 'delete': False},
+                'groups': {'read': True, 'write': True, 'delete': False},
+                'analytics': {'read': True, 'export': False},
+                'approvals': {'read': True, 'approve': True, 'reject': True},
+                'support': {'read': True, 'respond': False},
+                'team': {'read': False, 'write': False, 'delete': False},
+                'payouts': {'read': True, 'approve': False, 'reject': False},
+                'audit': {'read': False},
+                'settings': {'read': False, 'write': False},
+                'financial': {'read': True, 'write': False, 'approve': False},
+                'content': {'read': True, 'write': False, 'delete': False},
+                'security': {'read': False, 'write': False, 'configure': False}
+            }
+        },
+        {
+            'name': 'financial_admin',
+            'description': 'Handles financial operations, withdrawals, and transactions',
+            'is_system_role': False,
+            'permissions': {
+                'users': {'read': True, 'write': False, 'delete': False},
+                'groups': {'read': True, 'write': False, 'delete': False},
+                'analytics': {'read': True, 'export': True},
+                'approvals': {'read': True, 'approve': True, 'reject': True},
+                'support': {'read': True, 'respond': False},
+                'team': {'read': False, 'write': False, 'delete': False},
+                'payouts': {'read': True, 'approve': True, 'reject': True},
+                'audit': {'read': True},
+                'settings': {'read': False, 'write': False},
+                'financial': {'read': True, 'write': True, 'approve': True},
+                'content': {'read': False, 'write': False, 'delete': False},
+                'security': {'read': False, 'write': False, 'configure': False}
+            }
+        },
+        {
+            'name': 'support_admin',
+            'description': 'Manages customer support, KYC approvals, and user issues',
+            'is_system_role': False,
+            'permissions': {
+                'users': {'read': True, 'write': True, 'delete': False},
+                'groups': {'read': True, 'write': False, 'delete': False},
+                'analytics': {'read': False, 'export': False},
+                'approvals': {'read': True, 'approve': True, 'reject': True},
+                'support': {'read': True, 'respond': True},
+                'team': {'read': False, 'write': False, 'delete': False},
+                'payouts': {'read': False, 'approve': False, 'reject': False},
+                'audit': {'read': False},
+                'settings': {'read': False, 'write': False},
+                'financial': {'read': False, 'write': False, 'approve': False},
+                'content': {'read': True, 'write': False, 'delete': False},
+                'security': {'read': False, 'write': False, 'configure': False}
+            }
+        }
+    ]
+    
+    for role_data in roles_data:
+        role = AdminRole(**role_data)
+        db.session.add(role)
+        print(f"Created role: {role_data['name']}")
+    
+    db.session.commit()
+    print("Default roles created successfully!")
+
+
+@app.route('/api/admin/initialize-roles', methods=['POST'])
+def initialize_default_roles():
+    """Initialize default roles for the platform"""
+    try:
+        # Check if roles already exist
+        if AdminRole.query.first():
+            return jsonify({'message': 'Roles already exist'}), 200
+        
+        roles_data = [
+            {
+                'name': 'super_admin',
+                'description': 'Full system access with ability to manage all admins and roles',
+                'is_system_role': True,
+                'permissions': {
+                    'users': {'read': True, 'write': True, 'delete': True},
+                    'groups': {'read': True, 'write': True, 'delete': True},
+                    'analytics': {'read': True, 'export': True},
+                    'approvals': {'read': True, 'approve': True, 'reject': True},
+                    'support': {'read': True, 'respond': True},
+                    'team': {'read': True, 'write': True, 'delete': True},
+                    'payouts': {'read': True, 'approve': True, 'reject': True},
+                    'audit': {'read': True},
+                    'settings': {'read': True, 'write': True},
+                    'financial': {'read': True, 'write': True, 'approve': True},
+                    'content': {'read': True, 'write': True, 'delete': True},
+                    'security': {'read': True, 'write': True, 'configure': True}
+                }
+            },
+            {
+                'name': 'group_manager',
+                'description': 'Manages stokvel groups, members, and group-specific operations',
+                'is_system_role': False,
+                'permissions': {
+                    'users': {'read': True, 'write': False, 'delete': False},
+                    'groups': {'read': True, 'write': True, 'delete': False},
+                    'analytics': {'read': True, 'export': False},
+                    'approvals': {'read': True, 'approve': True, 'reject': True},
+                    'support': {'read': True, 'respond': False},
+                    'team': {'read': False, 'write': False, 'delete': False},
+                    'payouts': {'read': True, 'approve': False, 'reject': False},
+                    'audit': {'read': False},
+                    'settings': {'read': False, 'write': False},
+                    'financial': {'read': True, 'write': False, 'approve': False},
+                    'content': {'read': True, 'write': False, 'delete': False},
+                    'security': {'read': False, 'write': False, 'configure': False}
+                }
+            },
+            {
+                'name': 'financial_admin',
+                'description': 'Handles financial operations, withdrawals, and transactions',
+                'is_system_role': False,
+                'permissions': {
+                    'users': {'read': True, 'write': False, 'delete': False},
+                    'groups': {'read': True, 'write': False, 'delete': False},
+                    'analytics': {'read': True, 'export': True},
+                    'approvals': {'read': True, 'approve': True, 'reject': True},
+                    'support': {'read': True, 'respond': False},
+                    'team': {'read': False, 'write': False, 'delete': False},
+                    'payouts': {'read': True, 'approve': True, 'reject': True},
+                    'audit': {'read': True},
+                    'settings': {'read': False, 'write': False},
+                    'financial': {'read': True, 'write': True, 'approve': True},
+                    'content': {'read': False, 'write': False, 'delete': False},
+                    'security': {'read': False, 'write': False, 'configure': False}
+                }
+            },
+            {
+                'name': 'support_admin',
+                'description': 'Manages customer support, KYC approvals, and user issues',
+                'is_system_role': False,
+                'permissions': {
+                    'users': {'read': True, 'write': True, 'delete': False},
+                    'groups': {'read': True, 'write': False, 'delete': False},
+                    'analytics': {'read': False, 'export': False},
+                    'approvals': {'read': True, 'approve': True, 'reject': True},
+                    'support': {'read': True, 'respond': True},
+                    'team': {'read': False, 'write': False, 'delete': False},
+                    'payouts': {'read': False, 'approve': False, 'reject': False},
+                    'audit': {'read': False},
+                    'settings': {'read': False, 'write': False},
+                    'financial': {'read': False, 'write': False, 'approve': False},
+                    'content': {'read': True, 'write': False, 'delete': False},
+                    'security': {'read': False, 'write': False, 'configure': False}
+                }
+            }
+        ]
+        
+        for role_data in roles_data:
+            role = AdminRole(**role_data)
+            db.session.add(role)
+        
+        db.session.commit()
+        return jsonify({'message': 'Default roles created successfully'}), 201
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+  # -------------------- MAIN --------------------
+if __name__ == '__main__':
+    app.run(port=5001, debug=True)
+
+@event.listens_for(Engine, "connect")
+def connect(dbapi_connection, connection_record):
+    connection_record.info['pid'] = os.getpid()
+
+@event.listens_for(Engine, "checkout")
+def checkout(dbapi_connection, connection_record, connection_proxy):
+    pid = os.getpid()
+    if connection_record.info['pid'] != pid:
+        connection_record.info['pid'] = pid
+        connection_record.info['checked_out'] = time.time()
