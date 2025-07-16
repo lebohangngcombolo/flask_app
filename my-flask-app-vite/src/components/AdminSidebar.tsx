@@ -32,25 +32,24 @@ const navItems: NavItem[] = [
   { name: 'Manage Groups', path: '/admin/groups', icon: Folder, tooltip: 'Create, edit, and manage all stokvel groups', subItems: [
     { label: 'Group Management', path: '/admin/groups' }
   ] },
-  { name: 'Analytics', path: '/admin/analytics', icon: BarChart2, tooltip: 'View and analyze contributions', subItems: [
-    { label: 'Contributions', path: '/admin/analytics/contributions' },
-    {
-      label: 'Reports',
-      path: '/admin/analytics/reports',
-      subItems: [
-        { label: 'Monthly', path: '/admin/analytics/reports/monthly' },
-        { label: 'Yearly', path: '/admin/analytics/reports/yearly' }
-      ]
-    }
-  ] },
+  { 
+    name: 'Analytics', 
+    path: '/admin/analytics', 
+    icon: BarChart2, 
+    tooltip: 'View and analyze analytics', 
+    subItems: [
+      { label: 'Overview', path: '/admin/analytics' },
+      { label: 'Reports', path: '/admin/analytics/reports' },
+    ] 
+  },
   {
     name: 'Approvals',
     path: '/admin/beneficiary-approvals',
     icon: ShieldCheck,
     tooltip: 'Approve or reject KYC and beneficiary documents',
     subItems: [
-      { label: 'KYC', path: '/admin/kyc-management', icon: FileText },
-      { label: 'Beneficiaries', path: '/admin/beneficiary-approvals', icon: Users },
+      { label: 'KYC', path: '/admin/kyc-management' },
+      { label: 'Beneficiaries', path: '/admin/beneficiary-approvals' },
     ],
   },
   { name: 'Support', path: '/admin/support', icon: FileText, tooltip: 'FAQ, customer concerns, and notifications', subItems: [
@@ -63,15 +62,12 @@ const navItems: NavItem[] = [
     icon: UserCheck,
     tooltip: 'Manage admin team and roles',
     subItems: [
-      { label: 'View Admins', path: '/admin/team' },
-      { label: 'Add Admin', path: '/admin/team/add' },
-      { label: 'Roles & Permissions', path: '/admin/team/roles' },
-      // { label: 'Activity Logs', path: '/admin/team/logs' }, // optional
+      { label: 'Roles & Permissions', path: '/admin/team' }
     ]
   },
   {
     name: 'Payout Requests',
-    path: '/admin/payout-requests',
+    path: '/admin/payouts',
     icon: DollarSign,
     tooltip: 'Approve or reject payout requests'
   },
@@ -107,7 +103,7 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({ sidebarOpen, setSidebarOpen
                 title={item.tooltip}
                 style={{ background: isActive ? undefined : 'transparent', border: 'none', boxShadow: isActive ? undefined : 'none' }}
               >
-                <item.icon className="w-5 h-5" />
+                {React.createElement(item.icon, {})}
                 <span>{item.name}</span>
                 {hasSubItems && (
                   openMenus[item.name] ? <ChevronDown className="w-4 h-4 ml-auto" /> : <ChevronRight className="w-4 h-4 ml-auto" />

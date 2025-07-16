@@ -98,7 +98,10 @@ export const stokvelAPI = {
 
 // Admin API calls
 export const adminAPI = {
-  getStats: () => api.get('/api/dashboard/stats'),
+  getStats: () => axios.get('/api/admin/stats'),
+  getTodo: () => axios.get('/api/admin/todo'),
+  getActivity: () => axios.get('/api/admin/activity'),
+  getAnnouncements: () => axios.get('/api/admin/announcements'),
   getGroups: () => api.get('/api/admin/groups'),
   createGroup: (data: any) => {
     console.log("API: Creating group with data:", data);
@@ -110,6 +113,23 @@ export const adminAPI = {
   approveJoinRequest: (id: number) => api.post(`/api/admin/join-requests/${id}/approve`),
   deleteJoinRequests: (ids: number[]) => api.post('/api/admin/join-requests/bulk-delete', { ids }),
   rejectJoinRequest: (id: number, data: { reason: string }) => api.post(`/api/admin/join-requests/${id}/reject`, data),
+  getAnalyticsOverview: (params?: any) => api.get('/admin/analytics/overview', { params }),
+  getWithdrawals: () => api.get('/api/admin/withdrawals'),
+  getTransactions: () => api.get('/api/admin/transactions'),
+  getReferrals: () => api.get('/api/admin/referrals'),
+  getUsers: () => api.get('/api/admin/users'),
+  getGroupsDetailed: () => api.get('/api/admin/groups-detailed'),
+  getContributions: () => api.get('/api/admin/contributions'),
+  getTeam: (params?: any) => api.get('/api/admin/team', { params }),
+  createAdmin: (data: any) => api.post('/api/admin/team', data),
+  updateAdminRole: (adminId: number, data: any) => api.put(`/api/admin/team/${adminId}/role`, data),
+  getRoles: () => api.get('/api/admin/roles'),
+  createRole: (data: any) => api.post('/api/admin/roles', data),
+  updateRole: (roleId: number, data: any) => api.put(`/api/admin/roles/${roleId}`, data),
+  deleteRole: (roleId: number) => api.delete(`/api/admin/roles/${roleId}`),
+  setupMfa: () => api.post('/api/admin/mfa/setup'),
+  verifyMfa: (data: any) => api.post('/api/admin/mfa/verify', data),
+  getAuditLogs: (params?: any) => api.get('/api/admin/audit-logs', { params }),
 };
 
 // Dashboard API calls

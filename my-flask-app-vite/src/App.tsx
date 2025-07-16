@@ -43,6 +43,11 @@ import IDeals from "./pages/IDeals";
 import AdminFAQs from './pages/AdminFAQs';
 import GroupDetails from './pages/GroupDetails';
 import Transactions from './pages/Transactions';
+import AdminAnalytics from './pages/AdminAnalytics';
+import AdminReports from './pages/AdminReports';
+import AdminTeam from './pages/AdminTeam';
+import Learning from './pages/Learning';
+import AdminPayouts from './pages/AdminPayouts';
 
 const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
@@ -140,6 +145,7 @@ const App: React.FC = () => {
           <Route path="/about" element={<AboutUs />} />
           <Route path="/contact" element={<Contact />} />
           <Route path="/news" element={<News />} />
+          <Route path="/learning" element={<Learning />} />
 
           {/* User dashboard routes */}
           <Route path="/dashboard" element={<DashboardLayout />}>
@@ -172,6 +178,10 @@ const App: React.FC = () => {
             <Route path="concerns" element={<AdminRoute><AdminConcerns /></AdminRoute>} />
             <Route path="beneficiary-approvals" element={<BeneficiaryApprovals />} />
             <Route path="faqs" element={<AdminRoute><AdminFAQs /></AdminRoute>} />
+            <Route path="analytics" element={<AdminAnalytics />} />
+            <Route path="analytics/reports" element={<AdminReports />} />
+            <Route path="team" element={<AdminTeam />} />
+            <Route path="payouts" element={<AdminRoute><AdminPayouts /></AdminRoute>} />
           </Route>
           
           {/* Phone Auth route */}

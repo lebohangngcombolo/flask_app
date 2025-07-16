@@ -47,6 +47,7 @@ import re
 import secrets
 import pyotp
 from flask import Blueprint
+from sqlalchemy import not_
 
 
 # Add this right after line 50 (after the imports and before the models)
@@ -2217,7 +2218,11 @@ def submit_kyc(current_user):
 @app.route('/api/kyc/status', methods=['GET'])
 @token_required
 def get_kyc_status(current_user):
-    kyc = KYCVerification.query.filter_by(user_id=current_user.id).order_by(KYCVerification.created_at.desc()).first()
+    # Only fetch the latest non-draft KYC record
+    kyc = KYCVerification.query.filter(
+        KYCVerification.user_id == current_user.id,
+        KYCVerification.status != 'draft'
+    ).order_by(KYCVerification.updated_at.desc()).first()
     if not kyc:
         return jsonify({'status': 'not_submitted', 'message': 'No KYC submission found.'}), 200
 
@@ -2250,7 +2255,6 @@ def get_kyc_status(current_user):
         'rejection_reason': kyc.rejection_reason,
         'created_at': str(kyc.created_at),
         'updated_at': str(kyc.updated_at),
-        "status": get_status(kyc)
     }), 200
 
 @app.route('/api/admin/kyc/submissions', methods=['GET'])
@@ -5314,3 +5318,52 @@ def checkout(dbapi_connection, connection_record, connection_proxy):
     if connection_record.info['pid'] != pid:
         connection_record.info['pid'] = pid
         connection_record.info['checked_out'] = time.time()
+
+@app.route('/api/admin/withdrawals/<int:withdrawal_id>/approve', methods=['POST'])
+@role_required(['admin'])
+def approve_withdrawal(withdrawal_id):
+    withdrawal = WithdrawalRequest.query.get_or_404(withdrawal_id)
+    if withdrawal.status != 'pending':
+        return jsonify({'error': 'Request is not pending'}), 400
+    withdrawal.status = 'approved'
+    db.session.commit()
+    # Optionally send notification to user
+    member = withdrawal.member
+    user = User.query.get(member.user_id) if member else None
+    if user:
+        notification = Notification(
+            user_id=user.id,
+            title="Payout Approved",
+            message=f"Your payout request for R{withdrawal.amount:.2f} has been approved.",
+            type="payout_approved",
+            data={"withdrawal_id": withdrawal.id}
+        )
+        db.session.add(notification)
+        db.session.commit()
+    return jsonify({'message': 'Withdrawal request approved'}), 200
+
+@app.route('/api/admin/withdrawals/<int:withdrawal_id>/reject', methods=['POST'])
+@role_required(['admin'])
+def reject_withdrawal(withdrawal_id):
+    withdrawal = WithdrawalRequest.query.get_or_404(withdrawal_id)
+    if withdrawal.status != 'pending':
+        return jsonify({'error': 'Request is not pending'}), 400
+    data = request.get_json() or {}
+    reason = data.get('reason', '')
+    withdrawal.status = 'rejected'
+    withdrawal.reason = reason
+    db.session.commit()
+    # Optionally send notification to user
+    member = withdrawal.member
+    user = User.query.get(member.user_id) if member else None
+    if user:
+        notification = Notification(
+            user_id=user.id,
+            title="Payout Rejected",
+            message=f"Your payout request for R{withdrawal.amount:.2f} was rejected. Reason: {reason}",
+            type="payout_rejected",
+            data={"withdrawal_id": withdrawal.id, "reason": reason}
+        )
+        db.session.add(notification)
+        db.session.commit()
+    return jsonify({'message': 'Withdrawal request rejected'}), 200

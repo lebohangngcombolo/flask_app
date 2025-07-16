@@ -264,6 +264,7 @@ const UserProfile: React.FC = () => {
          employment_status: response.data.employment_status !== undefined && response.data.employment_status !== null
            ? response.data.employment_status
            : userDetails.employmentStatus,
+         profilePicture: response.data.profile_picture || getCurrentUser().profilePicture || response.data.profilePicture,
        };
        localStorage.setItem('user', JSON.stringify(updatedUser));
 

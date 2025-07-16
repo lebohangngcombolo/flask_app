@@ -264,9 +264,12 @@ const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ user }) => {
         <>
           {user.profilePicture ? (
             <img
-              src={user.profilePicture.startsWith('http') ? user.profilePicture : backendUrl + user.profilePicture}
+              src={user.profilePicture && user.profilePicture.startsWith('http') 
+                ? user.profilePicture 
+                : backendUrl + user.profilePicture}
               alt="Profile"
               className="w-8 h-8 rounded-full object-cover ring-2 ring-blue-500"
+              onError={e => { e.currentTarget.src = '/default-avatar.png'; }}
             />
           ) : (
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white">

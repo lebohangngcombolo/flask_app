@@ -40,8 +40,7 @@ const sidebarItems = [
 
 const topNavItems = [
   { label: 'Offers', path: '/dashboard/marketplace' },
-  { label: 'Learning', path: '/dashboard/offers' },
-  { label: 'Announcements', path: '/dashboard/announcements' },
+  { label: 'Learning', path: '/learning' },
 ];
 
 const SEEN_NOTIFICATIONS_KEY = 'seenNotificationIds';

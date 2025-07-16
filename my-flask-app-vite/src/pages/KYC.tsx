@@ -78,6 +78,7 @@ const KYC = () => {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [modalMessage, setModalMessage] = useState('');
+  const [showCongrats, setShowCongrats] = useState(true); // Add this state
 
   // --- Data Fetching ---
   const fetchUserProfile = useCallback(async () => {
@@ -105,17 +106,11 @@ const KYC = () => {
     try {
       const { data } = await api.get('/api/kyc/status');
       if (data && data.status !== 'not_submitted') {
-        // ✅ Only set status for approved/rejected, not for pending/draft
-        if (data.status === 'approved' || data.status === 'rejected') {
-          setKycStatus({
-            status: data.status,
-            rejection_reason: data.rejection_reason,
-            submitted_at: data.created_at,
-          });
-        } else {
-          // For pending/draft status, don't show status card - let user submit fresh
-          setKycStatus({ status: 'draft' });
-        }
+        setKycStatus({
+          status: data.status,
+          rejection_reason: data.rejection_reason,
+          submitted_at: data.created_at,
+        });
         
         // Map backend data to frontend form structure
         setFormData(prev => ({
@@ -764,6 +759,318 @@ const KYC = () => {
     </div>
   );
 
+  const renderReadOnlyPersonalDetails = () => (
+    <div className="space-y-4">
+      <h3 className="text-lg font-semibold text-gray-800 dark:text-dark-text">Personal Information</h3>
+      <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Full Name</label>
+        <div className="mt-1">{formData.personal.fullName}</div>
+      </div>
+      <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Date of Birth</label>
+        <div className="mt-1">{formData.personal.dateOfBirth}</div>
+      </div>
+      <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300">ID Number</label>
+        <div className="mt-1">{formData.personal.idNumber}</div>
+      </div>
+      <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Phone</label>
+        <div className="mt-1">{formData.personal.phone}</div>
+      </div>
+      <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Email</label>
+        <div className="mt-1">{formData.personal.email}</div>
+      </div>
+      <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Employment Status</label>
+        <div className="mt-1">{formData.personal.employmentStatus}</div>
+      </div>
+      <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Employer Name</label>
+        <div className="mt-1">{formData.personal.employerName}</div>
+      </div>
+    </div>
+  );
+
+  const renderReadOnlyAddress = () => (
+    <div>
+      <h3 className="text-xl font-semibold mb-4 text-gray-800 dark:text-dark-text">Residential Address</h3>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Street Address</label><div className="mt-1">{formData.address.streetAddress}</div></div>
+        <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300">City</label><div className="mt-1">{formData.address.city}</div></div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Province</label>
+          <div className="mt-1">{formData.address.province}</div>
+        </div>
+        <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Postal Code</label><div className="mt-1">{formData.address.postalCode}</div></div>
+        <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Country</label><div className="mt-1">{formData.address.country}</div></div>
+      </div>
+    </div>
+  );
+
+  const renderReadOnlyIncome = () => (
+    <div>
+      <h3 className="text-xl font-semibold mb-4 text-gray-800 dark:text-dark-text">Income Information</h3>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Estimated Monthly Income (ZAR)</label><div className="mt-1">{formData.income.monthlyIncome}</div></div>
+      <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Source of Income</label><div className="mt-1">{formData.income.incomeSource}</div></div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Employment Type</label>
+        <div className="mt-1">{formData.income.employmentType}</div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderReadOnlyBankDetails = () => (
+    <div>
+      <h3 className="text-xl font-semibold mb-4 text-gray-800 dark:text-dark-text">Bank Details</h3>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Bank Name</label>
+          <div className="mt-1">{formData.bank.bankName}</div>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Account Number</label>
+          <div className="mt-1">{formData.bank.accountNumber}</div>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Account Type</label>
+          <div className="mt-1">{formData.bank.accountType}</div>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Branch Code</label>
+          <div className="mt-1">{formData.bank.branchCode}</div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderReadOnlyDocuments = () => (
+    <div className="space-y-6">
+      <h3 className="text-lg font-semibold text-gray-800 dark:text-dark-text">Upload Documents</h3>
+      <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+        Please upload the required documents to complete your verification process. 
+        <span className="text-red-600 font-medium">* Required documents must be uploaded before submission.</span>
+      </p>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* ID Document */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            ID Document <span className="text-red-600">*</span>
+          </label>
+          <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 dark:border-gray-600 border-dashed rounded-md hover:border-blue-400 dark:hover:border-blue-500 transition-colors">
+            <div className="space-y-1 text-center">
+              <FileUp className="mx-auto h-12 w-12 text-gray-400" />
+              <label htmlFor="idDocument" className="relative cursor-pointer bg-white dark:bg-gray-700 rounded-md font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300">
+                <input 
+                  id="idDocument" 
+                  type="file" 
+                  className="sr-only" 
+                  accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                  onChange={e => handleDocumentUpload('idDocument', e.target.files?.[0] || null)} 
+                />
+                <span>Upload a file</span>
+              </label>
+              <p className="text-xs text-gray-500 dark:text-gray-400">PDF, JPG, PNG, DOC up to 10MB</p>
+              
+              {/* Upload Status */}
+              {uploadingDocuments.idDocument && (
+                <div className="mt-2">
+                  <div className="flex items-center justify-center">
+                    <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-blue-500 mr-2"></div>
+                    <p className="text-xs text-blue-600 dark:text-blue-400">Uploading...</p>
+                  </div>
+                </div>
+              )}
+              
+              {formData.documents.idDocument && (
+                <div className="mt-2">
+                  <p className="text-xs text-green-600 dark:text-green-400 font-medium">{formData.documents.idDocument.name}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    {(formData.documents.idDocument.size / 1024 / 1024).toFixed(2)} MB
+                  </p>
+                  {uploadedDocuments.idDocument && (
+                    <div className="flex items-center justify-center mt-1">
+                      <CheckCircle className="h-3 w-3 text-green-500 mr-1" />
+                      <p className="text-xs text-green-600 dark:text-green-400">Uploaded</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Proof of Address */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Proof of Address <span className="text-red-600">*</span>
+          </label>
+          <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 dark:border-gray-600 border-dashed rounded-md hover:border-blue-400 dark:hover:border-blue-500 transition-colors">
+            <div className="space-y-1 text-center">
+              <FileUp className="mx-auto h-12 w-12 text-gray-400" />
+              <label htmlFor="proofOfAddress" className="relative cursor-pointer bg-white dark:bg-gray-700 rounded-md font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300">
+                <input 
+                  id="proofOfAddress" 
+                  type="file" 
+                  className="sr-only" 
+                  accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                  onChange={e => handleDocumentUpload('proofOfAddress', e.target.files?.[0] || null)} 
+                />
+                <span>Upload a file</span>
+              </label>
+              <p className="text-xs text-gray-500 dark:text-gray-400">PDF, JPG, PNG, DOC up to 10MB</p>
+              
+              {/* Upload Status */}
+              {uploadingDocuments.proofOfAddress && (
+                <div className="mt-2">
+                  <div className="flex items-center justify-center">
+                    <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-blue-500 mr-2"></div>
+                    <p className="text-xs text-blue-600 dark:text-blue-400">Uploading...</p>
+                  </div>
+                </div>
+              )}
+              
+              {formData.documents.proofOfAddress && (
+                <div className="mt-2">
+                  <p className="text-xs text-green-600 dark:text-green-400 font-medium">{formData.documents.proofOfAddress.name}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    {(formData.documents.proofOfAddress.size / 1024 / 1024).toFixed(2)} MB
+                  </p>
+                  {uploadedDocuments.proofOfAddress && (
+                    <div className="flex items-center justify-center mt-1">
+                      <CheckCircle className="h-3 w-3 text-green-500 mr-1" />
+                      <p className="text-xs text-green-600 dark:text-green-400">Uploaded</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Proof of Income */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Proof of Income</label>
+          <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 dark:border-gray-600 border-dashed rounded-md hover:border-blue-400 dark:hover:border-blue-500 transition-colors">
+            <div className="space-y-1 text-center">
+              <FileUp className="mx-auto h-12 w-12 text-gray-400" />
+              <label htmlFor="proofOfIncome" className="relative cursor-pointer bg-white dark:bg-gray-700 rounded-md font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300">
+                <input 
+                  id="proofOfIncome" 
+                  type="file" 
+                  className="sr-only" 
+                  accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                  onChange={e => handleDocumentUpload('proofOfIncome', e.target.files?.[0] || null)} 
+                />
+                <span>Upload a file</span>
+              </label>
+              <p className="text-xs text-gray-500 dark:text-gray-400">PDF, JPG, PNG, DOC up to 10MB</p>
+              
+              {/* Upload Status */}
+              {uploadingDocuments.proofOfIncome && (
+                <div className="mt-2">
+                  <div className="flex items-center justify-center">
+                    <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-blue-500 mr-2"></div>
+                    <p className="text-xs text-blue-600 dark:text-blue-400">Uploading...</p>
+                  </div>
+                </div>
+              )}
+              
+              {formData.documents.proofOfIncome && (
+                <div className="mt-2">
+                  <p className="text-xs text-green-600 dark:text-green-400 font-medium">{formData.documents.proofOfIncome.name}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    {(formData.documents.proofOfIncome.size / 1024 / 1024).toFixed(2)} MB
+                  </p>
+                  {uploadedDocuments.proofOfIncome && (
+                    <div className="flex items-center justify-center mt-1">
+                      <CheckCircle className="h-3 w-3 text-green-500 mr-1" />
+                      <p className="text-xs text-green-600 dark:text-green-400">Uploaded</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Bank Statement */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Bank Statement</label>
+          <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 dark:border-gray-600 border-dashed rounded-md hover:border-blue-400 dark:hover:border-blue-500 transition-colors">
+            <div className="space-y-1 text-center">
+              <FileUp className="mx-auto h-12 w-12 text-gray-400" />
+              <label htmlFor="bankStatement" className="relative cursor-pointer bg-white dark:bg-gray-700 rounded-md font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300">
+                <input 
+                  id="bankStatement" 
+                  type="file" 
+                  className="sr-only" 
+                  accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                  onChange={e => handleDocumentUpload('bankStatement', e.target.files?.[0] || null)} 
+                />
+                <span>Upload a file</span>
+              </label>
+              <p className="text-xs text-gray-500 dark:text-gray-400">PDF, JPG, PNG, DOC up to 10MB</p>
+              
+              {/* Upload Status */}
+              {uploadingDocuments.bankStatement && (
+                <div className="mt-2">
+                  <div className="flex items-center justify-center">
+                    <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-blue-500 mr-2"></div>
+                    <p className="text-xs text-blue-600 dark:text-blue-400">Uploading...</p>
+                  </div>
+                </div>
+              )}
+              
+              {formData.documents.bankStatement && (
+                <div className="mt-2">
+                  <p className="text-xs text-green-600 dark:text-green-400 font-medium">{formData.documents.bankStatement.name}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    {(formData.documents.bankStatement.size / 1024 / 1024).toFixed(2)} MB
+                  </p>
+                  {uploadedDocuments.bankStatement && (
+                    <div className="flex items-center justify-center mt-1">
+                      <CheckCircle className="h-3 w-3 text-green-500 mr-1" />
+                      <p className="text-xs text-green-600 dark:text-green-400">Uploaded</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Upload Summary */}
+      <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+        <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Upload Summary</h4>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+          <div className="flex items-center">
+            <span className={`w-2 h-2 rounded-full mr-2 ${uploadedDocuments.idDocument ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}`}></span>
+            <span className={uploadedDocuments.idDocument ? 'text-green-600 dark:text-green-400 font-medium' : 'text-gray-500 dark:text-gray-400'}>
+              ID Document {uploadedDocuments.idDocument ? '✓' : ''}
+            </span>
+          </div>
+          <div className="flex items-center">
+            <span className={`w-2 h-2 rounded-full mr-2 ${uploadedDocuments.proofOfAddress ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}`}></span>
+            <span className={uploadedDocuments.proofOfAddress ? 'text-green-600 dark:text-green-400 font-medium' : 'text-gray-500 dark:text-gray-400'}>
+              Proof of Address {uploadedDocuments.proofOfAddress ? '✓' : ''}
+            </span>
+          </div>
+          <div className="flex items-center">
+            <span className={`w-2 h-2 rounded-full mr-2 ${uploadedDocuments.proofOfIncome ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}`}></span>
+            <span className={uploadedDocuments.proofOfIncome ? 'text-green-600 dark:text-green-400 font-medium' : 'text-gray-500 dark:text-gray-400'}>
+              Proof of Income {uploadedDocuments.proofOfIncome ? '✓' : ''}
+            </span>
+          </div>
+          <div className="flex items-center">
+            <span className={`w-2 h-2 rounded-full mr-2 ${uploadedDocuments.bankStatement ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}`}></span>
+            <span className={uploadedDocuments.bankStatement ? 'text-green-600 dark:text-green-400 font-medium' : 'text-gray-500 dark:text-gray-400'}>
+              Bank Statement {uploadedDocuments.bankStatement ? '✓' : ''}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
   const renderStatusCard = () => {
     const { status, rejection_reason, submitted_at } = kycStatus;
     
@@ -832,6 +1139,31 @@ const KYC = () => {
     }
   };
 
+  const renderKYCDetailsSummary = () => (
+    <div className="space-y-2">
+      <div><strong>Full Name:</strong> {formData.personal.fullName}</div>
+      <div><strong>Date of Birth:</strong> {formData.personal.dateOfBirth}</div>
+      <div><strong>ID Number:</strong> {formData.personal.idNumber}</div>
+      <div><strong>Phone:</strong> {formData.personal.phone}</div>
+      <div><strong>Email:</strong> {formData.personal.email}</div>
+      <div><strong>Employment Status:</strong> {formData.personal.employmentStatus}</div>
+      <div><strong>Employer Name:</strong> {formData.personal.employerName}</div>
+      <div><strong>Street Address:</strong> {formData.address.streetAddress}</div>
+      <div><strong>City:</strong> {formData.address.city}</div>
+      <div><strong>Province:</strong> {formData.address.province}</div>
+      <div><strong>Postal Code:</strong> {formData.address.postalCode}</div>
+      <div><strong>Country:</strong> {formData.address.country}</div>
+      <div><strong>Monthly Income:</strong> {formData.income.monthlyIncome}</div>
+      <div><strong>Income Source:</strong> {formData.income.incomeSource}</div>
+      <div><strong>Employment Type:</strong> {formData.income.employmentType}</div>
+      <div><strong>Bank Name:</strong> {formData.bank.bankName}</div>
+      <div><strong>Account Number:</strong> {formData.bank.accountNumber}</div>
+      <div><strong>Account Type:</strong> {formData.bank.accountType}</div>
+      <div><strong>Branch Code:</strong> {formData.bank.branchCode}</div>
+      {/* Add document links if needed */}
+    </div>
+  );
+
   if (isLoading) {
     return (
       <div className="bg-white dark:bg-dark-card p-6 rounded-lg shadow-md">
@@ -848,15 +1180,61 @@ const KYC = () => {
       
       {renderStatusCard()}
 
-      {/* Always show tabs and form */}
-      {renderTabs()}
-      <div className="mt-6">
-        {activeTab === 'personal' && renderPersonalDetails()}
-        {activeTab === 'address' && renderAddress()}
-        {activeTab === 'income' && renderIncome()}
-        {activeTab === 'bank' && renderBankDetails()}
-        {activeTab === 'documents' && renderDocuments()}
-      </div>
+      {/* Show Congratulations or Rejection screen if approved/rejected and showCongrats is true */}
+      {(kycStatus.status === "approved" && showCongrats) && (
+        <div className="flex flex-col items-center justify-center h-96">
+          <h1 className="text-3xl font-bold text-green-700 mb-4">CONGRATULATIONS, {formData.personal.fullName.toUpperCase()}!</h1>
+          <p className="text-lg mb-6">Your KYC application has been approved.</p>
+          <button
+            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            onClick={() => setShowCongrats(false)}
+          >
+            Back
+          </button>
+        </div>
+      )}
+
+      {(kycStatus.status === "rejected" && showCongrats) && (
+        <div className="flex flex-col items-center justify-center h-96">
+          <h1 className="text-3xl font-bold text-red-700 mb-4">SORRY, {formData.personal.fullName.toUpperCase()}!</h1>
+          <p className="text-lg mb-2">Your KYC application was rejected.</p>
+          <p className="text-md text-gray-700 mb-6">Reason: {kycStatus.rejection_reason || "No reason provided."}</p>
+          <button
+            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            onClick={() => setShowCongrats(false)}
+          >
+            Back
+          </button>
+        </div>
+      )}
+
+      {/* Only show editable form if draft or not_submitted */}
+      {(kycStatus.status === "draft" || kycStatus.status === "not_submitted") && (
+        <>
+          {renderTabs()}
+          <div className="mt-6">
+            {activeTab === 'personal' && renderPersonalDetails()}
+            {activeTab === 'address' && renderAddress()}
+            {activeTab === 'income' && renderIncome()}
+            {activeTab === 'bank' && renderBankDetails()}
+            {activeTab === 'documents' && renderDocuments()}
+          </div>
+        </>
+      )}
+
+      {/* Render read-only tabs if status is approved/pending/rejected */}
+      {(kycStatus.status === "approved" || kycStatus.status === "pending" || kycStatus.status === "rejected") && !showCongrats && (
+        <>
+          {renderTabs()}
+          <div className="mt-6">
+            {activeTab === 'personal' && renderReadOnlyPersonalDetails()}
+            {activeTab === 'address' && renderReadOnlyAddress()}
+            {activeTab === 'income' && renderReadOnlyIncome()}
+            {activeTab === 'bank' && renderReadOnlyBankDetails()}
+            {activeTab === 'documents' && renderReadOnlyDocuments()}
+          </div>
+        </>
+      )}
 
       {/* Modals */}
       {showSuccessModal && <SuccessModal />}
