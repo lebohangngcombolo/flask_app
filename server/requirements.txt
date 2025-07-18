@@ -58,3 +58,7 @@ wsproto==1.2.0
 zipp==3.22.0
 twilio
 phonenumbers
+google-auth
+google-auth-oauthlib
+pyotp
+sendgrid
