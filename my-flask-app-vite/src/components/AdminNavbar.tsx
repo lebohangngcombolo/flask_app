@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Bell, ChevronDown, User, LogOut, Settings, UserCircle, Menu } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import logo2 from '../assets/iSTOKVEL2.png';
 
 interface Notification {
   id: number;
@@ -108,7 +109,7 @@ const AdminNavbar: React.FC<AdminNavbarProps> = ({ onToggleSidebar }) => {
         </button>
         <div className="w-px h-6 bg-gray-200 mx-4"></div>
         <div className="cursor-pointer" onClick={() => navigate('/admin/dashboard')}>
-          <span className="text-xl font-bold text-gray-800">i-STOKVEL</span>
+          <img src={logo2} alt="i-STOKVEL Logo" className="h-12 w-auto" />
         </div>
       </div>
       

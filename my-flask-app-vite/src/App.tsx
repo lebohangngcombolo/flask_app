@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, Outlet } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, Outlet, Link } from 'react-router-dom';
 import LandingPage from './pages/LandingPage';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
@@ -33,6 +33,21 @@ import ReferralDashboard from './pages/ReferralDashboard';
 import TierDetails from './pages/TierDetails';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import ClaimSubmission from "./pages/ClaimSubmission";
+import Beneficiaries from './pages/Beneficiaries';
+import AdminConcerns from './pages/AdminConcerns';
+import MyGroups from "./pages/MyGroups";
+import BeneficiaryApprovals from './pages/BeneficiaryApprovals';
+import DealDetail from "./pages/DealDetail";
+import IDeals from "./pages/IDeals";
+import AdminFAQs from './pages/AdminFAQs';
+import GroupDetails from './pages/GroupDetails';
+import Transactions from './pages/Transactions';
+import AdminAnalytics from './pages/AdminAnalytics';
+import AdminReports from './pages/AdminReports';
+import AdminTeam from './pages/AdminTeam';
+import Learning from './pages/Learning';
+import AdminPayouts from './pages/AdminPayouts';
 
 const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
@@ -130,6 +145,7 @@ const App: React.FC = () => {
           <Route path="/about" element={<AboutUs />} />
           <Route path="/contact" element={<Contact />} />
           <Route path="/news" element={<News />} />
+          <Route path="/learning" element={<Learning />} />
 
           {/* User dashboard routes */}
           <Route path="/dashboard" element={<DashboardLayout />}>
@@ -139,25 +155,47 @@ const App: React.FC = () => {
             <Route path="kyc" element={<KYCPage />} />
             <Route path="marketplace" element={<Marketplace />} />
             <Route path="stokvel-groups" element={<StokvelGroups />} />
+            <Route path="stokvel-groups/:groupId" element={<GroupDetails />} />
             <Route path="refer" element={<ReferralDashboard />} />
             <Route path="referral-history" element={<ReferralHistory />} />
             <Route path="stokvel-groups/:category/:tier" element={<TierDetails />} />
+            <Route path="claims/new" element={<ClaimSubmission />} />
+            <Route path="beneficiaries" element={<Beneficiaries />} />
             {/* Add more dashboard sub-pages here if needed */}
+            <Route path="my-groups" element={<MyGroups />} />
           </Route>
 
           {/* Admin routes - ONLY NESTED UNDER /admin */}
           <Route path="/admin" element={<AdminLayout />}>
             <Route path="dashboard" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
             <Route path="kyc-management" element={<KYCManagement />} />
-            <Route path="groups" element={<GroupAdminManagement />} />
+            <Route path="groups" element={<StokvelManagement />} />
             <Route path="group-admin-management" element={<GroupAdminManagement />} />
             <Route path="users" element={<UserManagement />} />
+            <Route path="/admin/users/transactions" element={<Transactions />} />
             <Route path="stokvels" element={<StokvelManagement />} />
+            <Route path="support/concerns" element={<AdminRoute><AdminConcerns /></AdminRoute>} />
+            <Route path="concerns" element={<AdminRoute><AdminConcerns /></AdminRoute>} />
+            <Route path="beneficiary-approvals" element={<BeneficiaryApprovals />} />
+            <Route path="faqs" element={<AdminRoute><AdminFAQs /></AdminRoute>} />
+            <Route path="analytics" element={<AdminAnalytics />} />
+            <Route path="analytics/reports" element={<AdminReports />} />
+            <Route path="team" element={<AdminTeam />} />
+            <Route path="payouts" element={<AdminRoute><AdminPayouts /></AdminRoute>} />
           </Route>
           
           {/* Phone Auth route */}
           <Route path="/phone-auth" element={<PhoneAuth />} />
 
+          {/* Group Details route */}
+          {/* This route is now nested inside the /dashboard layout */}
+
+          {/* My Groups route */}
+          {/* This route is now nested inside the /dashboard layout */}
+
+          {/* i-Deals routes */}
+          <Route path="/i-deals" element={<IDeals />} />
+          <Route path="/i-deals/:id" element={<DealDetail />} />
 
           {/* Catch all route */}
           <Route path="*" element={<Navigate to="/" replace />} />

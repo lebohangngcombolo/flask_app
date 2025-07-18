@@ -39,35 +39,22 @@ const Contact: React.FC = () => {
     setIsSubmitting(true);
     setSubmitStatus(null);
 
-    // Simulate sending form data (frontend only)
-    console.log('Form submitted:', formData);
-
-    // In a real application, you would send this data to your backend API here.
-    // Example:
-    // try {
-    //   const response = await api.post('/api/contact', formData);
-    //   if (response.status === 200) {
-    //     setSubmitStatus('success');
-    //     setFormData({ name: '', email: '', subject: '', message: '' }); // Clear form
-    //   } else {
-    //     setSubmitStatus('error');
-    //   }
-    // } catch (error) {
-    //   console.error('Contact form submission error:', error);
-    //   setSubmitStatus('error');
-    // }
-
-    // Simulate success or failure after a delay
-    setTimeout(() => {
-      const success = Math.random() > 0.2; // Simulate 80% success rate
-      if (success) {
+    try {
+      const response = await fetch('/api/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      });
+      if (response.ok) {
         setSubmitStatus('success');
-        setFormData({ name: '', email: '', subject: '', message: '' }); // Clear form on success
+        setFormData({ name: '', email: '', subject: '', message: '' }); // Clear form
       } else {
         setSubmitStatus('error');
       }
-      setIsSubmitting(false);
-    }, 1500);
+    } catch (error) {
+      setSubmitStatus('error');
+    }
+    setIsSubmitting(false);
   };
 
 

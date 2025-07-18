@@ -26,29 +26,35 @@ interface NavItem {
 const navItems: NavItem[] = [
   { name: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard, tooltip: 'Overview and platform stats' },
   { name: 'Manage Users', path: '/admin/users', icon: Users, tooltip: 'View, edit, and manage all users', subItems: [
-    { label: 'View all', path: '/admin/users' }
+    { label: 'View all', path: '/admin/users' },
+    { label: 'Transactions', path: '/admin/users/transactions' }
   ] },
   { name: 'Manage Groups', path: '/admin/groups', icon: Folder, tooltip: 'Create, edit, and manage all stokvel groups', subItems: [
     { label: 'Group Management', path: '/admin/groups' }
   ] },
-  { name: 'Analytics', path: '/admin/analytics', icon: BarChart2, tooltip: 'View and analyze contributions', subItems: [
-    { label: 'Contributions', path: '/admin/analytics/contributions' },
-    {
-      label: 'Reports',
-      path: '/admin/analytics/reports',
-      subItems: [
-        { label: 'Monthly', path: '/admin/analytics/reports/monthly' },
-        { label: 'Yearly', path: '/admin/analytics/reports/yearly' }
-      ]
-    }
-  ] },
-  { name: 'KYC Approvals', path: '/admin/kyc-management', icon: ShieldCheck, tooltip: 'Approve or reject KYC submissions', subItems: [
-    { label: 'KYC Management', path: '/admin/kyc-management' },
-  ] },
+  { 
+    name: 'Analytics', 
+    path: '/admin/analytics', 
+    icon: BarChart2, 
+    tooltip: 'View and analyze analytics', 
+    subItems: [
+      { label: 'Overview', path: '/admin/analytics' },
+      { label: 'Reports', path: '/admin/analytics/reports' },
+    ] 
+  },
+  {
+    name: 'Approvals',
+    path: '/admin/beneficiary-approvals',
+    icon: ShieldCheck,
+    tooltip: 'Approve or reject KYC and beneficiary documents',
+    subItems: [
+      { label: 'KYC', path: '/admin/kyc-management' },
+      { label: 'Beneficiaries', path: '/admin/beneficiary-approvals' },
+    ],
+  },
   { name: 'Support', path: '/admin/support', icon: FileText, tooltip: 'FAQ, customer concerns, and notifications', subItems: [
-    { label: 'FAQ', path: '/admin/support/faq' },
-    { label: 'Customer Concerns', path: '/admin/support/concerns' },
-    { label: 'Notifications', path: '/admin/support/notifications' }
+    { label: 'FAQ', path: '/admin/faqs' },
+    { label: 'Customer Concerns', path: '/admin/support/concerns' }
   ] },
   {
     name: 'Admin Team',
@@ -56,18 +62,15 @@ const navItems: NavItem[] = [
     icon: UserCheck,
     tooltip: 'Manage admin team and roles',
     subItems: [
-      { label: 'View Admins', path: '/admin/team' },
-      { label: 'Add Admin', path: '/admin/team/add' },
-      { label: 'Roles & Permissions', path: '/admin/team/roles' },
-      // { label: 'Activity Logs', path: '/admin/team/logs' }, // optional
+      { label: 'Roles & Permissions', path: '/admin/team' }
     ]
   },
   {
     name: 'Payout Requests',
-    path: '/admin/payout-requests',
+    path: '/admin/payouts',
     icon: DollarSign,
     tooltip: 'Approve or reject payout requests'
-  }
+  },
 ];
 
 interface AdminSidebarProps {
@@ -84,7 +87,7 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({ sidebarOpen, setSidebarOpen
   };
 
   return (
-    <aside className="bg-[#23295A] min-h-screen w-64 flex flex-col py-6 px-2">
+    <aside className="bg-[#23295A] min-h-screen w-64 flex flex-col py-6 px-2 transition-all duration-300 ease-in-out h-full">
       <nav className="flex-1 space-y-2">
         {navItems.map((item) => {
           const hasSubItems = !!item.subItems;
@@ -100,7 +103,7 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({ sidebarOpen, setSidebarOpen
                 title={item.tooltip}
                 style={{ background: isActive ? undefined : 'transparent', border: 'none', boxShadow: isActive ? undefined : 'none' }}
               >
-                <item.icon className="w-5 h-5" />
+                {React.createElement(item.icon, {})}
                 <span>{item.name}</span>
                 {hasSubItems && (
                   openMenus[item.name] ? <ChevronDown className="w-4 h-4 ml-auto" /> : <ChevronRight className="w-4 h-4 ml-auto" />

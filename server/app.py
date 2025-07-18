@@ -1,6 +1,7 @@
-from flask import Flask, request, jsonify, Response, make_response, send_file, Blueprint, send_from_directory
+from flask import Flask, request, jsonify, send_file, current_app, send_from_directory
+from flask import Flask, request, jsonify, send_file, current_app, Blueprint
 from flask_sqlalchemy import SQLAlchemy
-from flask_cors import CORS
+from flask_cors import CORS, cross_origin
 from werkzeug.security import generate_password_hash, check_password_hash
 import jwt
 import datetime
@@ -8,7 +9,7 @@ from functools import wraps
 import click
 from flask.cli import with_appcontext
 from datetime import datetime, timedelta
-from sqlalchemy import func
+from sqlalchemy import func, extract
 from dotenv import load_dotenv
 import os
 from flask_jwt_extended import (
@@ -40,7 +41,160 @@ import jwt as pyjwt
 from sqlalchemy import select
 from flask_socketio import SocketIO, emit
 from sqlalchemy import or_
+from google.oauth2 import id_token
+from google.auth.transport import requests as grequests
+import re
+import secrets
+import pyotp
+from flask import Blueprint
+from sqlalchemy import not_
 
+
+# Add this right after line 50 (after the imports and before the models)
+from flask import Flask, request, jsonify, send_file, current_app
+from flask_sqlalchemy import SQLAlchemy
+from flask_cors import CORS, cross_origin
+from werkzeug.security import generate_password_hash, check_password_hash
+import jwt
+import datetime
+from functools import wraps
+import click
+from flask.cli import with_appcontext
+from datetime import datetime, timedelta
+from sqlalchemy import func, extract
+from dotenv import load_dotenv
+import os
+from flask_jwt_extended import (
+    JWTManager, 
+    jwt_required, 
+    create_access_token, 
+    get_jwt_identity,
+)
+from sqlalchemy.exc import SQLAlchemyError
+from flask_mail import Mail, Message
+import random
+import requests
+import logging
+import string
+import time
+from iStokvel.utils.email_utils import send_verification_email
+from flask_migrate import Migrate
+from twilio.rest import Client
+import phonenumbers
+from werkzeug.utils import secure_filename
+from werkzeug.exceptions import HTTPException
+from sqlalchemy import event
+from sqlalchemy.engine import Engine
+from jwt import ExpiredSignatureError, InvalidTokenError
+from openai import OpenAI
+import uuid
+import openai
+import jwt as pyjwt
+from sqlalchemy import select
+from flask_socketio import SocketIO, emit
+from sqlalchemy import or_
+from google.oauth2 import id_token
+from google.auth.transport import requests as grequests
+import re
+import secrets
+import pyotp
+
+
+# Add this right after line 50 (after the imports and before the models)
+
+# -------------------- SECURITY DECORATORS --------------------
+def super_admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        try:
+            token = request.headers.get('Authorization')
+            if not token:
+                return jsonify({'error': 'No token provided'}), 401
+
+            token = token.split(' ')[1]
+            payload = pyjwt.decode(token, app.config['JWT_SECRET_KEY'], algorithms=['HS256'])
+            user_id = payload.get('user_id')
+            user = User.query.get(user_id)
+
+            if not user or not user.is_verified:
+                return jsonify({'error': 'Unauthorized'}), 401
+
+            # Check if user has super_admin role
+            if not user.admin_role or user.admin_role.name != 'super_admin':
+                return jsonify({'error': 'Super admin access required'}), 403
+
+            return f(*args, **kwargs)
+        except Exception as e:
+            return jsonify({'error': 'Authentication failed'}), 401
+    return decorated_function
+
+def mfa_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        try:
+            token = request.headers.get('Authorization')
+            if not token:
+                return jsonify({'error': 'No token provided'}), 401
+
+            token = token.split(' ')[1]
+            payload = pyjwt.decode(token, app.config['JWT_SECRET_KEY'], algorithms=['HS256'])
+            user_id = payload.get('user_id')
+            user = User.query.get(user_id)
+
+            if not user or not user.is_verified:
+                return jsonify({'error': 'Unauthorized'}), 401
+
+            # Check if MFA is enabled and verified for this session
+            session_token = payload.get('session_token')
+            if session_token:
+                session = AdminSession.query.filter_by(
+                    session_token=session_token,
+                    user_id=user_id
+                ).first()
+                
+                if not session or not session.mfa_verified:
+                    return jsonify({'error': 'MFA verification required'}), 403
+
+            return f(*args, **kwargs)
+        except Exception as e:
+            return jsonify({'error': 'Authentication failed'}), 401
+    return decorated_function
+
+def audit_log(action, resource_type=None, resource_id=None):
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            try:
+                # Get admin info from token
+                token = request.headers.get('Authorization')
+                if token:
+                    token = token.split(' ')[1]
+                    payload = pyjwt.decode(token, app.config['JWT_SECRET_KEY'], algorithms=['HS256'])
+                    admin_id = payload.get('user_id')
+                    
+                    # Create audit log
+                    audit_entry = AdminAuditLog(
+                        admin_id=admin_id,
+                        action=action,
+                        resource_type=resource_type,
+                        resource_id=str(resource_id) if resource_id else None,
+                        details={
+                            'method': request.method,
+                            'endpoint': request.endpoint,
+                            'ip_address': request.remote_addr,
+                            'user_agent': request.headers.get('User-Agent')
+                        },
+                        ip_address=request.remote_addr,
+                        user_agent=request.headers.get('User-Agent')
+                    )
+                    db.session.add(audit_entry)
+                    db.session.commit()
+                
+                return f(*args, **kwargs)
+            except Exception as e:
+                return f(*args, **kwargs)  # Continue even if audit fails
+        return decorated_function
+    return decorator
 
 # Load environment variables from .env file
 load_dotenv()
@@ -48,7 +202,7 @@ load_dotenv()
 # Config
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key')
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'postgresql://postgres:property007@localhost:5432/authdb')
+app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:property007@192.168.137.147:5432/authdb'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['MAIL_SERVER'] = os.getenv('MAIL_SERVER')
 app.config['MAIL_PORT'] = int(os.getenv('MAIL_PORT')) if os.getenv('MAIL_PORT') else None
@@ -57,7 +211,8 @@ app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME')
 app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD')
 app.config['SENDGRID_API_KEY'] = os.getenv('SENDGRID_API_KEY')
 app.config['SENDGRID_FROM_EMAIL'] = os.getenv('SENDGRID_FROM_EMAIL')
-
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 # Add JWT configuration
 app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'your-jwt-secret-key')  # Change this in production
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=1)  # Token expires in 1 hour
@@ -91,46 +246,6 @@ CORS(app, resources={r"/api/*": {"origins": "http://localhost:5173"}}, supports_
 CORS(app, resources={r"/admin/*": {"origins": "http://localhost:5173"}}, supports_credentials=True)
 
 # -------------------- UTILITY FUNCTIONS --------------------
-#-----------------------------------Admin Notifications------------------------------------
-def create_admin_notification(title, message, notification_type, data=None):
-    """Helper function to create notifications for all admin users"""
-    try:
-        admin_users = User.query.filter_by(role='admin').all()
-        for admin in admin_users:
-            notification = Notification(
-                user_id=admin.id,
-                title=title,
-                message=message,
-                type=notification_type,
-                data=data or {}
-            )
-            db.session.add(notification)
-        db.session.commit()
-        print(f"✅ Created {len(admin_users)} admin notifications for: {title}")
-    except Exception as e:
-        print(f"❌ Error creating admin notifications: {str(e)}")
-        db.session.rollback()
-
-def create_system_warning_notification(warning_type, message, severity="warning"):
-    """Create system warning/error notifications for admins"""
-    title_map = {
-        "warning": "System Warning",
-        "error": "System Error",
-        "info": "System Info"
-    }
-    
-    create_admin_notification(
-        title=title_map.get(severity, "System Alert"),
-        message=message,
-        notification_type="system",
-        data={
-            "warning_type": warning_type,
-            "severity": severity,
-            "timestamp": datetime.utcnow().isoformat()
-        }
-    )
-#-------------------------------------------------------------------------------------------------
-
 def generate_otp():
     """Generate a 6-digit OTP"""
     return ''.join([str(random.randint(0, 9)) for _ in range(6)])
@@ -180,7 +295,7 @@ def generate_account_number():
 # -------------------- MODELS --------------------
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    full_name = db.Column(db.String(100), nullable=False)
+    full_name = db.Column(db.String(128))
     phone = db.Column(db.String(20), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password = db.Column(db.String(200), nullable=False)
@@ -206,9 +321,15 @@ class User(db.Model):
     points = db.Column(db.Integer, default=0)
     valid_referrals = db.Column(db.Integer, default=0)
     account_number = db.Column(db.String(20), unique=True, nullable=True)
-    
-    #---------------------------------Admin Team Role ---------------------------------
-    role_id = db.Column(db.Integer, db.ForeignKey('admin_role.id'), nullable=True)
+    role_id = db.Column(db.Integer, db.ForeignKey('admin_role.id'))
+    mfa_enabled = db.Column(db.Boolean, default=False)
+    mfa_secret = db.Column(db.String(32))
+    mfa_backup_codes = db.Column(db.JSON)
+    last_password_change = db.Column(db.DateTime, default=datetime.utcnow)
+    password_attempts = db.Column(db.Integer, default=0)
+    locked_until = db.Column(db.DateTime)
+    force_password_change = db.Column(db.Boolean, default=False)
+    admin_role = db.relationship('AdminRole', backref='users')
 
     def set_password(self, password):
         self.password = generate_password_hash(password)
@@ -224,36 +345,36 @@ class User(db.Model):
         db.session.commit()
         return self.verification_code
 
-class StokvelGroup(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False)
-    category = db.Column(db.String(50), nullable=False)
-    tier = db.Column(db.String(20), nullable=False)
-    amount = db.Column(db.Float, nullable=True)  # or nullable=True
-    contribution_amount = db.Column(db.Float, nullable=False)  # <-- ADD THIS LINE
-    rules = db.Column(db.String(255))
-    benefits = db.Column(db.ARRAY(db.String))
-    description = db.Column(db.Text)
-    frequency = db.Column(db.String(50), nullable=False)
-    max_members = db.Column(db.Integer)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    group_code = db.Column(db.String(10), unique=True)
-    admin_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-    members = db.relationship('StokvelMember', backref='group', lazy=True)
-
     def to_dict(self):
+        """Convert user object to dictionary for JSON serialization"""
         return {
             'id': self.id,
-            'name': self.name,
-            'description': self.description,
-            'contribution_amount': float(self.contribution_amount or 0),
-            'frequency': self.frequency,
-            'max_members': self.max_members,
-            'member_count': len(self.members),
-            'group_code': self.group_code,
-            'admin_id': self.admin_id,
-            'created_at': self.created_at.isoformat()
+            'full_name': self.full_name,
+            'email': self.email,
+            'phone': self.phone,
+            'role': self.role,
+            'is_verified': self.is_verified,
+            'is_suspended': getattr(self, 'is_suspended', False),  # Default to False if not exists
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'last_activity': self.updated_at.isoformat() if self.updated_at else None,
+            'total_contributions': 0,  # You can calculate this if needed
+            'engagement_level': 'medium'  # You can calculate this based on activity
         }
+
+class StokvelGroup(db.Model):
+    __tablename__ = 'stokvel_group'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120), nullable=False)
+    category = db.Column(db.String(50), nullable=False)
+    tier = db.Column(db.String(50), nullable=False)
+    status = db.Column(db.String(20), default="active")
+    contribution_amount = db.Column(db.Float, nullable=False)
+    frequency = db.Column(db.String(20), nullable=False)
+    max_members = db.Column(db.Integer, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    description = db.Column(db.Text)  # <-- ADD THIS LINE
+    # Add other fields as needed
+    members = db.relationship('StokvelMember', backref='group', lazy=True)
 
 class StokvelMember(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -271,6 +392,8 @@ class Contribution(db.Model):
     date = db.Column(db.DateTime, default=datetime.utcnow)
     status = db.Column(db.String(50), default='pending')  # pending, confirmed, rejected
     member = db.relationship('StokvelMember', backref='contributions')
+    transaction_id = db.Column(db.Integer, db.ForeignKey('transaction.id'), nullable=True)
+    transaction = db.relationship('Transaction', backref='contributions')
 
 class Poll(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -355,28 +478,6 @@ class Notification(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     user = db.relationship('User', backref='notifications')
-
-
-#----------------------------------------Admin Team Models----------------------------------------
-class AdminRole(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(50), unique=True, nullable=False)
-    permissions = db.Column(db.JSON, nullable=False)  # e.g., {"canAddAdmin": True, ...}
-    admins = db.relationship('User', backref='admin_role', lazy=True)
-
-
-#----------------------------------------Admin Notifications----------------------------------------
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'user_id': self.user_id,
-            'title': self.title,
-            'message': self.message,
-            'type': self.type,
-            'data': self.data,
-            'is_read': self.is_read,
-            'created_at': self.created_at.isoformat() if self.created_at else None
-        }
 
 class OTP(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -496,52 +597,6 @@ class Card(db.Model):
             return 'amex'
         else:
             return 'unknown'
-
-# ---------------------------------------------- Customer Concern Models --------------------
-class CustomerConcern(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
-    name = db.Column(db.String(100), nullable=False)
-    email = db.Column(db.String(120), nullable=False)
-    subject = db.Column(db.String(200), nullable=False)
-    message = db.Column(db.Text, nullable=False)
-    status = db.Column(db.String(20), default='open')  # open, closed, etc.
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-    user = db.relationship('User', backref='concerns')
-
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'user_id': self.user_id,
-            'name': self.name,
-            'email': self.email,
-            'subject': self.subject,
-            'message': self.message,
-            'status': self.status,
-            'created_at': self.created_at.isoformat() if self.created_at else None
-        }
-
-# ---------------------------------------------- FAQ Models -----------------------------------------
-class FAQ(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    question = db.Column(db.String(255), nullable=False)
-    answer = db.Column(db.Text, nullable=False)
-    category = db.Column(db.String(100))  # e.g., Payments, Account
-    is_published = db.Column(db.Boolean, default=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'question': self.question,
-            'answer': self.answer,
-            'category': self.category,
-            'is_published': self.is_published,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None
-        }
 
 # -------------------- DECORATORS --------------------
 def token_required(f):
@@ -674,24 +729,8 @@ def role_required(allowed_roles):
         return decorated_function
     return decorator
 
-#----------------------------------------Admin Team Decorators Permissions----------------------------------------
-def permission_required(permission):
-    def decorator(f):
-        @wraps(f)
-        def decorated_function(*args, **kwargs):
-            current_user_id = get_jwt_identity()
-            user = User.query.get(current_user_id)
-            if not user or not user.admin_role:
-                return jsonify({'error': 'Unauthorized'}), 403
-            if not user.admin_role.permissions.get(permission, False):
-                return jsonify({'error': 'Insufficient permissions'}), 403
-            return f(*args, **kwargs)
-        return decorated_function
-    return decorator
-
-
-
 # -------------------- ROUTES --------------------
+
 
 @app.route('/api/test', methods=['GET'])
 def test():
@@ -740,19 +779,6 @@ def register():
                 db.session.add(referral)
 
         db.session.commit()
-
-        # Create notification for admin about new user signup
-        create_admin_notification(
-            title="New User Registration",
-            message=f"New user registered: {full_name} ({email})",
-            notification_type="user_activity",
-            data={
-                "user_id": user.id,
-                "user_name": full_name,
-                "user_email": email,
-                "user_phone": phone
-            }
-        )
 
         # Generate and send verification code with better error handling
         try:
@@ -841,6 +867,7 @@ def login():
     user_data = {
         "id": user.id,
         "full_name": user.full_name,
+        "name": user.full_name,  # <-- Add this line
         "email": user.email,
         "phone": user.phone,
         "role": user.role,
@@ -869,76 +896,113 @@ def get_current_user(current_user):
     })
 
 @app.route('/api/admin/groups', methods=['GET'])
-@token_required
-def get_admin_groups(current_user):
-    if current_user.role != 'admin':
-        return jsonify({'error': 'Unauthorized'}), 403
-
-    groups = StokvelGroup.query.all()
-    groups_data = []
-    for group in groups:
-        groups_data.append(StokvelGroup.to_dict(group))
-    return jsonify(groups_data), 200
+@jwt_required()
+def get_admin_groups():
+    groups = StokvelGroup.query.all()  # Remove status filter for now
+    result = []
+    for g in groups:
+        members = StokvelMember.query.filter_by(group_id=g.id).count()
+        result.append({
+            "id": g.id,
+            "name": g.name,
+            "category": g.category,
+            "tier": g.tier,
+            "members": members,
+            "status": g.status
+        })
+    return jsonify(result)
 
 @app.route('/api/admin/stats', methods=['GET'])
 @token_required
 def get_admin_stats(current_user):
-    # Your implementation here
-    pass
+    total_funds = db.session.query(func.sum(Wallet.balance)).scalar() or 0
+    active_groups = StokvelGroup.query.filter_by(status='active').count()
+    this_month = datetime.utcnow().replace(day=1)
+    new_members = User.query.filter(User.created_at >= this_month).count()
+    payouts_due = WithdrawalRequest.query.filter_by(status='pending').count()
+    total_users = User.query.count()
+    total_transactions = Transaction.query.count()
+    total_contributions = Contribution.query.count()
+    return jsonify({
+        "totalFunds": total_funds,
+        "activeGroups": active_groups,
+        "newMembers": new_members,
+        "payoutsDue": payouts_due,
+        "totalUsers": total_users,
+        "totalTransactions": total_transactions,
+        "totalContributions": total_contributions
+    })
 
 @app.route('/api/admin/groups', methods=['POST'])
-@token_required
-def create_stokvel_group(current_user):
-    if current_user.role != 'admin':
-        return jsonify({'error': 'Unauthorized'}), 403
-    
+@jwt_required()
+def create_group():
     try:
-        data = request.get_json()
-        required_fields = ['name', 'description', 'contribution_amount', 'frequency', 'max_members']
-        if not all(field in data for field in required_fields):
-            return jsonify({'error': 'Missing required fields'}), 400
-
-        # Generate a unique group code if not provided
-        group_code = data.get('group_code')
-        if not group_code:
-            # Ensure uniqueness
-            while True:
-                group_code = generate_group_code()
-                if not StokvelGroup.query.filter_by(group_code=group_code).first():
-                    break
-
-        new_group = StokvelGroup(
-            name=data['name'],
-            description=data['description'],
-            category=data['category'],  # <-- ADD THIS LINE
-            contribution_amount=float(data['contribution_amount']),
-            frequency=data['frequency'],
-            max_members=int(data['max_members']),
-            rules=data['rules'],
-            tier=data['tier'],
-            group_code=group_code,  # <-- Set the generated code
-            admin_id=current_user.id
+        data = request.json
+        name = data.get('name')
+        description = data.get('description', '')
+        category = data.get('category')
+        tier = data.get('tier')
+        contribution_amount = data.get('contributionAmount')
+        frequency = data.get('frequency')
+        max_members = data.get('maxMembers')
+        group = StokvelGroup(
+            name=name,
+            description=description,
+            category=category,
+            tier=tier,
+            contribution_amount=contribution_amount,
+            frequency=frequency,
+            max_members=max_members
         )
-        
-        db.session.add(new_group)
+        db.session.add(group)
         db.session.commit()
-        return jsonify({
-            'id': new_group.id,
-            'name': new_group.name,
-            'description': new_group.description,
-            'contribution_amount': new_group.contribution_amount,
-            'frequency': new_group.frequency,
-            'max_members': new_group.max_members,
-            'tier': new_group.tier,
-            'group_code': new_group.group_code,  # <-- Return the code
-            'member_count': 0,
-            'created_at': new_group.created_at.isoformat()
-        }), 201
-
+        print("Created group:", group.id, group.name, group.status)
+        return jsonify({'message': 'Group created', 'id': group.id}), 201
     except Exception as e:
-        print(f"Error creating stokvel group: {str(e)}")
-        db.session.rollback()
-        return jsonify({'error': 'Failed to create stokvel group'}), 500
+        import traceback
+        print("Group creation error:", e)
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/api/admin/groups/<int:group_id>', methods=['GET'])
+@jwt_required()
+def get_group(group_id):
+    group = StokvelGroup.query.get(group_id)
+    if not group:
+        return jsonify({'error': 'Group not found'}), 404
+
+    # Safely serialize group info
+    return jsonify({
+        "id": group.id,
+        "name": group.name,
+        "category": group.category,
+        "tier": group.tier,
+        "description": group.description,
+        "contribution_amount": group.contribution_amount,
+        "interest_rate": getattr(group, "interest_rate", None),
+        "member_count": len(group.members) if group.members else 0,
+        # Add any other fields you need
+    })
+
+@app.route('/api/admin/groups/<int:group_id>', methods=['PUT'])
+@jwt_required()
+def edit_group(group_id):
+    group = StokvelGroup.query.get_or_404(group_id)
+    data = request.get_json()
+    group.name = data.get('name', group.name)
+    # ...update other fields...
+    db.session.commit()
+    return jsonify({"success": True})
+
+@app.route('/api/admin/groups/<int:group_id>', methods=['DELETE'])
+@jwt_required()
+def delete_group(group_id):
+    group = StokvelGroup.query.get_or_404(group_id)
+    # Remove members first if needed
+    StokvelMember.query.filter_by(group_id=group.id).delete()
+    db.session.delete(group)
+    db.session.commit()
+    return jsonify({"success": True})
 
 @app.cli.command('init-db')
 @with_appcontext
@@ -1058,57 +1122,6 @@ def get_polls(current_user):
         } for option in poll.options]
     } for poll in polls])
 
-@app.route('/api/polls', methods=['POST'])
-@token_required
-def create_poll(current_user):
-    data = request.get_json()
-    poll = Poll(
-        group_id=current_user.group_id,
-        title=data['title'],
-        description=data.get('description'),
-        end_date=datetime.fromisoformat(data['end_date']) if data.get('end_date') else None
-    )
-    db.session.add(poll)
-    db.session.commit()
-    
-    for option_text in data['options']:
-        option = PollOption(poll_id=poll.id, text=option_text)
-        db.session.add(option)
-    
-    try:
-        db.session.commit()
-        return jsonify({'message': 'Poll created successfully', 'poll_id': poll.id})
-    except SQLAlchemyError as e:
-        db.session.rollback()
-        return jsonify({'error': 'Database error occurred'}), 500
-
-@app.route('/api/meetings', methods=['GET'])
-@token_required
-def get_meetings(current_user):
-    meetings = Meeting.query.filter_by(group_id=current_user.group_id).all()
-    return jsonify([{
-        'id': meeting.id,
-        'title': meeting.title,
-        'description': meeting.description,
-        'date': meeting.date.isoformat(),
-        'location': meeting.location,
-        'status': meeting.status
-    } for meeting in meetings])
-
-@app.route('/api/meetings', methods=['POST'])
-@token_required
-def create_meeting(current_user):
-    data = request.get_json()
-    meeting = Meeting(
-        group_id=current_user.group_id,
-        title=data['title'],
-        description=data.get('description'),
-        date=datetime.fromisoformat(data['date']),
-        location=data.get('location')
-    )
-    db.session.add(meeting)
-    db.session.commit()
-    return jsonify({'message': 'Meeting created successfully', 'meeting_id': meeting.id})
 
 @app.route('/api/withdrawals', methods=['GET'])
 @token_required
@@ -1141,19 +1154,20 @@ def create_withdrawal(current_user):
 @app.route('/api/groups/available', methods=['GET'])
 def get_available_groups():
     groups = StokvelGroup.query.all()
-    return jsonify([{
-        'id': g.id,
-        'name': g.name,
-        'category': g.category,  # <-- ADD THIS LINE
-        'tier': g.tier,
-        'amount': g.amount,
-        'rules': g.rules,
-        'benefits': g.benefits,
-        'description': g.description,
-        'frequency': g.frequency,
-        'max_members': g.max_members,
-        # ... any other fields you want to expose ...
-    } for g in groups])
+    return jsonify([
+        {
+            'id': g.id,
+            'name': g.name,
+            'description': g.description,
+            'category': g.category,
+            'tier': g.tier,
+            'amount': g.contribution_amount,  # <-- FIXED
+            'frequency': g.frequency,
+            'maxMembers': g.max_members,
+            'createdAt': g.created_at,
+            # ... any other fields ...
+        } for g in groups
+    ])
 
 @app.route('/api/dashboard/stats', methods=['GET'])
 @token_required
@@ -1180,16 +1194,35 @@ def get_dashboard_stats(current_user):
             .limit(5) \
             .all()
 
-        # Get monthly contribution summary
+        # Daily summary (last 30 days)
+        daily_contributions = db.session.query(
+            func.to_char(Contribution.date, 'YYYY-MM-DD').label('date'),
+            func.sum(Contribution.amount).label('total')
+        ).join(StokvelMember) \
+         .filter(StokvelMember.user_id == current_user.id) \
+         .group_by('date') \
+         .order_by('date') \
+         .all()
+
+        # Weekly summary (last 12 weeks)
+        weekly_contributions = db.session.query(
+            func.to_char(Contribution.date, 'IYYY-IW').label('week'),  # ISO week
+            func.sum(Contribution.amount).label('total')
+        ).join(StokvelMember) \
+         .filter(StokvelMember.user_id == current_user.id) \
+         .group_by('week') \
+         .order_by('week') \
+         .all()
+
+        # Monthly summary (already present)
         monthly_contributions = db.session.query(
             func.to_char(Contribution.date, 'YYYY-MM').label('month'),
             func.sum(Contribution.amount).label('total')
-        ) \
-            .join(StokvelMember) \
-            .filter(StokvelMember.user_id == current_user.id) \
-            .group_by('month') \
-            .order_by('month') \
-            .all()
+        ).join(StokvelMember) \
+         .filter(StokvelMember.user_id == current_user.id) \
+         .group_by('month') \
+         .order_by('month') \
+         .all()
 
         # Get wallet balance
         wallet_balance = current_user.wallet[0].balance if current_user.wallet else 0.0
@@ -1232,6 +1265,8 @@ def get_dashboard_stats(current_user):
                 'type': 'deposit',
                 'description': f'Contribution to {t.member.group.name}'
             } for t in recent_transactions],
+            'dailySummary': [{'date': row.date, 'total': float(row.total)} for row in daily_contributions],
+            'weeklySummary': [{'week': row.week, 'total': float(row.total)} for row in weekly_contributions],
             'monthlySummary': [{'month': row.month, 'total': float(row.total)} for row in monthly_contributions],
             'groupStats': group_stats if is_group_admin else [],
             'activeGroups': [{
@@ -1303,36 +1338,32 @@ def register_stokvel_group(current_user):
 
 @app.route('/api/stokvel/join-group', methods=['POST'])
 @jwt_required()
-def join_stokvel_group():
+def join_group():
+    user_id = get_jwt_identity()
     data = request.get_json()
     category = data.get('category')
     tier = data.get('tier')
     amount = data.get('amount')
-    user_id = get_jwt_identity()
 
-    # Validate required fields
-    if not category or not tier or not amount:
-        return jsonify({"error": "Missing required fields"}), 400
-
-    # Prevent duplicate pending requests for the same user/category/tier/amount
+    # Check for existing pending request
     existing = GroupJoinRequest.query.filter_by(
-        user_id=user_id, category=category, tier=tier, amount=amount, status="pending"
+        user_id=user_id, category=category, tier=tier, amount=amount, status='pending'
     ).first()
     if existing:
-        return jsonify({"error": "You already have a pending request for this tier."}), 400
+        return jsonify({"error": "You already have a pending request for this group/tier/amount."}), 400
 
-    # Save the join request in the database
+    # Create new join request WITH created_at
     join_request = GroupJoinRequest(
         user_id=user_id,
         category=category,
         tier=tier,
         amount=amount,
-        status="pending"
+        status='pending',
+        created_at=datetime.utcnow()  # <-- THIS IS THE FIX
     )
     db.session.add(join_request)
     db.session.commit()
-
-    return jsonify({"message": "Join request submitted successfully!"}), 201
+    return jsonify({"message": "Join request submitted."}), 201
 
 def validate_email(email):
     # Add email validation
@@ -1602,6 +1633,7 @@ def get_user_profile(current_user):
         return jsonify({
             "id": current_user.id,
             "full_name": current_user.full_name,
+            "name": current_user.full_name,  # <-- Add this line
             "email": current_user.email,
             "phone": current_user.phone,
             "role": current_user.role,
@@ -1611,7 +1643,9 @@ def get_user_profile(current_user):
             "is_verified": current_user.is_verified,
             "two_factor_enabled": current_user.two_factor_enabled,
             "account_number": current_user.account_number,
-            "wallet_balance": float(wallet.balance) if wallet.balance is not None else 0.00
+            "wallet_balance": float(wallet.balance) if wallet.balance is not None else 0.00,
+            # Add this line to always return date_of_birth as a string
+            "date_of_birth": current_user.date_of_birth.strftime('%Y-%m-%d') if current_user.date_of_birth else None,
         }), 200
     except Exception as e:
         print(f"❌ Error in get_user_profile: {str(e)}")
@@ -1626,8 +1660,6 @@ def get_user_profile(current_user):
 @token_required
 def update_user_profile(current_user):
     data = request.get_json()
-
-    # Update fields that are simple string assignments
     if 'name' in data:
         current_user.full_name = data['name']
     if 'phone' in data:
@@ -1636,16 +1668,11 @@ def update_user_profile(current_user):
         current_user.gender = data['gender']
     if 'employment_status' in data:
         current_user.employment_status = data['employment_status']
-
-    # Specifically handle date_of_birth: parse string to datetime object
     if 'date_of_birth' in data and data['date_of_birth']:
         try:
-            # The fromisoformat() method correctly parses 'YYYY-MM-DD'
             current_user.date_of_birth = datetime.fromisoformat(data['date_of_birth'])
         except (ValueError, TypeError):
-            # Handle cases where the date format is wrong or data is null
             return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD.'}), 400
-
     db.session.commit()
     return jsonify({'message': 'Profile updated successfully'}), 200
 
@@ -1862,15 +1889,6 @@ def handle_error(error):
         return error
 
     logger.error(f"Unhandled error: {str(error)}")
-
-#-----------------------------------Admin Notifications------------------------------------
-    # Create system error notification for admins
-    create_system_warning_notification(
-        warning_type="unhandled_exception",
-        message=f"Unhandled error occurred: {str(error)}",
-        severity="error"
-    )
-    
     if isinstance(error, SQLAlchemyError):
         db.session.rollback()
         return jsonify({"error": "Database error occurred"}), 500
@@ -1937,6 +1955,92 @@ def verify_2fa_login():
     db.session.commit()
     access_token = create_access_token(identity=str(user.id))
     return jsonify({'message': '2FA login successful', 'access_token': access_token}), 200
+
+@app.route("/api/auth/google", methods=["POST", "OPTIONS"])
+@cross_origin(origin="http://localhost:5173", supports_credentials=True)
+def google_login():
+    if request.method == "OPTIONS":
+        return '', 200
+    token = request.json.get("token")
+    logger.debug("Received Google token")  # Using your existing logger instead of print
+    
+    if not token:
+        return jsonify({"error": "Missing Google token"}), 400
+
+    try:
+        # Verify the Google token
+        idinfo = id_token.verify_oauth2_token(token, grequests.Request(), GOOGLE_CLIENT_ID)
+        
+        # Validate that the token is for your app
+        if idinfo['aud'] != GOOGLE_CLIENT_ID:
+            raise ValueError("Invalid client ID")
+
+        google_id = idinfo["sub"]
+        email = idinfo.get("email")
+        full_name = idinfo.get("name")
+        profile_picture = idinfo.get("picture")
+
+        # Check if user exists by email (since not all users may have google_id)
+        user = User.query.filter_by(email=email).first()
+        
+        if not user:
+            # Create new user with Google auth
+            user = User(
+                email=email,
+                full_name=full_name,
+                profile_picture=profile_picture,
+                is_verified=True,  # Google verified the email
+                google_id=google_id
+            )
+            db.session.add(user)
+            db.session.commit()
+        elif not user.google_id:
+            # Existing user without google_id - update it
+            user.google_id = google_id
+            if not user.profile_picture:
+                user.profile_picture = profile_picture
+            db.session.commit()
+
+        # Create JWT token (using your existing JWT setup)
+        access_token = create_access_token(identity=str(user.id))
+
+        # Track the login session
+        user_agent = request.headers.get('User-Agent', 'Unknown')
+        ip_address = request.remote_addr or 'Unknown'
+        session = UserSession(
+            user_id=user.id,
+            user_agent=user_agent,
+            ip_address=ip_address
+        )
+        db.session.add(session)
+        db.session.commit()
+
+        # Return user data in the same format as your regular login
+        user_data = {
+            "id": user.id,
+            "full_name": user.full_name,
+            "email": user.email,
+            "phone": user.phone,
+            "role": user.role,
+            "profile_picture": user.profile_picture,
+            "is_verified": user.is_verified
+        }
+        
+        return jsonify({
+            "success": True,
+            "message": "Google login successful",
+            "access_token": access_token,
+            "user": user_data
+        }), 200
+
+    except ValueError as e:
+        logger.error(f"Google token validation failed: {str(e)}")
+        return jsonify({"error": "Invalid Google token", "details": str(e)}), 401
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Google login error: {str(e)}")
+        return jsonify({"error": "Server error during Google login"}), 500
+
 
 @app.route('/api/user/security/2fa/disable', methods=['POST'])
 @token_required
@@ -2028,7 +2132,9 @@ def update_kyc(current_user):
                 
                 filename = secure_filename(f"{current_user.id}_{field_name}_{file.filename}")
                 file_path = os.path.join(KYC_UPLOAD_FOLDER, filename)
+                print("Saving file to:", file_path)
                 file.save(file_path)
+                print(f"Saved file to: {file_path}")
                 return file_path
             return None
 
@@ -2092,6 +2198,7 @@ def submit_kyc(current_user):
         if file:
             filename = secure_file(f"{current_user.id}_{field}_{file.filename}")
             file_path = os.path.join(KYC_UPLOAD_FOLDER, filename)
+            print("Saving file to:", file_path)
             file.save(file_path)
             return file_path
         return None
@@ -2111,7 +2218,11 @@ def submit_kyc(current_user):
 @app.route('/api/kyc/status', methods=['GET'])
 @token_required
 def get_kyc_status(current_user):
-    kyc = KYCVerification.query.filter_by(user_id=current_user.id).order_by(KYCVerification.created_at.desc()).first()
+    # Only fetch the latest non-draft KYC record
+    kyc = KYCVerification.query.filter(
+        KYCVerification.user_id == current_user.id,
+        KYCVerification.status != 'draft'
+    ).order_by(KYCVerification.updated_at.desc()).first()
     if not kyc:
         return jsonify({'status': 'not_submitted', 'message': 'No KYC submission found.'}), 200
 
@@ -2143,7 +2254,7 @@ def get_kyc_status(current_user):
         'verification_date': str(kyc.verification_date) if kyc.verification_date else None,
         'rejection_reason': kyc.rejection_reason,
         'created_at': str(kyc.created_at),
-        'updated_at': str(kyc.updated_at)
+        'updated_at': str(kyc.updated_at),
     }), 200
 
 @app.route('/api/admin/kyc/submissions', methods=['GET'])
@@ -2313,35 +2424,6 @@ def list_all_stokvels():
     # your code here
     pass
 
-@app.route('/api/admin/groups/<int:group_id>', methods=['PUT'])
-@token_required
-def update_group(current_user, group_id):
-    if current_user.role != 'admin':
-        return jsonify({'error': 'Unauthorized'}), 403
-
-    group = StokvelGroup.query.get_or_404(group_id)
-    data = request.get_json()
-    group.name = data.get('name', group.name)
-    group.description = data.get('description', group.description)
-    group.contribution_amount = float(data.get('contribution_amount', group.amount))
-    group.frequency = data.get('frequency', group.frequency)
-    group.max_members = int(data.get('max_members', group.max_members))
-    group.tier = data.get('tier', group.tier)  # Add this if you have a tier field
-
-    db.session.commit()
-    return jsonify({'message': 'Group updated successfully'}), 200
-
-@app.route('/api/admin/groups/<int:group_id>', methods=['DELETE'])
-@token_required
-def delete_group(current_user, group_id):
-    if current_user.role != 'admin':
-        return jsonify({'error': 'Unauthorized'}), 403
-
-    group = StokvelGroup.query.get_or_404(group_id)
-    db.session.delete(group)
-    db.session.commit()
-    return jsonify({'message': 'Group deleted successfully'}), 200
-
 
     # Check for existing pending request
     existing = JoinRequest.query.filter_by(
@@ -2360,114 +2442,120 @@ def delete_group(current_user, group_id):
 
 class GroupJoinRequest(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    category = db.Column(db.String(50), nullable=False)
-    tier = db.Column(db.String(50), nullable=False)
-    amount = db.Column(db.Float, nullable=False)
-    status = db.Column(db.String(20), default='pending')  # pending, approved, rejected
-    reason = db.Column(db.String(255))  # Reason for rejection
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    group_id = db.Column(db.Integer, db.ForeignKey('stokvel_group.id'))  # <-- Add this
+    category = db.Column(db.String(64))
+    tier = db.Column(db.String(64))
+    amount = db.Column(db.Integer)
+    status = db.Column(db.String(20), default="Pending")
+    reason = db.Column(db.String(255))
+    created_at = db.Column(db.DateTime)
     user = db.relationship('User', backref='join_requests')
+    group = db.relationship('StokvelGroup', backref='join_requests')  # <-- Add this
+
 
 @app.route('/api/admin/join-requests', methods=['GET'])
 @jwt_required()
-def list_join_requests():
-    requests = GroupJoinRequest.query.order_by(GroupJoinRequest.created_at.desc()).all()
-    result = []
-    for req in requests:
-        result.append({
-            'id': req.id,
-            'user_id': req.user_id,
-            'category': req.category,
-            'tier': req.tier,
-            'amount': req.amount,
-            'status': req.status,
-            'reason': req.reason,
-            'created_at': req.created_at.isoformat() if req.created_at else None,
-            'user': {
-                'id': req.user.id,
-                'name': req.user.full_name,
-                'email': req.user.email,
-            }
-        })
-    return jsonify(result)
+def get_admin_join_requests():
+    requests = GroupJoinRequest.query.all()
+    return jsonify([
+        {
+            "id": r.id,
+            "user": r.user.full_name if r.user else "",
+            "category": r.category,
+            "tier": r.tier,
+            "amount": r.amount,
+            "status": r.status,
+            "reason": r.reason,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        }
+        for r in requests
+    ])
 
 @app.route('/api/admin/join-requests/<int:request_id>/approve', methods=['POST'])
 @jwt_required()
 def approve_join_request(request_id):
     req = GroupJoinRequest.query.get_or_404(request_id)
-    user = User.query.get(req.user_id)
-    kyc = KYCVerification.query.filter_by(user_id=user.id).order_by(KYCVerification.created_at.desc()).first()
-    
-    if not kyc or kyc.status != 'approved':
-        # Send notification to user to complete KYC
-        notification = Notification(
-            user_id=user.id,
-            title="KYC Required for Group Approval",
-            message="Your join request is pending. Please complete your KYC verification to be approved for the group.",
-            type="kyc_required",
-            data={
-                "join_request_id": req.id,
-                "action_required": "complete_kyc",
-                "kyc_url": "/dashboard/kyc"  # <-- Add this line
-            }
+    user_id = req.user_id
+    category = req.category
+    tier = req.tier
+    amount = req.amount
+
+    # 1. Find or create the group
+    group = StokvelGroup.query.filter_by(category=category, tier=tier).first()
+    if not group:
+        group = StokvelGroup(
+            name=f"{category} {tier}",
+            category=category,
+            tier=tier,
+            status="active",
+            contribution_amount=amount,
+            frequency="monthly",  # or get from req or default
+            max_members=100,      # or get from req or default
         )
-        db.session.add(notification)
+        db.session.add(group)
         db.session.commit()
-        
-        return jsonify({
-            'error': 'User must complete and have KYC approved before approval.',
-            'message': 'Notification sent to user to complete KYC',
-            'user_email': user.email
-        }), 400
-    
-    req.status = 'approved'
+
+    # 2. Add user as member if not already
+    if not StokvelMember.query.filter_by(user_id=user_id, group_id=group.id).first():
+        member = StokvelMember(user_id=user_id, group_id=group.id)
+        db.session.add(member)
+
+    # 3. Approve the join request
+    req.status = "approved"
+    req.group_id = group.id
     db.session.commit()
-    return jsonify({'message': 'Request approved'})
+
+    # After adding user to group
+    notification = Notification(
+        user_id=user_id,  # <-- Use user_id instead of approved_user.id
+        title="Group Join Approved",
+        message=f"You have been approved to join {group.name} ({tier})!",
+        type="group_join_approved",
+        data={"group_id": group.id, "tier": tier}
+    )
+    db.session.add(notification)
+    db.session.commit()
+
+    return jsonify({"success": True})
 
 @app.route('/api/admin/join-requests/<int:request_id>/reject', methods=['POST'])
 @jwt_required()
 def reject_join_request(request_id):
-    data = request.get_json()
-    reason = data.get('reason', '')
     req = GroupJoinRequest.query.get_or_404(request_id)
+    data = request.get_json()
     req.status = 'rejected'
-    req.reason = reason
+    req.reason = data.get('reason', '')
     db.session.commit()
-    return jsonify({'message': 'Request rejected'})
+    return jsonify({"message": "Request rejected."})
 
 @app.route('/api/user/join-requests', methods=['GET'])
 @jwt_required()
 def get_user_join_requests():
     user_id = get_jwt_identity()
     requests = GroupJoinRequest.query.filter_by(user_id=user_id).all()
-    result = []
-    for req in requests:
-        result.append({
-            'category': req.category,
-            'tier': req.tier,
-            'amount': req.amount,
-            'status': req.status,
-            'reason': req.reason,
-            'created_at': req.created_at.isoformat() if req.created_at else None
-        })
-    return jsonify(result)
-
-
+    return jsonify([
+        {
+            "id": r.id,
+            "group_id": r.group_id,
+            "group_name": r.group.name if r.group else "",
+            "category": r.category,
+            "tier": r.tier,
+            "amount": r.amount,
+            "status": r.status,
+            "reason": r.reason,
+            "created_at": r.created_at.isoformat(),
+        }
+        for r in requests
+    ])
 
 @app.route('/api/user/notifications', methods=['GET'])
 @jwt_required()
 def get_user_notifications():
     user_id = get_jwt_identity()
     notifications = Notification.query.filter_by(user_id=user_id).order_by(Notification.created_at.desc()).all()
-
-#------------------------------------Print Statements------------------------------------    
-    print("DEBUG: notifications type:", type(notifications))
-    print("DEBUG: first notification type:", type(notifications[0]) if notifications else "None")
-    print("DEBUG: first notification repr:", repr(notifications[0]) if notifications else "None")
     
-    return jsonify([{
+    return jsonify({'notifications': [{
         'id': n.id,
         'title': n.title,
         'message': n.message,
@@ -2475,7 +2563,7 @@ def get_user_notifications():
         'data': n.data,
         'is_read': n.is_read,
         'created_at': n.created_at.isoformat()
-    } for n in notifications])
+    } for n in notifications]})
 
 @app.route('/api/user/notifications/<int:notification_id>/read', methods=['POST'])
 @jwt_required()
@@ -2489,40 +2577,58 @@ def mark_notification_read(notification_id):
     
     return jsonify({'message': 'Notification marked as read'})
 
-#@app.route('/api/admin/notifications', methods=['GET'])
-#@jwt_required()
-#def get_admin_notifications():
-#    user_id = get_jwt_identity()
-#    user = User.query.get(user_id)
-#    
-#    if not user or user.role != 'admin':
-#        return jsonify({'error': 'Unauthorized'}), 401
-#    
-#    # Get notifications for admin users
-#    notifications = Notification.query.filter_by(user_id=user_id).order_by(Notification.created_at.desc()).all()
-#    
-#    return jsonify([{
-#        'id': n.id,
-#        'title': n.title,
-#        'message': n.message,
-#        'type': n.type,
-#        'data': n.data,
-#        'is_read': n.is_read,
-#        'created_at': n.created_at.isoformat()
-#    } for n in notifications])
+@app.route('/api/admin/notifications', methods=['GET'])
+@jwt_required()
+def get_admin_notifications():
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    
+    if not user or user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    # Get notifications for admin users
+    notifications = Notification.query.filter_by(user_id=user_id).order_by(Notification.created_at.desc()).all()
+    
+    return jsonify([{
+        'id': n.id,
+        'title': n.title,
+        'message': n.message,
+        'type': n.type,
+        'data': n.data,
+        'is_read': n.is_read,
+        'created_at': n.created_at.isoformat()
+    } for n in notifications])
 
 @app.route('/api/admin/notifications/<int:notification_id>/read', methods=['POST'])
 @jwt_required()
 def mark_admin_notification_read(notification_id):
-    notification = Notification.query.get_or_404(notification_id)
-    notification.is_read = True
-    db.session.commit()
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    
+    if not user or user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    notification = Notification.query.filter_by(id=notification_id, user_id=user_id).first()
+    
+    if notification:
+        notification.is_read = True
+        db.session.commit()
+    
     return jsonify({'message': 'Notification marked as read'})
 
 @app.route('/api/user/notifications/mark-as-read', methods=['POST'])
-@token_required
-def mark_notifications_as_read(current_user):
-    return jsonify({'message': 'Not implemented'}), 501
+@jwt_required()
+def mark_notifications_as_read():
+    user_id = get_jwt_identity()
+    notification_ids = request.json.get('notification_ids', None)
+    query = Notification.query.filter_by(user_id=user_id)
+    if notification_ids:
+        query = query.filter(Notification.id.in_(notification_ids))
+    notifications = query.all()
+    for n in notifications:
+        n.is_read = True
+    db.session.commit()
+    return jsonify({'message': 'Notifications marked as read'})
 
 
 
@@ -2777,6 +2883,7 @@ class Transaction(db.Model):
     card_id = db.Column(db.Integer, db.ForeignKey('card.id'))  # For deposits
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     completed_at = db.Column(db.DateTime)
+    payment_method = db.Column(db.String(20))  # 'wallet' or 'bank'
     
     # Relationships
     user = db.relationship('User', backref='transactions')
@@ -2795,7 +2902,8 @@ class Transaction(db.Model):
             'recipient_email': self.recipient_email,
             'sender_email': self.sender_email,
             'created_at': self.created_at.isoformat(),
-            'completed_at': self.completed_at.isoformat() if self.completed_at else None
+            'completed_at': self.completed_at.isoformat() if self.completed_at else None,
+            'payment_method': self.payment_method
         }
 
 def get_or_create_wallet(user_id):
@@ -2864,7 +2972,8 @@ def process_deposit(user_id, amount, card_id, description=""):
             reference=generate_transaction_reference(),
             description=description or f"Deposit via {card.card_type.title()} ****{card.card_number_last4}",
             card_id=card_id,
-            completed_at=datetime.utcnow()
+            completed_at=datetime.utcnow(),
+            payment_method='wallet'  # Add this if you want to track wallet/bank
         )
         
         # Update wallet balance
@@ -3022,7 +3131,8 @@ def make_transfer(current_user):
             description=f"Transfer to {recipient.full_name} ({recipient_account_number[-4:]})",
             recipient_email=recipient.email,
             sender_email=current_user.email,
-            completed_at=datetime.utcnow()
+            completed_at=datetime.utcnow(),
+            payment_method='wallet'  # Add this if you want to track wallet/bank
         )
 
         recipient_transaction = Transaction(
@@ -3036,7 +3146,8 @@ def make_transfer(current_user):
             description=f"Transfer from {current_user.full_name} ({current_user.account_number[-4:]})",
             recipient_email=recipient.email,
             sender_email=current_user.email,
-            completed_at=datetime.utcnow()
+            completed_at=datetime.utcnow(),
+            payment_method='wallet'  # Add this if you want to track wallet/bank
         )
 
         # Create notification for recipient
@@ -3388,7 +3499,8 @@ def withdraw(current_user):
             status='completed',
             reference=generate_transaction_reference(),
             description=f"Withdrawal to bank account ending in {bank_account_number[-4:]} (Fee: R{fee:.2f})",
-            completed_at=datetime.utcnow()
+            completed_at=datetime.utcnow(),
+            payment_method='wallet'  # Add this if you want to track wallet/bank
         )
         db.session.add(transaction)
         
@@ -3442,7 +3554,215 @@ def delete_card(card_id):
     db.session.commit()
     return jsonify({'message': 'Card deleted successfully'}), 200
 
-#------------------------------------Contact & Concerns Routes------------------------------------
+
+
+@app.route('/api/admin/groups/<int:group_id>', methods=['GET'])
+@jwt_required()
+def get_group_details(group_id):
+    group = StokvelGroup.query.get_or_404(group_id)
+    # Optionally, fetch members and join requests here
+    return jsonify({
+        'id': group.id,
+        'name': group.name,
+        'description': group.description,
+        'category': group.category,
+        'tier': group.tier,
+        'contributionAmount': group.contribution_amount,
+        'frequency': group.frequency,
+        'maxMembers': group.max_members,
+        'createdAt': group.created_at,
+    })
+
+@app.route('/api/admin/groups/<int:group_id>/members', methods=['GET'])
+@jwt_required()
+def get_group_members(group_id):
+    # Assuming a relationship exists
+    group = StokvelGroup.query.get_or_404(group_id)
+    # Replace with your actual member fetching logic
+    members = User.query.join(StokvelMember).filter(StokvelMember.group_id == group_id).all()
+    return jsonify([
+        {
+            "id": m.id,
+            "full_name": getattr(m, "full_name", None) or getattr(m, "name", None),  # <-- Use full_name instead of name
+            "email": m.email,
+            # ...
+        } for m in members
+    ])
+
+@app.route('/api/admin/groups/<int:group_id>/requests', methods=['GET'])
+@jwt_required()
+def get_group_requests(group_id):
+    requests = GroupJoinRequest.query.filter_by(group_id=group_id).all()
+    return jsonify([{
+        'id': r.id,
+        'userId': r.user_id,
+        'status': r.status,
+        'reason': r.reason,
+        'createdAt': r.created_at.isoformat() if r.created_at else None,
+    } for r in requests])
+
+@app.route('/api/admin/requests/<int:request_id>/approve', methods=['POST'])
+@jwt_required()
+def approve_request(request_id):
+    req = GroupJoinRequest.query.get_or_404(request_id)
+    req.status = 'approved'
+    db.session.commit()
+    return jsonify({'message': 'Request approved'})
+
+@app.route('/api/admin/requests/<int:request_id>/deny', methods=['POST'])
+@jwt_required()
+def deny_request(request_id):
+    req = GroupJoinRequest.query.get_or_404(request_id)
+    req.status = 'rejected'
+    req.reason = request.json.get('reason', '')
+    db.session.commit()
+    return jsonify({'message': 'Request denied'})
+
+def join_request_to_dict(jr):
+    return {
+        "id": jr.id,
+        "user_id": jr.user_id,
+        "user": {
+            "id": jr.user.id,
+            "name": jr.user.full_name,
+            "email": jr.user.email,
+            # ...other user fields...
+        } if jr.user else None,
+        # ... other fields ...
+    }
+
+@app.cli.command('create-default-groups')
+def create_default_groups():
+    default_groups = [
+        {'name': 'Savings Bronze', 'category': 'savings', 'tier': 'Bronze', 'contribution_amount': 200, 'frequency': 'monthly', 'max_members': 50},
+        # ... add the rest ...
+    ]
+    for group_data in default_groups:
+        existing = StokvelGroup.query.filter_by(
+            category=group_data['category'], 
+            tier=group_data['tier']
+        ).first()
+        if not existing:
+            group = StokvelGroup(**group_data)
+            db.session.add(group)
+            print(f"Created: {group_data['name']}")
+    db.session.commit()
+    print("Default groups created successfully!")
+
+@app.route('/api/beneficiaries', methods=['POST'])
+@jwt_required()
+def add_beneficiary():
+    user_id = get_jwt_identity()
+    data = request.get_json()
+    name = data.get('name')
+    id_number = data.get('id_number')
+    relationship = data.get('relationship')
+    date_of_birth = data.get('date_of_birth')
+    phone = data.get('phone')
+    email = data.get('email')
+    if not name:
+        return jsonify({"error": "Name is required"}), 400
+    beneficiary = Beneficiary(
+        user_id=user_id,
+        name=name,
+        id_number=id_number,
+        relationship=relationship,
+        date_of_birth=date_of_birth,
+        phone=phone,
+        email=email
+    )
+    db.session.add(beneficiary)
+    db.session.commit()
+    return jsonify({"message": "Beneficiary added", "id": beneficiary.id}), 201
+
+@app.route('/api/beneficiaries/<int:beneficiary_id>', methods=['PUT'])
+@jwt_required()
+def edit_beneficiary(beneficiary_id):
+    user_id = get_jwt_identity()
+    beneficiary = Beneficiary.query.filter_by(id=beneficiary_id, user_id=user_id).first()
+    if not beneficiary:
+        return jsonify({"error": "Beneficiary not found"}), 404
+    data = request.get_json()
+    beneficiary.name = data.get('name', beneficiary.name)
+    beneficiary.id_number = data.get('id_number', beneficiary.id_number)
+    beneficiary.relationship = data.get('relationship', beneficiary.relationship)
+    beneficiary.date_of_birth = data.get('date_of_birth', beneficiary.date_of_birth)
+    beneficiary.phone = data.get('phone', beneficiary.phone)
+    beneficiary.email = data.get('email', beneficiary.email)
+    db.session.commit()
+    return jsonify({"message": "Beneficiary updated"})
+
+@app.route('/api/beneficiaries', methods=['GET'])
+@jwt_required()
+def get_beneficiaries():
+    user_id = get_jwt_identity()
+    beneficiaries = Beneficiary.query.filter_by(user_id=user_id).all()
+    return jsonify([{
+        "id": b.id,
+        "name": b.name,
+        "id_number": b.id_number,
+        "relationship": b.relationship,
+        "phone": b.phone,
+        "email": b.email,
+        "date_of_birth": b.date_of_birth,
+        "created_at": b.created_at,
+        "id_doc_url": b.id_doc_url,
+        "address_doc_url": b.address_doc_url,
+        "relationship_doc_url": b.relationship_doc_url,
+    } for b in beneficiaries])
+
+@app.route('/api/beneficiaries/<int:beneficiary_id>', methods=['DELETE'])
+@jwt_required()
+def delete_beneficiary(beneficiary_id):
+    user_id = get_jwt_identity()
+    beneficiary = Beneficiary.query.filter_by(id=beneficiary_id, user_id=user_id).first()
+    if not beneficiary:
+        return jsonify({"error": "Beneficiary not found"}), 404
+    db.session.delete(beneficiary)
+    db.session.commit()
+    return jsonify({"message": "Beneficiary deleted"}), 200
+
+class Beneficiary(db.Model):
+    __tablename__ = 'beneficiary'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    name = db.Column(db.String(100), nullable=False)
+    relationship = db.Column(db.String(50))
+    id_number = db.Column(db.String(20))
+    date_of_birth = db.Column(db.String(20))
+    phone = db.Column(db.String(20))
+    email = db.Column(db.String(120))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    # --- Add these fields ---
+    id_doc_url = db.Column(db.String(255))
+    address_doc_url = db.Column(db.String(255))
+    relationship_doc_url = db.Column(db.String(255))
+    # ------------------------
+    user = db.relationship('User', backref='beneficiaries')
+    status = db.Column(db.String(20), default="No Documents")
+
+class CustomerConcern(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    name = db.Column(db.String(100), nullable=False)
+    email = db.Column(db.String(120), nullable=False)
+    subject = db.Column(db.String(200), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    status = db.Column(db.String(20), default='open')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "name": self.name,
+            "email": self.email,
+            "subject": self.subject,
+            "message": self.message,
+            "status": self.status,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
 @app.route('/api/contact', methods=['POST'])
 def submit_contact():
     data = request.get_json()
@@ -3451,7 +3771,6 @@ def submit_contact():
     subject = data.get('subject')
     message = data.get('message')
     user_id = None
-    # Try to get user from JWT if present
     try:
         user_id = get_jwt_identity()
     except Exception:
@@ -3467,21 +3786,6 @@ def submit_contact():
     )
     db.session.add(concern)
     db.session.commit()
-
- #----------------------------------------Admin Notifications----------------------------------------   
-    # Create notification for admin about new customer concern
-    create_admin_notification(
-        title="New Customer Concern",
-        message=f"New support message from {name} ({email}): {subject}",
-        notification_type="support",
-        data={
-            "concern_id": concern.id,
-            "user_name": name,
-            "user_email": email,
-            "subject": subject
-        }
-    )
-    
     return jsonify({'message': 'Your message has been received. Thank you for contacting us!'}), 201
 
 @app.route('/api/admin/concerns', methods=['GET'])
@@ -3521,61 +3825,381 @@ def get_all_concerns():
         'concerns': [c.to_dict() for c in concerns]
     }), 200
 
-@app.route('/api/admin/concerns/<int:id>', methods=['GET'])
-@role_required(['admin'])
-def get_concern(id):
-    concern = CustomerConcern.query.get_or_404(id)
-    return jsonify(concern.to_dict()), 200
+@app.route('/api/beneficiaries/<int:beneficiary_id>/documents', methods=['POST'])
+@jwt_required()
+def upload_beneficiary_document(beneficiary_id):
+    beneficiary = Beneficiary.query.get_or_404(beneficiary_id)
+    file = request.files.get('file')
+    doc_type = request.form.get('type')
+    if not file or not doc_type:
+        return jsonify({'error': 'Missing file or type'}), 400
 
-@app.route('/api/admin/concerns/<int:id>/status', methods=['PUT'])
-@role_required(['admin'])
-def update_concern_status(id):
-    concern = CustomerConcern.query.get_or_404(id)
-    data = request.get_json()
-    status = data.get('status')
-    if status not in ['open', 'closed', 'in-progress']:
-        return jsonify({'error': 'Invalid status'}), 400
-    concern.status = status
+    upload_folder = os.path.abspath(os.path.join(os.path.dirname(__file__), 'uploads', 'beneficiary_docs'))
+    os.makedirs(upload_folder, exist_ok=True)
+    filename = f"{beneficiary_id}_{doc_type}_{secure_filename(file.filename)}"
+    save_path = os.path.join(upload_folder, filename)
+    print("Saving file to:", save_path)
+    file.save(save_path)
+
+    url = f"http://localhost:5001/uploads/beneficiary_docs/{filename}"
+    if doc_type == 'id':
+        beneficiary.id_doc_url = url
+    elif doc_type == 'address':
+        beneficiary.address_doc_url = url
+    elif doc_type == 'relationship':
+        beneficiary.relationship_doc_url = url
+    else:
+        return jsonify({'error': 'Invalid document type'}), 400
+
     db.session.commit()
-    return jsonify({'message': f'Status updated to {status}'}), 200
+    return jsonify({'url': url}), 200
 
-@app.route('/api/admin/concerns/<int:id>', methods=['DELETE'])
-@role_required(['admin'])
-def delete_concern(id):
-    concern = CustomerConcern.query.get_or_404(id)
-    db.session.delete(concern)
-    db.session.commit()
-    return jsonify({'message': 'Concern deleted successfully'}), 200
+@app.route('/uploads/beneficiary_docs/<filename>')
+def serve_beneficiary_doc(filename):
+    upload_folder = os.path.abspath(os.path.join(os.path.dirname(__file__), 'uploads', 'beneficiary_docs'))
+    return send_from_directory(upload_folder, filename)
 
-# -------------------- FAQ Admin Endpoints --------------------
-
-@app.route('/api/admin/faqs', methods=['POST'])
-@role_required(['admin'])
-def create_faq():
+@app.route('/api/groups/<int:group_id>/contribute', methods=['POST'])
+@jwt_required()
+def contribute_to_group(group_id):
+    user_id = get_jwt_identity()
     data = request.get_json()
-    faq = FAQ(
-        question=data.get('question'),
-        answer=data.get('answer'),
-        category=data.get('category'),
-        is_published=data.get('is_published', True)
+    amount = data.get('amount')
+    method = data.get('method')  # "wallet" or "bank"
+    card_id = data.get('card_id')  # Only needed for "bank"
+
+    # 1. Check user is a member of the group
+    member = StokvelMember.query.filter_by(user_id=user_id, group_id=group_id).first()
+    if not member:
+        return jsonify({'error': 'You are not a member of this group.'}), 403
+
+    group = StokvelGroup.query.get_or_404(group_id)
+    if not amount or amount < group.contribution_amount:
+        return jsonify({'error': f'Minimum contribution is R{group.contribution_amount}.'}), 400
+
+    # 2. Handle payment
+    if method == "wallet":
+        wallet = Wallet.query.filter_by(user_id=user_id).first()
+        if not wallet or wallet.balance < amount:
+            return jsonify({'error': 'Insufficient wallet balance.'}), 400
+        wallet.balance -= amount
+    elif method == "bank":
+        # Simulate deposit to wallet first
+        if not card_id:
+            return jsonify({'error': 'Card ID required for bank payment.'}), 400
+        # You can call your process_deposit logic here
+        # For now, just add to wallet
+        wallet = Wallet.query.filter_by(user_id=user_id).first()
+        wallet.balance += amount  # Simulate deposit
+        wallet.balance -= amount  # Then deduct for contribution
+    else:
+        return jsonify({'error': 'Invalid payment method.'}), 400
+
+    # 3. Create contribution record
+    contribution = Contribution(
+        member_id=member.id,
+        amount=amount,
+        status='confirmed'
     )
-    db.session.add(faq)
+    db.session.add(contribution)
+
+    # 4. Create transaction record for dashboard/wallet
+    from datetime import datetime
+    transaction = Transaction(
+        user_id=user_id,
+        transaction_type='stokvel_contribution',
+        amount=amount,
+        fee=0.00,
+        net_amount=amount,
+        status='completed',
+        reference=generate_transaction_reference(),
+        description=f"Contribution to {group.name}",
+        completed_at=datetime.utcnow(),
+        payment_method=method  # <-- Add this
+    )
+    db.session.add(transaction)
+    db.session.flush()  # Get transaction.id before commit
+
+    # 3. Create contribution record and link to transaction
+    contribution = Contribution(
+        member_id=member.id,
+        amount=amount,
+        status='confirmed',
+        transaction_id=transaction.id  # Link to transaction
+    )
+    db.session.add(contribution)
     db.session.commit()
-    
-    # Create notification for admin about FAQ creation
-    create_admin_notification(
-        title="FAQ Created",
-        message=f"New FAQ created: {faq.question[:50]}...",
-        notification_type="system",
-        data={
-            "faq_id": faq.id,
-            "question": faq.question,
-            "category": faq.category,
-            "is_published": faq.is_published
+
+    return jsonify({'message': 'Contribution successful!'}), 200
+
+@app.route('/api/dashboard/my-groups', methods=['GET'])
+@jwt_required()
+def get_my_groups():
+    user_id = get_jwt_identity()
+    memberships = StokvelMember.query.filter_by(user_id=user_id).all()
+    groups = []
+    for m in memberships:
+        group = StokvelGroup.query.get(m.group_id)
+        if group:
+            groups.append({
+                "id": group.id,
+                "name": group.name,
+                "category": group.category,
+                "tier": group.tier,
+                "description": group.description,
+                "member_count": len(group.members)
+            })
+    return jsonify(groups)
+
+class SavingsGoal(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    label = db.Column(db.String(100), nullable=False)
+    target = db.Column(db.Float, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    user = db.relationship('User', backref='savings_goals')
+
+@app.route('/api/user/savings-goal', methods=['GET'])
+@token_required
+def get_savings_goal(current_user):
+    goal = SavingsGoal.query.filter_by(user_id=current_user.id).order_by(SavingsGoal.created_at.desc()).first()
+    if not goal:
+        return jsonify({'label': '', 'target': 0, 'progress': 0})
+    # Calculate progress as sum of all contributions
+    from sqlalchemy import func
+    progress = db.session.query(func.sum(Contribution.amount)) \
+        .join(StokvelMember) \
+        .filter(StokvelMember.user_id == current_user.id) \
+        .scalar() or 0.0
+    return jsonify({
+        'label': goal.label,
+        'target': goal.target,
+        'progress': float(progress)
+    })
+
+@app.route('/api/user/savings-goal', methods=['POST'])
+@token_required
+def set_savings_goal(current_user):
+    data = request.get_json()
+    label = data.get('label')
+    target = data.get('target')
+    if not label or not target:
+        return jsonify({'error': 'Label and target are required.'}), 400
+    goal = SavingsGoal(user_id=current_user.id, label=label, target=target)
+    db.session.add(goal)
+    db.session.commit()
+    return jsonify({'message': 'Savings goal set successfully.'}), 201
+
+@app.route('/api/admin/beneficiaries', methods=['GET'])
+@jwt_required()  # Or use your admin role decorator if you have one
+def get_all_beneficiaries():
+    beneficiaries = Beneficiary.query.all()
+    return jsonify([{
+        "id": b.id,
+        "name": b.name,
+        "id_number": b.id_number,
+        "relationship": b.relationship,
+        "phone": b.phone,
+        "email": b.email,
+        "created_at": b.created_at,
+        "id_doc_url": b.id_doc_url,
+        "address_doc_url": b.address_doc_url,
+        "relationship_doc_url": b.relationship_doc_url,
+        "status": b.status,  # <-- Make sure this is included!
+        "user_id": b.user_id
+    } for b in beneficiaries])
+
+# Approve beneficiary
+@app.route('/api/admin/beneficiaries/<int:beneficiary_id>/approve', methods=['POST'])
+@jwt_required()  # Or your admin role decorator
+def approve_beneficiary(beneficiary_id):
+    beneficiary = Beneficiary.query.get_or_404(beneficiary_id)
+    beneficiary.status = "Approved"
+    db.session.commit()
+    # Send notification to user
+    notification = Notification(
+        user_id=beneficiary.user_id,
+        title="Beneficiary Approved",
+        message=f"Your beneficiary '{beneficiary.name}' has been approved.",
+        type="beneficiary"
+    )
+    db.session.add(notification)
+    db.session.commit()
+    return jsonify({"message": "Beneficiary approved"})
+
+# Reject beneficiary
+@app.route('/api/admin/beneficiaries/<int:beneficiary_id>/reject', methods=['POST'])
+@jwt_required()
+def reject_beneficiary(beneficiary_id):
+    beneficiary = Beneficiary.query.get_or_404(beneficiary_id)
+    beneficiary.status = "Rejected"
+    db.session.commit()
+    # Send notification to user
+    notification = Notification(
+        user_id=beneficiary.user_id,
+        title="Beneficiary Rejected",
+        message=f"Your beneficiary '{beneficiary.name}' has been rejected.",
+        type="beneficiary"
+    )
+    db.session.add(notification)
+    db.session.commit()
+    return jsonify({"message": "Beneficiary rejected"})
+
+# Send notification to user
+@app.route('/api/notifications/send', methods=['POST'])
+@jwt_required()
+def send_notification():
+    data = request.get_json()
+    user_id = data.get("userId")
+    message = data.get("message")
+    # You can use your Notification model or any notification logic here
+    notification = Notification(
+        user_id=user_id,
+        title="Beneficiary Status Update",
+        message=message,
+        type="beneficiary"
+    )
+    db.session.add(notification)
+    db.session.commit()
+    return jsonify({"message": "Notification sent"})
+
+def get_status(b):
+    if b.status in ["Approved", "Rejected"]:
+        return b.status
+    if not (b.id_doc_url or b.address_doc_url or b.relationship_doc_url):
+        return "No Documents"
+    return "Pending"
+
+@app.route('/api/user/groups', methods=['GET'])
+@jwt_required()
+def get_user_groups():
+    user_id = get_jwt_identity()
+    # Adjust this query to match your group membership logic
+    groups = StokvelGroup.query.join(StokvelMember).filter(StokvelMember.user_id == user_id).all()
+    return jsonify([
+        {
+            "id": g.id,
+            "name": g.name,
+            "category": g.category,
+            "rules": getattr(g, "rules", ""),
+            "claimable_amount": getattr(g, "claimable_amount", 0)
         }
+        for g in groups
+    ])
+
+@app.route('/market/transactions', methods=['GET'])
+@jwt_required()
+def get_transactions():
+    user_id = get_jwt_identity()
+    txns = MarketTransaction.query.filter_by(user_id=user_id).order_by(MarketTransaction.timestamp.desc()).all()
+    return jsonify([{
+        "id": t.id,
+        "item_type": t.item_type,
+        "provider": t.provider,
+        "amount": t.amount,
+        "payment_method": t.payment_method,
+        "status": t.status,
+        "timestamp": t.timestamp.isoformat(),
+        "reference": t.reference
+    } for t in txns])
+
+class MarketTransaction(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, nullable=False)
+    item_type = db.Column(db.String(50), nullable=False)  # airtime, data, electricity, voucher
+    provider = db.Column(db.String(100), nullable=False)
+    amount = db.Column(db.Float, nullable=False)
+    payment_method = db.Column(db.String(50), nullable=False)  # wallet, card
+    status = db.Column(db.String(20), default='pending')  # pending, successful, failed
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    reference = db.Column(db.String(100), unique=True)
+
+@app.route('/market/purchase', methods=['POST'])
+@jwt_required()
+def purchase():
+    user_id = get_jwt_identity()
+    data = request.json
+
+    item_type = data.get('item_type')
+    provider = data.get('provider')
+    amount = data.get('amount')
+    payment_method = data.get('payment_method')
+    card_id = data.get('card_id')
+
+    if not all([item_type, provider, amount, payment_method]):
+        return jsonify({"error": "Missing required fields"}), 400
+
+    try:
+        amount = float(amount)
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid amount format"}), 400
+
+    # --- Digital Wallet ---
+    if payment_method == "wallet":
+        wallet = Wallet.query.filter_by(user_id=user_id).first()
+        if not wallet:
+            return jsonify({"error": "Wallet not found"}), 404
+        if wallet.balance < amount:
+            return jsonify({"error": "Insufficient wallet balance"}), 400
+        wallet.balance -= amount
+
+    # --- Card Payment ---
+    elif payment_method == "card":
+        card = Card.query.filter_by(id=card_id, user_id=user_id).first()
+        if not card:
+            return jsonify({"error": "Card not found"}), 404
+        # Simulate card payment
+        print(f"Charging card **** **** **** {card.card_number_last4} for R{amount}")
+    else:
+        return jsonify({"error": "Invalid payment method"}), 400
+
+    # --- Record Transaction ---
+    txn = MarketTransaction(
+        user_id=user_id,
+        item_type=item_type,
+        provider=provider,
+        amount=amount,
+        payment_method=payment_method,
+        status='successful',
+        reference=generate_reference()
     )
-    
-    return jsonify({'message': 'FAQ created', 'faq': faq.to_dict()}), 201
+    db.session.add(txn)
+    db.session.commit()
+
+    # --- Send Notification (optional) ---
+    send_notification(user_id, f"Your purchase of {item_type} for R{amount} was successful.")
+
+    return jsonify({"message": "Purchase successful!", "reference": txn.reference}), 200
+
+def generate_reference():
+    return f"TXN-{uuid.uuid4().hex[:12]}"
+
+def send_notification(user_id, message):
+    # Replace with actual notification logic (email, SMS, push etc.)
+    print(f"Notification to user {user_id}: {message}")
+
+app.url_map.strict_slashes = False
+
+class FAQ(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    question = db.Column(db.String(500), nullable=False)
+    answer = db.Column(db.Text, nullable=False)
+    category = db.Column(db.String(100), nullable=True)
+    is_published = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "question": self.question,
+            "answer": self.answer,
+            "category": self.category,
+            "is_published": self.is_published,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
 
 @app.route('/api/admin/faqs', methods=['GET'])
 @role_required(['admin'])
@@ -3599,170 +4223,486 @@ def get_faqs():
     faqs = query.order_by(FAQ.created_at.desc()).all()
     return jsonify([faq.to_dict() for faq in faqs]), 200
 
-@app.route('/api/admin/faqs/<int:id>', methods=['GET'])
+@app.route('/api/admin/faqs', methods=['POST'])
 @role_required(['admin'])
-def get_faq(id):
-    faq = FAQ.query.get_or_404(id)
-    return jsonify(faq.to_dict()), 200
-
-@app.route('/api/admin/faqs/<int:id>', methods=['PUT'])
-@role_required(['admin'])
-def update_faq(id):
-    faq = FAQ.query.get_or_404(id)
+def create_faq():
     data = request.get_json()
-    old_question = faq.question
-    old_category = faq.category
-    
-    faq.question = data.get('question', faq.question)
-    faq.answer = data.get('answer', faq.answer)
-    faq.category = data.get('category', faq.category)
-    if 'is_published' in data:
-        faq.is_published = data['is_published']
-    db.session.commit()
-    
-    # Create notification for admin about FAQ update
-    create_admin_notification(
-        title="FAQ Updated",
-        message=f"FAQ updated: {faq.question[:50]}...",
-        notification_type="system",
-        data={
-            "faq_id": faq.id,
-            "old_question": old_question,
-            "new_question": faq.question,
-            "old_category": old_category,
-            "new_category": faq.category,
-            "is_published": faq.is_published
-        }
+    faq = FAQ(
+        question=data.get('question'),
+        answer=data.get('answer'),
+        category=data.get('category'),
+        is_published=data.get('is_published', True)
     )
-    
-    return jsonify({'message': 'FAQ updated', 'faq': faq.to_dict()}), 200
-
-@app.route('/api/admin/faqs/<int:id>', methods=['DELETE'])
-@role_required(['admin'])
-def delete_faq(id):
-    faq = FAQ.query.get_or_404(id)
-    question = faq.question
-    category = faq.category
-    
-    db.session.delete(faq)
+    db.session.add(faq)
     db.session.commit()
-    
-    # Create notification for admin about FAQ deletion
-    create_admin_notification(
-        title="FAQ Deleted",
-        message=f"FAQ deleted: {question[:50]}...",
-        notification_type="system",
-        data={
-            "deleted_faq_question": question,
-            "deleted_faq_category": category
-        }
-    )
-    
-    return jsonify({'message': 'FAQ deleted'}), 200
+    return jsonify({'message': 'FAQ created', 'faq': faq.to_dict()}), 201
 
-# ------------------- BULK DELETE ALL FAQS -------------------
-@app.route('/api/admin/faqs', methods=['DELETE'])
+# Add the other FAQ endpoints (POST, PUT, DELETE) as needed
+
+@app.route('/api/admin/contributions', methods=['GET'])
 @role_required(['admin'])
-def delete_all_faqs():
+def get_all_contributions():
+    contributions = db.session.query(
+        Contribution.id,
+        Contribution.amount,
+        Contribution.date,
+        Contribution.status,
+        User.full_name.label('contributor'),
+        StokvelGroup.name.label('group'),
+        StokvelGroup.id.label('group_id'),
+        Transaction.description,
+        Transaction.reference,
+        Transaction.payment_method,
+        Card.cardholder,
+        Card.card_number_last4
+    ).join(StokvelMember, Contribution.member_id == StokvelMember.id) \
+     .join(User, StokvelMember.user_id == User.id) \
+     .join(StokvelGroup, StokvelMember.group_id == StokvelGroup.id) \
+     .join(Transaction, Contribution.transaction_id == Transaction.id) \
+     .join(Card, Transaction.card_id == Card.id, isouter=True) \
+     .all()
+
+    result = []
+    for c in contributions:
+        result.append({
+            "id": c.id,
+            "amount": c.amount,
+            "date": c.date.isoformat(),
+            "status": c.status,
+            "contributor": c.contributor,
+            "group": c.group,
+            "group_id": c.group_id,
+            "description": c.description,
+            "payment_method": c.payment_method,
+            "reference": c.reference,
+            "cardholder": c.cardholder,
+            "card_number_last4": c.card_number_last4
+        })
+    return jsonify(result)
+
+@app.route('/api/admin/group-categories', methods=['GET'])
+@jwt_required()
+def get_group_categories():
+    categories = db.session.query(StokvelGroup.category).distinct().all()
+    return jsonify([c[0] for c in categories])
+
+@app.route('/api/admin/group-names', methods=['GET'])
+@jwt_required()
+def get_group_names():
+    groups = StokvelGroup.query.all()
+    return jsonify([g.name for g in groups])
+
+@app.route('/admin/analytics/overview', methods=['GET'])
+@admin_required
+def admin_analytics_overview():
+    now = datetime.utcnow()
+    thirty_days_ago = now - timedelta(days=30)
+
+    # Optional filters
+    start_date_str = request.args.get('start_date')  # format: YYYY-MM-DD
+    end_date_str = request.args.get('end_date')
+    user_id = request.args.get('user_id')
+    group_id = request.args.get('group_id')
+
+    # Parse date filters
     try:
-        num_deleted = FAQ.query.delete()
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d') if start_date_str else thirty_days_ago
+        end_date = datetime.strptime(end_date_str, '%Y-%m-%d') if end_date_str else now
+    except ValueError:
+        return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD.'}), 400
+
+    # User Stats (global only)
+    total_users = db.session.query(func.count(User.id)).scalar()
+    verified_users = db.session.query(func.count(User.id)).filter(User.is_verified == True).scalar()
+    recent_users = db.session.query(func.count(User.id)).filter(User.created_at >= (now - timedelta(days=7))).scalar()
+
+    # Sessions (only count active sessions in the last 24 hours)
+    recent_window = datetime.utcnow() - timedelta(hours=24)
+    session_query = db.session.query(UserSession).filter(UserSession.login_time.between(start_date, end_date))
+    if user_id:
+        session_query = session_query.filter(UserSession.user_id == user_id)
+    total_sessions = session_query.count()
+    active_sessions = session_query.filter(
+        UserSession.is_active == True,
+        UserSession.last_activity >= recent_window
+    ).count()
+
+    # Transactions
+    txn_query = db.session.query(Transaction).filter(Transaction.created_at.between(start_date, end_date))
+    if user_id:
+        txn_query = txn_query.filter(Transaction.user_id == user_id)
+    total_transactions = txn_query.count()
+    completed_txns = txn_query.filter(Transaction.status == 'completed')
+    completed_count = completed_txns.count()
+    total_volume = completed_txns.with_entities(func.sum(Transaction.amount)).scalar() or 0
+
+    txn_volume_by_type = completed_txns.with_entities(
+        Transaction.transaction_type,
+        func.sum(Transaction.amount)
+    ).group_by(Transaction.transaction_type).all()
+
+    txn_daily_volume = completed_txns.with_entities(
+        func.date(Transaction.created_at),
+        func.sum(Transaction.amount)
+    ).group_by(func.date(Transaction.created_at)).order_by(func.date(Transaction.created_at)).all()
+
+    # Contributions
+    contrib_query = db.session.query(Contribution).join(StokvelMember)
+    if group_id:
+        contrib_query = contrib_query.filter(StokvelMember.group_id == group_id)
+    if user_id:
+        contrib_query = contrib_query.filter(StokvelMember.user_id == user_id)
+    contrib_query = contrib_query.filter(Contribution.date.between(start_date, end_date))
+    total_contributions = contrib_query.count()
+    contribution_volume = contrib_query.with_entities(func.sum(Contribution.amount)).scalar() or 0
+
+    # Referrals
+    referral_query = db.session.query(Referral).filter(Referral.created_at.between(start_date, end_date))
+    if user_id:
+        referral_query = referral_query.filter((Referral.referrer_id == user_id) | (Referral.referee_id == user_id))
+    total_referrals = referral_query.count()
+    completed_referrals = referral_query.filter(Referral.status == 'completed').count()
+
+    # Chat
+    message_query = db.session.query(Message).filter(Message.created_at.between(start_date, end_date))
+    if user_id:
+        message_query = message_query.join(Conversation).filter(Conversation.user_id == user_id)
+    total_messages = message_query.count()
+    assistant_messages = message_query.filter(Message.role == 'assistant').count()
+    user_messages = total_messages - assistant_messages
+
+    # Notifications
+    notif_query = db.session.query(Notification).filter(Notification.created_at.between(start_date, end_date))
+    if user_id:
+        notif_query = notif_query.filter(Notification.user_id == user_id)
+    unread_notifications = notif_query.filter(Notification.is_read == False).count()
+
+    # Top stokvel groups (not affected by filters)
+    top_groups = db.session.query(
+        StokvelGroup.name,
+        func.count(StokvelGroup.members)
+    ).group_by(StokvelGroup.id).order_by(func.count(StokvelGroup.members).desc()).limit(5).all()
+
+    return jsonify({
+        "filters": {
+            "start_date": start_date.strftime('%Y-%m-%d'),
+            "end_date": end_date.strftime('%Y-%m-%d'),
+            "user_id": user_id,
+            "group_id": group_id
+        },
+        "user_stats": {
+            "total": total_users,
+            "verified": verified_users,
+            "recent_last_7_days": recent_users
+        },
+        "sessions": {
+            "total": total_sessions,
+            "active": active_sessions
+        },
+        "transactions": {
+            "total": total_transactions,
+            "completed": completed_count,
+            "volume": float(total_volume),
+            "volume_by_type": {t[0]: float(t[1]) for t in txn_volume_by_type},
+            "daily_volume": [{"date": str(t[0]), "amount": float(t[1])} for t in txn_daily_volume]
+        },
+        "contributions": {
+            "total": total_contributions,
+            "volume": float(contribution_volume)
+        },
+        "referrals": {
+            "total": total_referrals,
+            "completed": completed_referrals
+        },
+        "chat": {
+            "total_messages": total_messages,
+            "user": user_messages,
+            "assistant": assistant_messages
+        },
+        "notifications": {
+            "unread": unread_notifications
+        },
+        "top_stokvel_groups": [
+            {"name": g[0], "members": g[1]} for g in top_groups
+        ]
+    }), 200
+
+@app.route('/logout', methods=['POST'])
+@token_required
+def logout(current_user):
+    session = UserSession.query.filter_by(user_id=current_user.id, is_active=True).first()
+    if session:
+        session.is_active = False
         db.session.commit()
-        create_admin_notification(
-            title="All FAQs Deleted",
-            message=f"Admin deleted all FAQs ({num_deleted} entries).",
-            notification_type="system"
-        )
-        return jsonify({'message': f'All FAQs deleted ({num_deleted} entries).'}), 200
+    return jsonify({'message': 'Logged out successfully'})
+
+@app.cli.command('cleanup-sessions')
+@with_appcontext
+def cleanup_sessions_command():
+    cleanup_old_sessions()
+    print("Old sessions cleaned up.")
+
+def cleanup_old_sessions():
+    expiry_window = datetime.utcnow() - timedelta(days=7)  # or whatever makes sense
+    old_sessions = UserSession.query.filter(
+        UserSession.is_active == True,
+        UserSession.last_activity < expiry_window
+    ).all()
+    for session in old_sessions:
+        session.is_active = False
+    db.session.commit()
+
+# Add these endpoints after line 4119 (after the get_all_contributions function)
+
+@app.route('/api/admin/withdrawals', methods=['GET'])
+@role_required(['admin'])
+def get_all_withdrawals():
+    """Get all withdrawal requests for admin reports"""
+    try:
+        withdrawals = db.session.query(
+            WithdrawalRequest.id,
+            WithdrawalRequest.amount,
+            WithdrawalRequest.reason,
+            WithdrawalRequest.created_at,
+            WithdrawalRequest.status,
+            WithdrawalRequest.approvals_needed,
+            WithdrawalRequest.approvals_received,
+            User.full_name.label('user_name'),
+            User.email.label('user_email'),
+            StokvelGroup.name.label('group_name')
+        ).join(StokvelMember, WithdrawalRequest.member_id == StokvelMember.id) \
+         .join(User, StokvelMember.user_id == User.id) \
+         .join(StokvelGroup, StokvelMember.group_id == StokvelGroup.id) \
+         .order_by(WithdrawalRequest.created_at.desc()) \
+         .all()
+
+        result = []
+        for w in withdrawals:
+            result.append({
+                "id": w.id,
+                "amount": float(w.amount),
+                "reason": w.reason,
+                "created_at": w.created_at.isoformat(),
+                "status": w.status,
+                "user_name": w.user_name,
+                "user_email": w.user_email,
+                "group_name": w.group_name,
+                "approvals_needed": w.approvals_needed,
+                "approvals_received": w.approvals_received
+            })
+        return jsonify(result)
     except Exception as e:
-        db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
-
-@app.route('/api/admin/faqs/<int:id>/visibility', methods=['PATCH'])
+@app.route('/api/admin/transactions', methods=['GET'])
 @role_required(['admin'])
-def toggle_faq_visibility(id):
-    faq = FAQ.query.get_or_404(id)
-    data = request.get_json()
-    if 'is_published' not in data:
-        return jsonify({'error': 'is_published required'}), 400
-    
-    old_status = faq.is_published
-    faq.is_published = data['is_published']
-    db.session.commit()
-    
-    # Create notification for admin about FAQ visibility change
-    status_text = "published" if faq.is_published else "unpublished"
-    create_admin_notification(
-        title="FAQ Visibility Changed",
-        message=f"FAQ {status_text}: {faq.question[:50]}...",
-        notification_type="system",
-        data={
-            "faq_id": faq.id,
-            "old_status": old_status,
-            "new_status": faq.is_published,
-            "question": faq.question
+def get_all_transactions():
+    """Get all transactions for admin reports"""
+    try:
+        transactions = db.session.query(
+            Transaction.id,
+            Transaction.transaction_type,
+            Transaction.amount,
+            Transaction.fee,
+            Transaction.net_amount,
+            Transaction.status,
+            Transaction.reference,
+            Transaction.description,
+            Transaction.created_at,
+            Transaction.completed_at,
+            Transaction.payment_method,
+            User.full_name.label('user_name'),
+            User.email.label('user_email'),
+            Card.cardholder,
+            Card.card_number_last4
+        ).join(User, Transaction.user_id == User.id) \
+         .join(Card, Transaction.card_id == Card.id, isouter=True) \
+         .order_by(Transaction.created_at.desc()) \
+         .all()
+
+        result = []
+        for t in transactions:
+            result.append({
+                "id": t.id,
+                "transaction_type": t.transaction_type,
+                "amount": float(t.amount),
+                "fee": float(t.fee) if t.fee else 0,
+                "net_amount": float(t.net_amount),
+                "status": t.status,
+                "reference": t.reference,
+                "description": t.description,
+                "created_at": t.created_at.isoformat(),
+                "completed_at": t.completed_at.isoformat() if t.completed_at else None,
+                "payment_method": t.payment_method,
+                "user_name": t.user_name,
+                "user_email": t.user_email,
+                "cardholder": t.cardholder,
+                "card_number_last4": t.card_number_last4
+            })
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/referrals', methods=['GET'])
+@role_required(['admin'])
+def get_all_referrals():
+    """Get all referrals for admin reports"""
+    try:
+        referrals = db.session.query(
+            Referral.id,
+            Referral.status,
+            Referral.created_at,
+            User.full_name.label('referrer_name'),
+            User.email.label('referrer_email'),
+            User.full_name.label('referee_name'),
+            User.email.label('referee_email')
+        ).join(User, Referral.referrer_id == User.id) \
+         .join(User, Referral.referee_id == User.id) \
+         .order_by(Referral.created_at.desc()) \
+         .all()
+
+        result = []
+        for r in referrals:
+            result.append({
+                "id": r.id,
+                "status": r.status,
+                "created_at": r.created_at.isoformat(),
+                "referrer_name": r.referrer_name,
+                "referrer_email": r.referrer_email,
+                "referee_name": r.referee_name,
+                "referee_email": r.referee_email
+            })
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/users', methods=['GET'])
+@role_required(['admin'])
+def get_all_users():
+    """Get all users for admin reports"""
+    try:
+        users = User.query.order_by(User.created_at.desc()).all()
+        result = []
+        for user in users:
+            # Get user's group memberships
+            memberships = StokvelMember.query.filter_by(user_id=user.id).all()
+            groups = [m.group.name for m in memberships if m.group]
+            
+            result.append({
+                "id": user.id,
+                "full_name": user.full_name,
+                "email": user.email,
+                "phone": user.phone,
+                "role": user.role,
+                "is_verified": user.is_verified,
+                "created_at": user.created_at.isoformat(),
+                "groups": groups,
+                "points": user.points,
+                "valid_referrals": user.valid_referrals
+            })
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/groups-detailed', methods=['GET'])
+@role_required(['admin'])
+def get_all_groups_detailed():
+    """Get all groups with detailed information for admin reports"""
+    try:
+        groups = StokvelGroup.query.order_by(StokvelGroup.created_at.desc()).all()
+        result = []
+        for group in groups:
+            # Get member count
+            member_count = StokvelMember.query.filter_by(group_id=group.id).count()
+            active_members = StokvelMember.query.filter_by(group_id=group.id, status='active').count()
+            
+            # Get total contributions
+            total_contributions = db.session.query(func.sum(Contribution.amount)) \
+                .join(StokvelMember) \
+                .filter(StokvelMember.group_id == group.id) \
+                .scalar() or 0
+            
+            result.append({
+                "id": group.id,
+                "name": group.name,
+                "category": group.category,
+                "tier": group.tier,
+                "status": group.status,
+                "contribution_amount": float(group.contribution_amount),
+                "frequency": group.frequency,
+                "max_members": group.max_members,
+                "created_at": group.created_at.isoformat(),
+                "description": group.description,
+                "member_count": member_count,
+                "active_members": active_members,
+                "total_contributions": float(total_contributions)
+            })
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+class AdminRole(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(50), unique=True, nullable=False)
+    description = db.Column(db.Text)
+    permissions = db.Column(db.JSON, default={})
+    is_system_role = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'description': self.description,
+            'permissions': self.permissions,
+            'is_system_role': self.is_system_role,
+            'created_at': self.created_at.isoformat(),
+            'updated_at': self.updated_at.isoformat()
         }
-    )
-    
-    return jsonify({'message': 'FAQ visibility updated', 'faq': faq.to_dict()}), 200
 
-#------------------------------------Defensive Serialization------------------------------------
-def safe_to_dict(n):
-    if hasattr(n, "to_dict"):
-        return n.to_dict()
-    else:
-        return str(n)  # fallback for debugging
+class AdminSession(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    session_token = db.Column(db.String(255), unique=True, nullable=False)
+    ip_address = db.Column(db.String(45))
+    user_agent = db.Column(db.Text)
+    mfa_verified = db.Column(db.Boolean, default=False)
+    last_activity = db.Column(db.DateTime, default=datetime.utcnow)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    user = db.relationship('User', backref='admin_sessions')
 
-@app.route('/api/admin/notifications', methods=['GET'])
-@role_required(['admin'])
-def get_admin_notifications():
-    notif_type = request.args.get('type')
-    unread = request.args.get('unread')
-    page = request.args.get('page', 1, type=int)
-    limit = request.args.get('limit', 20, type=int)
-    query = Notification.query
-    if notif_type:
-        query = query.filter(Notification.type == notif_type)
-    if unread == 'true':
-        query = query.filter(Notification.is_read == False)
-    total = query.count()
-    notifications = query.order_by(Notification.created_at.desc()).offset((page-1)*limit).limit(limit).all()
-    return jsonify({
-        'total': total,
-        'page': page,
-        'limit': limit,
-#------------------------------------Defensive Serialization------------------------------------
-        'notifications': [safe_to_dict(n) for n in notifications]
-    })
+class AdminAuditLog(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    admin_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    action = db.Column(db.String(100), nullable=False)
+    resource_type = db.Column(db.String(50))
+    resource_id = db.Column(db.String(50))
+    details = db.Column(db.JSON)
+    ip_address = db.Column(db.String(45))
+    user_agent = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    admin = db.relationship('User', backref='audit_logs')
 
-#----------------------------------------Admin Notifications----------------------------------------
-@app.route('/api/admin/notifications/mark-all-read', methods=['POST'])
-@role_required(['admin'])
-def mark_all_admin_notifications_read():
-    Notification.query.filter_by(is_read=False).update({'is_read': True})
-    db.session.commit()
-    return jsonify({'message': 'All notifications marked as read'})
-
-@app.route('/api/admin/notifications/<int:id>', methods=['DELETE'])
-@role_required(['admin'])
-def delete_admin_notification(id):
-    notification = Notification.query.get_or_404(id)
-    db.session.delete(notification)
-    db.session.commit()
-    return jsonify({'message': 'Notification deleted'})
-
-#----------------------------------------Admin Team Routes----------------------------------------
 @app.route('/api/admin/team', methods=['GET'])
-@role_required(['admin', 'super_admin', 'manager'])  # Only certain roles can view
+@role_required(['admin', 'super_admin', 'manager'])
+# @mfa_required
 def list_admins():
     page = request.args.get('page', 1, type=int)
     limit = request.args.get('limit', 20, type=int)
     search = request.args.get('search', '')
+    role_filter = request.args.get('role', '')
 
     query = User.query.filter(User.role == 'admin')
     if search:
         like = f"%{search}%"
-        query = query.filter(or_(User.full_name.ilike(like), User.email.ilike(like)))
+        query = query.filter(or_(
+            User.full_name.ilike(like), 
+            User.email.ilike(like)
+        ))
+    if role_filter:
+        query = query.join(AdminRole).filter(AdminRole.name == role_filter)
     total = query.count()
     admins = query.order_by(User.created_at.desc()).offset((page-1)*limit).limit(limit).all()
     return jsonify({
@@ -3774,62 +4714,366 @@ def list_admins():
             'name': a.full_name,
             'email': a.email,
             'role': a.admin_role.name if a.admin_role else None,
-            'created_at': a.created_at.isoformat()
+            'mfa_enabled': a.mfa_enabled,
+            'is_locked': a.locked_until and a.locked_until > datetime.utcnow(),
+            'created_at': a.created_at.isoformat(),
+            'last_activity': a.admin_sessions[-1].last_activity.isoformat() if a.admin_sessions else None
         } for a in admins]
     })
 
-@app.route('/api/admin/roles', methods=['POST'])
-@role_required(['super_admin'])
-def create_role():
-    data = request.get_json()
-    name = data.get('name')
-    permissions = data.get('permissions', {})
-    if not name or not isinstance(permissions, dict):
-        return jsonify({'error': 'Name and permissions required'}), 400
-    if AdminRole.query.filter_by(name=name).first():
-        return jsonify({'error': 'Role already exists'}), 400
-    role = AdminRole(name=name, permissions=permissions)
-    db.session.add(role)
-    db.session.commit()
-    return jsonify({'message': 'Role created', 'role_id': role.id}), 201
-
 @app.route('/api/admin/team', methods=['POST'])
-@role_required(['super_admin', 'manager'])  # Only certain roles can add
+@role_required(['admin', 'super_admin'])
+# @mfa_required
+@audit_log('CREATE_ADMIN', 'USER')
 def add_admin():
     data = request.get_json()
-    name = data.get('name')
-    email = data.get('email')
-    password = data.get('password')
-    phone = data.get('phone')
-    role_id = data.get('role_id')
-
-    # Validations
-    if not all([name, email, password, phone, role_id]):
-        return jsonify({'error': 'All fields (name, email, password, phone, role_id) are required'}), 400
-    if User.query.filter_by(email=email).first():
+    
+    # Validate required fields
+    required_fields = ['name', 'email', 'password', 'phone', 'role_id']
+    if not all(field in data for field in required_fields):
+        return jsonify({'error': 'All fields are required'}), 400
+    
+    # Validate email format
+    if not re.match(r"[^@]+@[^@]+\.[^@]+", data['email']):
+        return jsonify({'error': 'Invalid email format'}), 400
+    
+    # Validate password strength
+    if len(data['password']) < 12:
+        return jsonify({'error': 'Password must be at least 12 characters'}), 400
+    
+    if not re.search(r"[A-Z]", data['password']):
+        return jsonify({'error': 'Password must contain at least one uppercase letter'}), 400
+    
+    if not re.search(r"[a-z]", data['password']):
+        return jsonify({'error': 'Password must contain at least one lowercase letter'}), 400
+    
+    if not re.search(r"\d", data['password']):
+        return jsonify({'error': 'Password must contain at least one number'}), 400
+    
+    if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", data['password']):
+        return jsonify({'error': 'Password must contain at least one special character'}), 400
+    
+    # Check if email already exists
+    if User.query.filter_by(email=data['email']).first():
         return jsonify({'error': 'Email already exists'}), 400
-    if len(password) < 8:
-        return jsonify({'error': 'Password must be at least 8 characters'}), 400
-
-    admin_role = AdminRole.query.get(role_id)
-    if not admin_role:
+    
+    # Validate role exists
+    role = AdminRole.query.get(data['role_id'])
+    if not role:
         return jsonify({'error': 'Invalid role'}), 400
-
+    
+    # Create user with enhanced security
     user = User(
-        full_name=name,
-        email=email,
-        password=generate_password_hash(password),
-        phone=phone,  # <-- ADD THIS LINE!
+        full_name=data['name'],
+        email=data['email'],
+        password=generate_password_hash(data['password']),
+        phone=data['phone'],
         role='admin',
-        role_id=role_id,
-        is_verified=True
+        role_id=data['role_id'],
+        is_verified=True,
+        force_password_change=True,
+        last_password_change=datetime.utcnow()
     )
+    
     db.session.add(user)
     db.session.commit()
-    return jsonify({'message': 'Admin created', 'admin_id': user.id}), 201
+    
+    return jsonify({
+        'message': 'Admin created successfully',
+        'admin_id': user.id,
+        'force_password_change': True
+    }), 201
+
+@app.route('/api/admin/roles', methods=['GET'])
+@role_required(['admin', 'super_admin'])
+# @mfa_required
+def list_roles():
+    roles = AdminRole.query.all()
+    return jsonify([r.to_dict() for r in roles])
+
+@app.route('/api/admin/roles', methods=['POST'])
+@role_required(['admin', 'super_admin'])
+# @mfa_required
+@audit_log('CREATE_ROLE', 'ROLE')
+def create_role():
+    data = request.get_json()
+    
+    if not data.get('name') or not isinstance(data.get('permissions', {}), dict):
+        return jsonify({'error': 'Name and permissions required'}), 400
+    
+    # Validate role name
+    if AdminRole.query.filter_by(name=data['name']).first():
+        return jsonify({'error': 'Role already exists'}), 400
+    
+    # Validate permissions structure
+    valid_permissions = {
+        'users': ['read', 'write', 'delete'],
+        'groups': ['read', 'write', 'delete'],
+        'analytics': ['read', 'export'],
+        'approvals': ['read', 'approve', 'reject'],
+        'support': ['read', 'respond'],
+        'team': ['read', 'write', 'delete'],
+        'payouts': ['read', 'approve', 'reject'],
+        'audit': ['read'],
+        'settings': ['read', 'write']
+    }
+    
+    permissions = data.get('permissions', {})
+    validated_permissions = {}
+    
+    for resource, actions in permissions.items():
+        if resource in valid_permissions:
+            validated_permissions[resource] = {
+                action: actions.get(action, False) 
+                for action in valid_permissions[resource]
+            }
+    
+    role = AdminRole(
+        name=data['name'],
+        description=data.get('description', ''),
+        permissions=validated_permissions
+    )
+    
+    db.session.add(role)
+    db.session.commit()
+    
+    return jsonify({
+        'message': 'Role created successfully',
+        'role': role.to_dict()
+    }), 201
+
+@app.route('/api/admin/mfa/setup', methods=['POST'])
+@role_required(['admin', 'super_admin', 'manager'])
+def setup_mfa():
+    try:
+        token = request.headers.get('Authorization').split(' ')[1]
+        payload = pyjwt.decode(token, app.config['JWT_SECRET_KEY'], algorithms=['HS256'])
+        user_id = payload.get('user_id')
+        user = User.query.get(user_id)
+        
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        # Generate TOTP secret
+        import pyotp
+        secret = pyotp.random_base32()
+        
+        # Generate backup codes
+        import secrets
+        backup_codes = [secrets.token_hex(4).upper() for _ in range(10)]
+        
+        user.mfa_secret = secret
+        user.mfa_backup_codes = backup_codes
+        
+        db.session.commit()
+        
+        # Generate QR code URL
+        totp = pyotp.TOTP(secret)
+        qr_url = totp.provisioning_uri(
+            name=user.email,
+            issuer_name="iStokvel Admin"
+        )
+        
+        return jsonify({
+            'secret': secret,
+            'qr_url': qr_url,
+            'backup_codes': backup_codes
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/mfa/verify', methods=['POST'])
+@role_required(['admin', 'super_admin', 'manager'])
+def verify_mfa():
+    try:
+        data = request.get_json()
+        token = request.headers.get('Authorization').split(' ')[1]
+        payload = pyjwt.decode(token, app.config['JWT_SECRET_KEY'], algorithms=['HS256'])
+        user_id = payload.get('user_id')
+        user = User.query.get(user_id)
+        
+        if not user or not user.mfa_enabled:
+            return jsonify({'error': 'MFA not enabled'}), 400
+        
+        # Verify TOTP token
+        import pyotp
+        totp = pyotp.TOTP(user.mfa_secret)
+        
+        if not totp.verify(data.get('token')):
+            return jsonify({'error': 'Invalid MFA token'}), 400
+        
+        # Create secure admin session
+        session_token = secrets.token_urlsafe(32)
+        session = AdminSession(
+            user_id=user.id,
+            session_token=session_token,
+            ip_address=request.remote_addr,
+            user_agent=request.headers.get('User-Agent'),
+            mfa_verified=True,
+            expires_at=datetime.utcnow() + timedelta(hours=8)
+        )
+        
+        db.session.add(session)
+        db.session.commit()
+        
+        # Generate new JWT with session info
+        new_payload = {
+            'user_id': user.id,
+            'session_token': session_token,
+            'exp': datetime.utcnow() + timedelta(hours=8)
+        }
+        
+        new_token = pyjwt.encode(new_payload, app.config['JWT_SECRET_KEY'], algorithm='HS256')
+        
+        return jsonify({
+            'token': new_token,
+            'expires_at': session.expires_at.isoformat()
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/audit-logs', methods=['GET'])
+@role_required(['admin', 'super_admin'])
+# @mfa_required
+def get_audit_logs():
+    page = request.args.get('page', 1, type=int)
+    limit = request.args.get('limit', 50, type=int)
+    admin_id = request.args.get('admin_id')
+    action = request.args.get('action')
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    
+    query = AdminAuditLog.query
+    
+    if admin_id:
+        query = query.filter(AdminAuditLog.admin_id == admin_id)
+    if action:
+        query = query.filter(AdminAuditLog.action == action)
+    if start_date:
+        query = query.filter(AdminAuditLog.created_at >= start_date)
+    if end_date:
+        query = query.filter(AdminAuditLog.created_at <= end_date)
+    
+    total = query.count()
+    logs = query.order_by(AdminAuditLog.created_at.desc()).offset((page-1)*limit).limit(limit).all()
+    
+    return jsonify({
+        'total': total,
+        'page': page,
+        'limit': limit,
+        'logs': [{
+            'id': log.id,
+            'admin_name': log.admin.full_name if log.admin else 'Unknown',
+            'action': log.action,
+            'resource_type': log.resource_type,
+            'resource_id': log.resource_id,
+            'details': log.details,
+            'ip_address': log.ip_address,
+            'created_at': log.created_at.isoformat()
+        } for log in logs]
+    })
+
+def super_admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        try:
+            token = request.headers.get('Authorization')
+            if not token:
+                return jsonify({'error': 'No token provided'}), 401
+
+            token = token.split(' ')[1]
+            payload = pyjwt.decode(token, app.config['JWT_SECRET_KEY'], algorithms=['HS256'])
+            user_id = payload.get('user_id')
+            user = User.query.get(user_id)
+
+            if not user or not user.is_verified:
+                return jsonify({'error': 'Unauthorized'}), 401
+
+            # Check if user has super_admin role
+            if not user.admin_role or user.admin_role.name != 'super_admin':
+                return jsonify({'error': 'Super admin access required'}), 403
+
+            return f(*args, **kwargs)
+        except Exception as e:
+            return jsonify({'error': 'Authentication failed'}), 401
+    return decorated_function
+
+def mfa_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        try:
+            token = request.headers.get('Authorization')
+            if not token:
+                return jsonify({'error': 'No token provided'}), 401
+
+            token = token.split(' ')[1]
+            payload = pyjwt.decode(token, app.config['JWT_SECRET_KEY'], algorithms=['HS256'])
+            user_id = payload.get('user_id')
+            user = User.query.get(user_id)
+
+            if not user or not user.is_verified:
+                return jsonify({'error': 'Unauthorized'}), 401
+
+            # Check if MFA is enabled and verified for this session
+            session_token = payload.get('session_token')
+            if session_token:
+                session = AdminSession.query.filter_by(
+                    session_token=session_token,
+                    user_id=user_id
+                ).first()
+                
+                if not session or not session.mfa_verified:
+                    return jsonify({'error': 'MFA verification required'}), 403
+
+            return f(*args, **kwargs)
+        except Exception as e:
+            return jsonify({'error': 'Authentication failed'}), 401
+    return decorated_function
+
+def audit_log(action, resource_type=None, resource_id=None):
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            try:
+                # Get admin info from token
+                token = request.headers.get('Authorization')
+                if token:
+                    token = token.split(' ')[1]
+                    payload = pyjwt.decode(token, app.config['JWT_SECRET_KEY'], algorithms=['HS256'])
+                    admin_id = payload.get('user_id')
+                    
+                    # Create audit log
+                    audit_entry = AdminAuditLog(
+                        admin_id=admin_id,
+                        action=action,
+                        resource_type=resource_type,
+                        resource_id=str(resource_id) if resource_id else None,
+                        details={
+                            'method': request.method,
+                            'endpoint': request.endpoint,
+                            'ip_address': request.remote_addr,
+                            'user_agent': request.headers.get('User-Agent')
+                        },
+                        ip_address=request.remote_addr,
+                        user_agent=request.headers.get('User-Agent')
+                    )
+                    db.session.add(audit_entry)
+                    db.session.commit()
+                
+                return f(*args, **kwargs)
+            except Exception as e:
+                return f(*args, **kwargs)  # Continue even if audit fails
+        return decorated_function
+    return decorator
+
+# Add these endpoints after the existing ones
 
 @app.route('/api/admin/roles/<int:role_id>', methods=['PUT'])
-@role_required(['super_admin'])
+@role_required(['admin', 'super_admin'])
+# @mfa_required
+@audit_log('UPDATE_ROLE', 'ROLE')
 def update_role(role_id):
     role = AdminRole.query.get_or_404(role_id)
     data = request.get_json()
@@ -3840,15 +5084,21 @@ def update_role(role_id):
     return jsonify({'message': 'Role updated'})
 
 @app.route('/api/admin/roles/<int:role_id>', methods=['DELETE'])
-@role_required(['super_admin'])
+@role_required(['admin', 'super_admin'])
+# @mfa_required
+@audit_log('DELETE_ROLE', 'ROLE')
 def delete_role(role_id):
     role = AdminRole.query.get_or_404(role_id)
+    if role.is_system_role:
+        return jsonify({'error': 'Cannot delete system role'}), 400
     db.session.delete(role)
     db.session.commit()
     return jsonify({'message': 'Role deleted'})
 
 @app.route('/api/admin/team/<int:admin_id>/role', methods=['PUT'])
-@role_required(['super_admin', 'manager'])
+@role_required(['admin', 'super_admin'])
+# @mfa_required
+@audit_log('UPDATE_ADMIN_ROLE', 'USER')
 def change_admin_role(admin_id):
     user = User.query.get_or_404(admin_id)
     data = request.get_json()
@@ -3860,13 +5110,201 @@ def change_admin_role(admin_id):
     db.session.commit()
     return jsonify({'message': 'Admin role updated'})
 
-@app.route('/api/admin/roles', methods=['GET'])
-@role_required(['super_admin'])
-def list_roles():
-    roles = AdminRole.query.all()
-    return jsonify([{"id": r.id, "name": r.name, "permissions": r.permissions} for r in roles])
+@app.cli.command('create-default-roles')
+@with_appcontext
+def create_default_roles():
+    """Create default admin roles for the stokvel platform"""
+    
+    # Check if roles already exist
+    if AdminRole.query.first():
+        print("Roles already exist. Skipping creation.")
+        return
+    
+    roles_data = [
+        {
+            'name': 'super_admin',
+            'description': 'Full system access with ability to manage all admins and roles',
+            'is_system_role': True,
+            'permissions': {
+                'users': {'read': True, 'write': True, 'delete': True},
+                'groups': {'read': True, 'write': True, 'delete': True},
+                'analytics': {'read': True, 'export': True},
+                'approvals': {'read': True, 'approve': True, 'reject': True},
+                'support': {'read': True, 'respond': True},
+                'team': {'read': True, 'write': True, 'delete': True},
+                'payouts': {'read': True, 'approve': True, 'reject': True},
+                'audit': {'read': True},
+                'settings': {'read': True, 'write': True},
+                'financial': {'read': True, 'write': True, 'approve': True},
+                'content': {'read': True, 'write': True, 'delete': True},
+                'security': {'read': True, 'write': True, 'configure': True}
+            }
+        },
+        {
+            'name': 'group_manager',
+            'description': 'Manages stokvel groups, members, and group-specific operations',
+            'is_system_role': False,
+            'permissions': {
+                'users': {'read': True, 'write': False, 'delete': False},
+                'groups': {'read': True, 'write': True, 'delete': False},
+                'analytics': {'read': True, 'export': False},
+                'approvals': {'read': True, 'approve': True, 'reject': True},
+                'support': {'read': True, 'respond': False},
+                'team': {'read': False, 'write': False, 'delete': False},
+                'payouts': {'read': True, 'approve': False, 'reject': False},
+                'audit': {'read': False},
+                'settings': {'read': False, 'write': False},
+                'financial': {'read': True, 'write': False, 'approve': False},
+                'content': {'read': True, 'write': False, 'delete': False},
+                'security': {'read': False, 'write': False, 'configure': False}
+            }
+        },
+        {
+            'name': 'financial_admin',
+            'description': 'Handles financial operations, withdrawals, and transactions',
+            'is_system_role': False,
+            'permissions': {
+                'users': {'read': True, 'write': False, 'delete': False},
+                'groups': {'read': True, 'write': False, 'delete': False},
+                'analytics': {'read': True, 'export': True},
+                'approvals': {'read': True, 'approve': True, 'reject': True},
+                'support': {'read': True, 'respond': False},
+                'team': {'read': False, 'write': False, 'delete': False},
+                'payouts': {'read': True, 'approve': True, 'reject': True},
+                'audit': {'read': True},
+                'settings': {'read': False, 'write': False},
+                'financial': {'read': True, 'write': True, 'approve': True},
+                'content': {'read': False, 'write': False, 'delete': False},
+                'security': {'read': False, 'write': False, 'configure': False}
+            }
+        },
+        {
+            'name': 'support_admin',
+            'description': 'Manages customer support, KYC approvals, and user issues',
+            'is_system_role': False,
+            'permissions': {
+                'users': {'read': True, 'write': True, 'delete': False},
+                'groups': {'read': True, 'write': False, 'delete': False},
+                'analytics': {'read': False, 'export': False},
+                'approvals': {'read': True, 'approve': True, 'reject': True},
+                'support': {'read': True, 'respond': True},
+                'team': {'read': False, 'write': False, 'delete': False},
+                'payouts': {'read': False, 'approve': False, 'reject': False},
+                'audit': {'read': False},
+                'settings': {'read': False, 'write': False},
+                'financial': {'read': False, 'write': False, 'approve': False},
+                'content': {'read': True, 'write': False, 'delete': False},
+                'security': {'read': False, 'write': False, 'configure': False}
+            }
+        }
+    ]
+    
+    for role_data in roles_data:
+        role = AdminRole(**role_data)
+        db.session.add(role)
+        print(f"Created role: {role_data['name']}")
+    
+    db.session.commit()
+    print("Default roles created successfully!")
 
- # -------------------- MAIN --------------------
+
+@app.route('/api/admin/initialize-roles', methods=['POST'])
+def initialize_default_roles():
+    """Initialize default roles for the platform"""
+    try:
+        # Check if roles already exist
+        if AdminRole.query.first():
+            return jsonify({'message': 'Roles already exist'}), 200
+        
+        roles_data = [
+            {
+                'name': 'super_admin',
+                'description': 'Full system access with ability to manage all admins and roles',
+                'is_system_role': True,
+                'permissions': {
+                    'users': {'read': True, 'write': True, 'delete': True},
+                    'groups': {'read': True, 'write': True, 'delete': True},
+                    'analytics': {'read': True, 'export': True},
+                    'approvals': {'read': True, 'approve': True, 'reject': True},
+                    'support': {'read': True, 'respond': True},
+                    'team': {'read': True, 'write': True, 'delete': True},
+                    'payouts': {'read': True, 'approve': True, 'reject': True},
+                    'audit': {'read': True},
+                    'settings': {'read': True, 'write': True},
+                    'financial': {'read': True, 'write': True, 'approve': True},
+                    'content': {'read': True, 'write': True, 'delete': True},
+                    'security': {'read': True, 'write': True, 'configure': True}
+                }
+            },
+            {
+                'name': 'group_manager',
+                'description': 'Manages stokvel groups, members, and group-specific operations',
+                'is_system_role': False,
+                'permissions': {
+                    'users': {'read': True, 'write': False, 'delete': False},
+                    'groups': {'read': True, 'write': True, 'delete': False},
+                    'analytics': {'read': True, 'export': False},
+                    'approvals': {'read': True, 'approve': True, 'reject': True},
+                    'support': {'read': True, 'respond': False},
+                    'team': {'read': False, 'write': False, 'delete': False},
+                    'payouts': {'read': True, 'approve': False, 'reject': False},
+                    'audit': {'read': False},
+                    'settings': {'read': False, 'write': False},
+                    'financial': {'read': True, 'write': False, 'approve': False},
+                    'content': {'read': True, 'write': False, 'delete': False},
+                    'security': {'read': False, 'write': False, 'configure': False}
+                }
+            },
+            {
+                'name': 'financial_admin',
+                'description': 'Handles financial operations, withdrawals, and transactions',
+                'is_system_role': False,
+                'permissions': {
+                    'users': {'read': True, 'write': False, 'delete': False},
+                    'groups': {'read': True, 'write': False, 'delete': False},
+                    'analytics': {'read': True, 'export': True},
+                    'approvals': {'read': True, 'approve': True, 'reject': True},
+                    'support': {'read': True, 'respond': False},
+                    'team': {'read': False, 'write': False, 'delete': False},
+                    'payouts': {'read': True, 'approve': True, 'reject': True},
+                    'audit': {'read': True},
+                    'settings': {'read': False, 'write': False},
+                    'financial': {'read': True, 'write': True, 'approve': True},
+                    'content': {'read': False, 'write': False, 'delete': False},
+                    'security': {'read': False, 'write': False, 'configure': False}
+                }
+            },
+            {
+                'name': 'support_admin',
+                'description': 'Manages customer support, KYC approvals, and user issues',
+                'is_system_role': False,
+                'permissions': {
+                    'users': {'read': True, 'write': True, 'delete': False},
+                    'groups': {'read': True, 'write': False, 'delete': False},
+                    'analytics': {'read': False, 'export': False},
+                    'approvals': {'read': True, 'approve': True, 'reject': True},
+                    'support': {'read': True, 'respond': True},
+                    'team': {'read': False, 'write': False, 'delete': False},
+                    'payouts': {'read': False, 'approve': False, 'reject': False},
+                    'audit': {'read': False},
+                    'settings': {'read': False, 'write': False},
+                    'financial': {'read': False, 'write': False, 'approve': False},
+                    'content': {'read': True, 'write': False, 'delete': False},
+                    'security': {'read': False, 'write': False, 'configure': False}
+                }
+            }
+        ]
+        
+        for role_data in roles_data:
+            role = AdminRole(**role_data)
+            db.session.add(role)
+        
+        db.session.commit()
+        return jsonify({'message': 'Default roles created successfully'}), 201
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+  # -------------------- MAIN --------------------
 if __name__ == '__main__':
     app.run(port=5001, debug=True)
 
@@ -3881,15 +5319,51 @@ def checkout(dbapi_connection, connection_record, connection_proxy):
         connection_record.info['pid'] = pid
         connection_record.info['checked_out'] = time.time()
 
-@app.cli.command('delete-admin')
-@with_appcontext
-def delete_admin():
-    """Delete an admin user by email."""
-    email = click.prompt('Enter admin email to delete', type=str)
-    user = User.query.filter_by(email=email).first()
-    if not user:
-        click.echo(click.style(f"Error: User with email '{email}' not found.", fg='red'))
-        return
-    db.session.delete(user)
+@app.route('/api/admin/withdrawals/<int:withdrawal_id>/approve', methods=['POST'])
+@role_required(['admin'])
+def approve_withdrawal(withdrawal_id):
+    withdrawal = WithdrawalRequest.query.get_or_404(withdrawal_id)
+    if withdrawal.status != 'pending':
+        return jsonify({'error': 'Request is not pending'}), 400
+    withdrawal.status = 'approved'
     db.session.commit()
-    click.echo(click.style(f"Admin user '{email}' deleted successfully.", fg='green'))
+    # Optionally send notification to user
+    member = withdrawal.member
+    user = User.query.get(member.user_id) if member else None
+    if user:
+        notification = Notification(
+            user_id=user.id,
+            title="Payout Approved",
+            message=f"Your payout request for R{withdrawal.amount:.2f} has been approved.",
+            type="payout_approved",
+            data={"withdrawal_id": withdrawal.id}
+        )
+        db.session.add(notification)
+        db.session.commit()
+    return jsonify({'message': 'Withdrawal request approved'}), 200
+
+@app.route('/api/admin/withdrawals/<int:withdrawal_id>/reject', methods=['POST'])
+@role_required(['admin'])
+def reject_withdrawal(withdrawal_id):
+    withdrawal = WithdrawalRequest.query.get_or_404(withdrawal_id)
+    if withdrawal.status != 'pending':
+        return jsonify({'error': 'Request is not pending'}), 400
+    data = request.get_json() or {}
+    reason = data.get('reason', '')
+    withdrawal.status = 'rejected'
+    withdrawal.reason = reason
+    db.session.commit()
+    # Optionally send notification to user
+    member = withdrawal.member
+    user = User.query.get(member.user_id) if member else None
+    if user:
+        notification = Notification(
+            user_id=user.id,
+            title="Payout Rejected",
+            message=f"Your payout request for R{withdrawal.amount:.2f} was rejected. Reason: {reason}",
+            type="payout_rejected",
+            data={"withdrawal_id": withdrawal.id, "reason": reason}
+        )
+        db.session.add(notification)
+        db.session.commit()
+    return jsonify({'message': 'Withdrawal request rejected'}), 200

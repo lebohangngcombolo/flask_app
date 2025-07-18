@@ -218,8 +218,6 @@ const TierDetails: React.FC = () => {
         'Authorization': `Bearer ${localStorage.getItem('token')}`,
       },
       body: JSON.stringify({
-        fullName: user.fullName || user.full_name,
-        email: user.email,
         category,
         tier,
         amount,
@@ -371,14 +369,14 @@ const TierDetails: React.FC = () => {
               <CheckCircle className="w-10 h-10 mb-2 text-purple-600" />
               <div className="font-semibold mb-1">Track Progress</div>
               <div className="text-gray-500 text-center text-sm">Track your progress and earn interest together.</div>
-            </div>
+                </div>
             <div className="bg-white rounded-xl shadow p-6 flex flex-col items-center">
               <Calendar className="w-10 h-10 mb-2 text-yellow-600" />
               <div className="font-semibold mb-1">Withdraw Funds</div>
               <div className="text-gray-500 text-center text-sm">Withdraw funds anytime or set payout dates.</div>
-            </div>
-          </div>
-        </div>
+                  </div>
+                  </div>
+                </div>
 
         {/* FAQ */}
         <div className="mb-12">
@@ -442,18 +440,36 @@ const TierDetails: React.FC = () => {
               Your request will be reviewed by an admin. You'll be notified once it's approved.
             </div>
             {/* Confirm button */}
-            <button
+          <button
               className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-xl transition mb-8 mx-auto block"
               onClick={() => {
                 handleJoin(selectedAmount);
                 setShowModal(false);
                 setShowSuccess(true);
+
+                // Refetch join requests to update pending state
+                fetch('/api/user/join-requests', {
+                  headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                    'Content-Type': 'application/json'
+                  }
+                })
+                  .then(res => res.json())
+                  .then(data => {
+                    const pending = data.some(req =>
+                      req.category === category &&
+                      req.tier === tier &&
+                      req.amount === selectedAmount &&
+                      req.status === "pending"
+                    );
+                    setIsPending(pending);
+                  });
               }}
             >
               Confirm
-            </button>
-          </div>
+          </button>
         </div>
+      </div>
       )}
 
       {showSuccess && (

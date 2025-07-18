@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { signup, verifyEmailCode, resendEmailVerificationCode, verifyPhoneCode, resendSmsVerificationCode } from '../utils/auth';
 import { toast } from 'react-toastify';
 import PageTransition from '../components/PageTransition';
-// import GoogleLoginButton from '../components/GoogleLoginButton';
+import GoogleLoginButton from '../components/GoogleLoginButton';
 import { Eye, EyeOff, CheckCircle, XCircle, AlertCircle, Shield, Lock, Zap, Clock } from 'lucide-react';
 
 // Password strength types
@@ -808,7 +808,7 @@ const Signup: React.FC = () => {
                   </div>
                 </div>
 
-                {/* <GoogleLoginButton /> */}
+                <GoogleLoginButton />
               </form>
             )}
           </div>

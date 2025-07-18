@@ -22,15 +22,11 @@ import toast from 'react-hot-toast';
 import { userNavItems, marketplaceNavItem } from '../navItems';
 import { authAPI, securityAPI, userAPI } from '../services/api';
 import api from '../services/api'; // <-- Make sure this is here
+import { getCurrentUser } from '../utils/auth'; // Add this import
 
-// Add to your API service (api.ts)
-export const profileAPI = {
-  getUserProfile: () => api.get('/api/user/profile'),
-  updateUserProfile: (data: any) => api.put('/api/user/profile', data),
-  getActiveSessions: () => api.get('/api/user/sessions'),
-};
 
-// Mock Active Sessions data
+
+
 const mockSessions = [
   { id: 1, device: 'Windows 10 - Chrome', location: 'Cape Town, South Africa', time: '2023-10-27T10:00:00Z', current: true },
   { id: 2, device: 'Android Phone - Chrome', location: 'Johannesburg, South Africa', time: '2023-10-26T18:30:00Z', current: false },
@@ -246,12 +242,31 @@ const UserProfile: React.FC = () => {
        const response = await userAPI.getProfile();
        setUserDetails(prev => ({
          ...prev,
-         name: response.data.name || '',
-         phone: response.data.phone || '',
-         dateOfBirth: response.data.date_of_birth ? moment(response.data.date_of_birth).format('YYYY-MM-DD') : '',
-         gender: response.data.gender || '',
-         employmentStatus: response.data.employment_status || '',
+         name: response.data.name !== undefined && response.data.name !== null ? response.data.name : prev.name,
+         phone: response.data.phone !== undefined && response.data.phone !== null ? response.data.phone : prev.phone,
+         dateOfBirth: response.data.date_of_birth
+           ? moment(response.data.date_of_birth).format('YYYY-MM-DD')
+           : prev.dateOfBirth,
+         gender: response.data.gender !== undefined && response.data.gender !== null ? response.data.gender : prev.gender,
+         employmentStatus: response.data.employment_status !== undefined && response.data.employment_status !== null
+           ? response.data.employment_status
+           : prev.employmentStatus,
        }));
+
+       const updatedUser = {
+         ...getCurrentUser(), // import from utils/auth
+         name: response.data.name !== undefined && response.data.name !== null ? response.data.name : userDetails.name,
+         phone: response.data.phone !== undefined && response.data.phone !== null ? response.data.phone : userDetails.phone,
+         date_of_birth: response.data.date_of_birth
+           ? moment(response.data.date_of_birth).format('YYYY-MM-DD')
+           : userDetails.dateOfBirth,
+         gender: response.data.gender !== undefined && response.data.gender !== null ? response.data.gender : userDetails.gender,
+         employment_status: response.data.employment_status !== undefined && response.data.employment_status !== null
+           ? response.data.employment_status
+           : userDetails.employmentStatus,
+         profilePicture: response.data.profile_picture || getCurrentUser().profilePicture || response.data.profilePicture,
+       };
+       localStorage.setItem('user', JSON.stringify(updatedUser));
 
      } catch (err: any) {
        toast.error(
@@ -1113,6 +1128,38 @@ const UserProfile: React.FC = () => {
           {renderContent()}
         </div>
       </div>
+      {showDeleteModal && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-sm">
+            <h2 className="text-lg font-bold mb-4 text-red-600">Delete Account</h2>
+            <p className="mb-4 text-gray-600">
+              Are you sure you want to permanently delete your account? This action cannot be undone.
+            </p>
+            <input
+              type="password"
+              placeholder="Enter your password to confirm"
+              value={deletePassword}
+              onChange={e => setDeletePassword(e.target.value)}
+              className="w-full border rounded p-2 mb-4"
+              disabled={isDeleting}
+            />
+            <button
+              onClick={handleDeleteAccount}
+              className="w-full bg-red-600 text-white py-2 rounded mb-2"
+              disabled={isDeleting || !deletePassword}
+            >
+              {isDeleting ? 'Deleting...' : 'Delete Account'}
+            </button>
+            <button
+              onClick={() => setShowDeleteModal(false)}
+              className="w-full text-gray-500"
+              disabled={isDeleting}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

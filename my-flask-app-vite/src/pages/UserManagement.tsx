@@ -1,261 +1,381 @@
 import React, { useState, useEffect } from 'react';
-import { Banknote, CreditCard, Building2, User, CheckCircle, Ban, Eye, Search, Filter } from 'lucide-react';
-import { dashboardAPI } from '../services/api'; // Assuming dashboardAPI exists and has getUsers
+import { 
+  Search, Filter, Download, RefreshCw, MessageSquare, 
+  CheckCircle, Ban, User, Mail, Phone, Calendar, 
+  Users, Crown, Clock, AlertTriangle, Shield, Star, 
+  MoreHorizontal, Eye, Edit, Trash2, UserPlus,
+  TrendingUp, TrendingDown, Activity, Zap, Sparkles
+} from 'lucide-react';
+import { dashboardAPI } from '../services/api';
 
-// Define a type for the user data expected from the API
 interface UserData {
   id: number;
-  full_name: string; // Use full_name based on backend response
+  full_name: string;
   email: string;
+  phone?: string;
   role: 'admin' | 'member';
-  is_verified: boolean; // Assuming KYC status is boolean is_verified
-  is_suspended: boolean; // Assuming a suspended status field
-  group?: string; // Assuming group name or identifier might be here
-  total_contributions?: number; // Assuming total contributions
-  bankDetails?: { // Assuming nested bank details
-    bankName: string;
-    accountNumber: string;
-    accountType: string;
-  };
-  created_at: string; // Assuming a creation date
-  // Add other fields as needed from your backend User model
+  is_verified: boolean;
+  is_suspended: boolean;
+  created_at: string;
+  last_activity?: string;
+  total_contributions?: number;
+  engagement_level?: 'high' | 'medium' | 'low';
 }
 
 const UserManagement: React.FC = () => {
   const [users, setUsers] = useState<UserData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedUser, setSelectedUser] = useState<UserData | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [selectedUsers, setSelectedUsers] = useState<number[]>([]);
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
 
+  // Fetch users
   useEffect(() => {
     const fetchUsers = async () => {
       try {
         setLoading(true);
-        // Correct the API call: use dashboardAPI.getUsers()
-        const response = await dashboardAPI.getUsers(); // Call getUsers from dashboardAPI
-        setUsers(response.data); // Assuming the list of users is in response.data
+        const response = await dashboardAPI.getUsers();
+        setUsers(response.data);
         setError(null);
       } catch (err) {
         console.error('Error fetching users:', err);
-        // It's helpful to log the error response data if available
-        console.error('Error response data:', err.response?.data);
         setError('Failed to load users. Please try again later.');
-        setUsers([]); // Clear users on error
+        setUsers([]);
       } finally {
         setLoading(false);
       }
     };
 
     fetchUsers();
-  }, []); // Empty dependency array means this effect runs once on mount
+  }, []);
 
-  const handleUserSelect = (user: UserData) => {
-    setSelectedUser(user);
+  // Calculate stats
+  const stats = {
+    total: users.length,
+    active: users.filter(u => !u.is_suspended).length,
+    verified: users.filter(u => u.is_verified).length,
+    pending: users.filter(u => !u.is_verified).length,
+    highValue: users.filter(u => (u.total_contributions || 0) > 5000).length,
+    engaged: users.filter(u => u.engagement_level === 'high').length,
   };
 
-  const handleCloseModal = () => {
-    setSelectedUser(null);
+  // Filter users
+  const filteredUsers = users.filter(user => {
+    const matchesSearch = user.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         user.email.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesFilter = statusFilter === 'all' || 
+                         (statusFilter === 'active' && !user.is_suspended) ||
+                         (statusFilter === 'suspended' && user.is_suspended) ||
+                         (statusFilter === 'verified' && user.is_verified) ||
+                         (statusFilter === 'unverified' && !user.is_verified);
+    
+    return matchesSearch && matchesFilter;
+  });
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedUsers(filteredUsers.map(u => u.id));
+    } else {
+      setSelectedUsers([]);
+    }
   };
 
-  // Placeholder handlers for actions - implement actual API calls here
-  const handleSuspendUser = async (userId: number) => {
-    console.log('Suspend user:', userId);
-    // TODO: Implement API call to suspend user using appropriate API object/method
-    // Example: await adminAPI.suspendUser(userId); // You'll need to add this method
-    // Refresh users list after action
+  const handleSelectUser = (userId: number, checked: boolean) => {
+    if (checked) {
+      setSelectedUsers(prev => [...prev, userId]);
+    } else {
+      setSelectedUsers(prev => prev.filter(id => id !== userId));
+    }
   };
 
-  const handleVerifyKyc = async (userId: number) => {
-    console.log('Verify KYC for user:', userId);
-    // TODO: Implement API call to verify KYC using appropriate API object/method
-     // Example: await adminAPI.verifyKyc(userId); // You'll need to add this method
-    // Refresh users list after action
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'short', 
+      day: 'numeric' 
+    });
   };
 
-  // Basic filtering/searching (can be expanded)
-  // const [searchTerm, setSearchTerm] = useState('');
-  // const filteredUsers = users.filter(user =>
-  //   user.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-  //   user.email.toLowerCase().includes(searchTerm.toLowerCase())
-  // );
+  const getStatusBadge = (user: UserData) => {
+    if (user.is_suspended) {
+      return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">Suspended</span>;
+    }
+    if (!user.is_verified) {
+      return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">Pending KYC</span>;
+    }
+    return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Active</span>;
+  };
 
+  const getEngagementBadge = (level?: string) => {
+    switch (level) {
+      case 'high':
+        return <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-emerald-100 text-emerald-700">High</span>;
+      case 'medium':
+        return <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-blue-100 text-blue-700">Medium</span>;
+      case 'low':
+        return <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-700">Low</span>;
+      default:
+        return <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-700">Unknown</span>;
+    }
+  };
 
   return (
-    <div className="flex min-h-screen bg-gray-100">
-      {/* Add AdminSidebar and AdminNavbar if this page is not rendered within AdminDashboard */}
-      {/* Assuming this page is accessed via the /admin route which includes the sidebar and navbar */}
-      {/* If not, you might need to wrap this component with a layout similar to AdminDashboard */}
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">User Management</h1>
+          <p className="text-gray-600 mt-1">Manage and monitor all platform users</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500">
+            <Download className="w-4 h-4 mr-2" />
+            Export
+          </button>
+          <button className="inline-flex items-center px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500">
+            <UserPlus className="w-4 h-4 mr-2" />
+            Add User
+          </button>
+        </div>
+      </div>
+      {/* Search and Filters */}
+      <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <div className="flex flex-col lg:flex-row gap-4">
+          <div className="flex-1">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+              <input
+                type="text"
+                placeholder="Search users by name or email..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-all duration-200"
+              />
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-all duration-200"
+            >
+              <option value="all">All Users</option>
+              <option value="active">Active</option>
+              <option value="suspended">Suspended</option>
+              <option value="verified">Verified</option>
+              <option value="unverified">Unverified</option>
+            </select>
 
-      {/* Main Content Area */}
-      <div className="flex-1 p-8 space-y-6 mt-16 ml-16"> {/* Added margin-top and margin-left for fixed header/sidebar */}
-        <h1 className="text-3xl font-bold text-gray-900">User Management</h1>
-        <p className="text-gray-600">View and manage all users in the i-Stokvel platform.</p>
+            <button className="inline-flex items-center px-4 py-3 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500">
+              <Filter className="w-4 h-4 mr-2" />
+              Filters
+            </button>
+          </div>
+        </div>
+      </div>
 
-        {/* Add Search/Filter controls here later */}
-        {/* <input
-          type="text"
-          placeholder="Search users..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="mb-4 p-2 border rounded"
-        /> */}
+      {/* Bulk Actions */}
+      {selectedUsers.length > 0 && (
+        <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+          <div className="flex items-center justify-between">
+            <span className="text-gray-700 font-medium">
+              {selectedUsers.length} user(s) selected
+            </span>
+            <div className="flex gap-2">
+              <button className="inline-flex items-center px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors duration-200 text-sm">
+                <CheckCircle className="w-4 h-4 mr-2" />
+                Verify Selected
+              </button>
+              <button className="inline-flex items-center px-3 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors duration-200 text-sm">
+                <Ban className="w-4 h-4 mr-2" />
+                Suspend Selected
+              </button>
+              <button className="inline-flex items-center px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200 text-sm">
+                <MessageSquare className="w-4 h-4 mr-2" />
+                Message Selected
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
-        {loading && <div className="text-center">Loading users...</div>}
-        {error && <div className="text-red-600">Error: {error}</div>}
+      {/* Loading State */}
+      {loading && (
+        <div className="text-center py-12">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading users...</p>
+        </div>
+      )}
 
-        {!loading && !error && users.length > 0 && (
-          <div className="bg-white shadow rounded-lg overflow-hidden">
+      {/* Error State */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-6">
+          <div className="flex items-center">
+            <AlertTriangle className="w-5 h-5 text-red-400 mr-3" />
+            <p className="text-red-600">Error: {error}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Users Table */}
+      {!loading && !error && filteredUsers.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-medium text-gray-900">
+                Users ({filteredUsers.length})
+              </h3>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setViewMode('grid')}
+                  className={`p-2 rounded-lg ${viewMode === 'grid' ? 'bg-gray-100 text-gray-900' : 'text-gray-400 hover:text-gray-600'}`}
+                >
+                  <div className="w-4 h-4 grid grid-cols-2 gap-0.5">
+                    <div className="w-1.5 h-1.5 bg-current rounded-sm"></div>
+                    <div className="w-1.5 h-1.5 bg-current rounded-sm"></div>
+                    <div className="w-1.5 h-1.5 bg-current rounded-sm"></div>
+                    <div className="w-1.5 h-1.5 bg-current rounded-sm"></div>
+                  </div>
+                </button>
+                <button
+                  onClick={() => setViewMode('list')}
+                  className={`p-2 rounded-lg ${viewMode === 'list' ? 'bg-gray-100 text-gray-900' : 'text-gray-400 hover:text-gray-600'}`}
+                >
+                  <div className="w-4 h-4 space-y-0.5">
+                    <div className="w-full h-0.5 bg-current rounded-sm"></div>
+                    <div className="w-full h-0.5 bg-current rounded-sm"></div>
+                    <div className="w-full h-0.5 bg-current rounded-sm"></div>
+                  </div>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+              <thead className="bg-[#3B4CCA]">
                 <tr>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Name
+                  <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                    <input
+                      type="checkbox"
+                      checked={selectedUsers.length === filteredUsers.length}
+                      onChange={(e) => handleSelectAll(e.target.checked)}
+                      className="rounded border-gray-300 text-gray-900 focus:ring-gray-900"
+                    />
                   </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Email
+                  <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                    User
                   </th>
-                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Role
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    KYC Verified
-                  </th>
-                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                     Status
                   </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Groups
+                  <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                    Role
                   </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                    Engagement
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                    Joined
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                    Last Activity
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-white uppercase tracking-wider">
                     Actions
                   </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {users.map((user) => (
-                  <tr key={user.id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{user.full_name}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.email}</td>
-                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.role}</td>
+                {filteredUsers.map((user) => (
+                  <tr key={user.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <input
+                        type="checkbox"
+                        checked={selectedUsers.includes(user.id)}
+                        onChange={(e) => handleSelectUser(user.id, e.target.checked)}
+                        className="rounded border-gray-300 text-gray-900 focus:ring-gray-900"
+                      />
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <div className="flex-shrink-0 h-10 w-10">
+                          <div className="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center">
+                            <User className="h-5 w-5 text-gray-600" />
+                          </div>
+                        </div>
+                        <div className="ml-4">
+                          <div className="text-sm font-medium text-gray-900">{user.full_name}</div>
+                          <div className="text-sm text-gray-500">{user.email}</div>
+                          {user.phone && (
+                            <div className="text-sm text-gray-500 flex items-center">
+                              <Phone className="w-3 h-3 mr-1" />
+                              {user.phone}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {getStatusBadge(user)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        user.role === 'admin' 
+                          ? 'bg-purple-100 text-purple-800' 
+                          : 'bg-gray-100 text-gray-800'
+                      }`}>
+                        {user.role}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {getEngagementBadge(user.engagement_level)}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {user.is_verified ? (
-                        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                          Yes
-                        </span>
-                      ) : (
-                         <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
-                          No
-                        </span>
-                      )}
-                    </td>
-                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                       {user.is_suspended ? (
-                        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
-                          Suspended
-                        </span>
-                      ) : (
-                         <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                          Active
-                        </span>
-                      )}
+                      {formatDate(user.created_at)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {/* Display joined groups count or list */}
-                      {/* Assuming user object might contain group info */}
-                      {user.group || 'N/A'} {/* Placeholder */}
+                      {user.last_activity ? formatDate(user.last_activity) : 'Never'}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <button onClick={() => handleUserSelect(user)} className="text-indigo-600 hover:text-indigo-900 mr-3">
-                        <Eye className="w-5 h-5 inline-block" /> View
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <div className="flex items-center justify-end gap-2">
+                        <button className="text-gray-400 hover:text-gray-600 p-1 rounded">
+                          <Eye className="w-4 h-4" />
                       </button>
-                       {!user.is_suspended && (
-                          <button onClick={() => handleSuspendUser(user.id)} className="text-yellow-600 hover:text-yellow-900 mr-3">
-                            <Ban className="w-5 h-5 inline-block" /> Suspend
+                        <button className="text-gray-400 hover:text-gray-600 p-1 rounded">
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button className="text-gray-400 hover:text-gray-600 p-1 rounded">
+                          <MessageSquare className="w-4 h-4" />
                           </button>
-                       )}
-                       {!user.is_verified && (
-                          <button onClick={() => handleVerifyKyc(user.id)} className="text-green-600 hover:text-green-900">
-                             <CheckCircle className="w-5 h-5 inline-block" /> Verify KYC
+                        <button className="text-gray-400 hover:text-gray-600 p-1 rounded">
+                          <MoreHorizontal className="w-4 h-4" />
                            </button>
-                       )}
+                      </div>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        )}
-
-         {!loading && !error && users.length === 0 && (
-            <div className="text-center text-gray-600">No users found.</div>
-         )}
-
-
-        {/* User Details Modal (simplified - you can use a dedicated modal component) */}
-        {selectedUser && (
-          <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50" id="my-modal">
-            <div className="relative top-20 mx-auto p-5 border w-11/12 md:w-1/2 shadow-lg rounded-md bg-white">
-              <h3 className="text-2xl font-bold text-gray-900 mb-4">User Details: {selectedUser.full_name}</h3>
-              <div className="space-y-6">
-                {/* User Info */}
-                <div className="space-y-2">
-                  <h4 className="text-lg font-semibold text-gray-800">Basic Information</h4>
-                  <p className="text-sm text-gray-700"><strong>Email:</strong> {selectedUser.email}</p>
-                  <p className="text-sm text-gray-700"><strong>Role:</strong> {selectedUser.role}</p>
-                   <p className="text-sm text-gray-700"><strong>Account Status:</strong> {selectedUser.is_suspended ? 'Suspended' : 'Active'}</p>
-                  <p className="text-sm text-gray-700"><strong>Member Since:</strong> {new Date(selectedUser.created_at).toLocaleDateString()}</p>
-                </div>
-
-                {/* KYC Status */}
-                 <div className="space-y-2">
-                  <h4 className="text-lg font-semibold text-gray-800">KYC Verification</h4>
-                   <p className="text-sm text-gray-700"><strong>Status:</strong> {selectedUser.is_verified ? 'Verified' : 'Pending Verification'}</p>
-                   {/* Add more KYC details here if available in user data */}
-                 </div>
-
-                {/* Group Info */}
-                <div className="space-y-2">
-                  <h4 className="text-lg font-semibold text-gray-800">Group Information</h4>
-                  {/* You'll likely need to fetch detailed group info for the user here */}
-                  <p className="text-sm text-gray-700"><strong>Group:</strong> {selectedUser.group || 'Not in a group yet'}</p>
-                   {/* Add a list of groups if a user can be in multiple */}
-                </div>
-
-                {/* Contributions Summary */}
-                 <div className="space-y-2">
-                  <h4 className="text-lg font-semibold text-gray-800">Contributions Summary</h4>
-                  {/* You'll likely need to fetch a summary of contributions for the user */}
-                  <p className="text-sm text-gray-700"><strong>Total Contributed:</strong> R{selectedUser.total_contributions?.toFixed(2) || '0.00'}</p>
-                   {/* Add links or summaries of recent transactions */}
-                 </div>
-
-
-                {/* Bank Details */}
-                <div className="space-y-2">
-                  <h4 className="text-lg font-semibold text-gray-800">Bank Details</h4>
-                  {selectedUser.bankDetails ? (
-                    <div className="space-y-1 text-sm text-gray-700">
-                      <p><strong>Bank Name:</strong> {selectedUser.bankDetails.bankName}</p>
-                      <p><strong>Account Number:</strong> {selectedUser.bankDetails.accountNumber}</p>
-                      <p><strong>Account Type:</strong> {selectedUser.bankDetails.accountType}</p>
-                    </div>
-                  ) : (
-                    <div className="text-sm text-gray-500">No bank details provided.</div>
-                  )}
-                </div>
-
-                 {/* Add more sections for Transactions, Activity Log, etc. */}
-
-              </div>
-              <div className="flex justify-end mt-6">
-                <button onClick={handleCloseModal} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">
-                  Close
-                </button>
-              </div>
-            </div>
           </div>
         )}
-      </div>
+
+      {/* Empty State */}
+      {!loading && !error && filteredUsers.length === 0 && (
+        <div className="text-center py-12">
+          <Users className="mx-auto h-12 w-12 text-gray-400" />
+          <h3 className="mt-2 text-sm font-medium text-gray-900">No users found</h3>
+          <p className="mt-1 text-sm text-gray-500">
+            {searchTerm || statusFilter !== 'all' 
+              ? 'Try adjusting your search or filter criteria.'
+              : 'Get started by adding your first user.'
+            }
+          </p>
+          </div>
+        )}
     </div>
   );
 };

@@ -58,7 +58,9 @@ export const userAPI = {
   getProfile: () => api.get('/api/user/profile'),
   updateProfile: (data: any) => api.put('/api/user/profile', data),
   getUserStats: () => api.get('/api/dashboard/stats'),
-  getAvailableGroups: () => api.get('/api/groups/available')
+  getAvailableGroups: () => api.get('/api/groups/available'),
+  getSavingsGoal: () => api.get('/api/user/savings-goal'),
+  setSavingsGoal: (data: { label: string; target: number }) => api.post('/api/user/savings-goal', data),
 };
 
 // Communication & Privacy
@@ -88,20 +90,46 @@ export const stokvelAPI = {
   createStokvel: (data: any) => api.post('/api/stokvel/register-group', data),
   getStokvelDetails: (id: string) => api.get(`/api/groups/${id}`),
   joinStokvel: (category: string, tier: string, amount: number) =>
-    api.post(`/api/stokvel/join-group`, { category, tier, amount })
+    api.post(`/api/stokvel/join-group`, { category, tier, amount }),
+  getMyGroups: () => api.get('/api/groups/my-groups'), // or '/api/groups/available' if that's your endpoint
+  getClaimableAmount: (groupId) => api.get(`/api/groups/${groupId}/claimable-amount`),
+  getGroupRules: (groupId) => api.get(`/api/groups/${groupId}/rules`),
 };
 
 // Admin API calls
 export const adminAPI = {
-  getStats: () => api.get('/api/dashboard/stats'),
+  getStats: () => axios.get('/api/admin/stats'),
+  getTodo: () => axios.get('/api/admin/todo'),
+  getActivity: () => axios.get('/api/admin/activity'),
+  getAnnouncements: () => axios.get('/api/admin/announcements'),
   getGroups: () => api.get('/api/admin/groups'),
-  createGroup: (data: any) => api.post('/api/admin/groups', data),
+  createGroup: (data: any) => {
+    console.log("API: Creating group with data:", data);
+    return api.post('/api/admin/groups', data);
+  },
   updateGroup: (id: number, data: any) => api.put(`/api/admin/groups/${id}`, data),
   deleteGroup: (id: number) => api.delete(`/api/admin/groups/${id}`),
   getJoinRequests: () => api.get('/api/admin/join-requests'),
   approveJoinRequest: (id: number) => api.post(`/api/admin/join-requests/${id}/approve`),
   deleteJoinRequests: (ids: number[]) => api.post('/api/admin/join-requests/bulk-delete', { ids }),
   rejectJoinRequest: (id: number, data: { reason: string }) => api.post(`/api/admin/join-requests/${id}/reject`, data),
+  getAnalyticsOverview: (params?: any) => api.get('/admin/analytics/overview', { params }),
+  getWithdrawals: () => api.get('/api/admin/withdrawals'),
+  getTransactions: () => api.get('/api/admin/transactions'),
+  getReferrals: () => api.get('/api/admin/referrals'),
+  getUsers: () => api.get('/api/admin/users'),
+  getGroupsDetailed: () => api.get('/api/admin/groups-detailed'),
+  getContributions: () => api.get('/api/admin/contributions'),
+  getTeam: (params?: any) => api.get('/api/admin/team', { params }),
+  createAdmin: (data: any) => api.post('/api/admin/team', data),
+  updateAdminRole: (adminId: number, data: any) => api.put(`/api/admin/team/${adminId}/role`, data),
+  getRoles: () => api.get('/api/admin/roles'),
+  createRole: (data: any) => api.post('/api/admin/roles', data),
+  updateRole: (roleId: number, data: any) => api.put(`/api/admin/roles/${roleId}`, data),
+  deleteRole: (roleId: number) => api.delete(`/api/admin/roles/${roleId}`),
+  setupMfa: () => api.post('/api/admin/mfa/setup'),
+  verifyMfa: (data: any) => api.post('/api/admin/mfa/verify', data),
+  getAuditLogs: (params?: any) => api.get('/api/admin/audit-logs', { params }),
 };
 
 // Dashboard API calls
@@ -150,6 +178,11 @@ export const referralAPI = {
   getReferralDetails: () => api.get('/api/user/referral-details'),
   getRewardsCatalog: () => api.get('/api/user/points/rewards'),
   redeemReward: (reward_key: string) => api.post('/api/user/points/redeem', { reward_key }),
+};
+
+export const savingsGoalAPI = {
+  get: () => api.get('/api/user/savings-goal'),
+  set: (data: { label: string; target: number }) => api.post('/api/user/savings-goal', data),
 };
 
 export default api; 
