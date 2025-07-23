@@ -8,7 +8,7 @@ export default defineConfig({
     port: 5173,
     host: true,
     proxy: {
-      '/api': 'http://127.0.0.1:5001',
+      '/api': 'https://server-batm.onrender.com',
     }
   },
   build: {
@@ -22,5 +22,8 @@ export default defineConfig({
         }
       }
     }
+  },
+  define: {
+    'import.meta.env.VITE_API_URL': JSON.stringify('https://server-batm.onrender.com')
   }
 })

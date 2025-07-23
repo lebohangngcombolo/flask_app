@@ -42,7 +42,7 @@ const KYCManagement: React.FC = () => {
   const [previewType, setPreviewType] = useState<'image' | 'pdf' | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
 
-  const backendUrl = import.meta.env.VITE_API_URL || "http://localhost:5001";
+  const backendUrl = import.meta.env.VITE_API_URL || "https://server-batm.onrender.com";
 
   useEffect(() => {
     fetchSubmissions();
