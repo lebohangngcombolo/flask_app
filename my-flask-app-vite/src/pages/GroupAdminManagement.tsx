@@ -35,7 +35,9 @@ const GroupAdminManagement: React.FC = () => {
   const [rejectReason, setRejectReason] = useState("");
   const [activeTab, setActiveTab] = useState<'groups' | 'joinRequests'>('groups');
   const [selectedRequests, setSelectedRequests] = useState<number[]>([]);
-  const filteredRequests = requests.filter(r => 'all' === 'all' || r.status === 'all');
+  const filteredRequests = requests.filter(r =>
+    filter === 'all' ? true : r.status === filter
+  );
 
   useEffect(() => {
     fetchGroups();
