@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Star, Gift, Users, ShieldCheck, TrendingUp, CheckCircle, ArrowLeft, Calendar } from "lucide-react";
+import { Star, Gift, Users, ShieldCheck, TrendingUp, CheckCircle, ArrowLeft, Calendar, DollarSign } from "lucide-react";
 import { Link } from "react-router-dom";
 import DashboardLayout from "../components/DashboardLayout";
 import { useAuth } from "../hooks/useAuth";

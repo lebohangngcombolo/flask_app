@@ -14,24 +14,6 @@ import {
 } from "lucide-react";
 import api from "../services/api";
 
-// --- MOCK DATA for groups ---
-const MOCK_GROUPS = [
-  {
-    id: 1,
-    name: "Family Stokvel",
-    category: "Burial",
-    rules: "You must have contributed for 6 months. Claims are processed within 48 hours. Maximum claim: R10,000.",
-    claimable_amount: 8000,
-  },
-  {
-    id: 2,
-    name: "Savings Club",
-    category: "Savings",
-    rules: "Withdrawals allowed once per quarter. Minimum balance: R500.",
-    claimable_amount: 2500,
-  },
-];
-
 const steps = [
   { label: "Stokvel", icon: <Users className="w-5 h-5" /> },
   { label: "Terms", icon: <ShieldCheck className="w-5 h-5" /> },
@@ -71,14 +53,10 @@ const ClaimSubmission: React.FC = () => {
   // Submission
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
-  const [submitSuccess, setSubmitSuccess] = useState(false);
 
   // Reason for claim
   const [selectedReason, setSelectedReason] = useState<string>("");
   const [customReason, setCustomReason] = useState<string>("");
-
-  // Success screen state
-  const [showSuccess, setShowSuccess] = useState(false);
 
   // --- MOCK: Load groups on mount ---
   useEffect(() => {
@@ -396,7 +374,6 @@ const ClaimSubmission: React.FC = () => {
             setSubmitError("");
             try {
               // await api.post("/api/claims", ...);
-              setShowSuccess(true);
             } catch (err) {
               setSubmitError("Failed to submit claim.");
             } finally {
@@ -411,44 +388,18 @@ const ClaimSubmission: React.FC = () => {
         </div>
   );
 
-  // --- Success Screen ---
-  const SuccessScreen = () => (
-    <div className="flex flex-col items-center justify-center min-h-[400px]">
-      <PartyPopper className="w-16 h-16 text-green-500 animate-bounce mb-4" />
-      <h2 className="text-3xl font-extrabold text-green-700 mb-2">Claim Submitted!</h2>
-      <div className="text-lg text-gray-700 mb-4 text-center">
-        Your claim has been received and is awaiting approval.<br />
-        Our team will review your claim and contact you soon.
-      </div>
-      <button
-        className={`mt-4 px-8 py-3 rounded-xl font-bold shadow-lg text-lg ${gradientBtn}`}
-        onClick={() => window.location.href = "/dashboard"}
-      >
-        Back to Dashboard
-      </button>
-    </div>
-  );
-
   // --- Main Render ---
   return (
     <div className="max-w-6xl mx-auto px-6 py-10">
       {/* Breadcrumbs */}
       {/* Stepper */}
       {/* Step content */}
-      {showSuccess ? (
-        <SuccessScreen />
-      ) : (
-        <>
-          <Stepper />
-          <div className="mt-8">
-            {step === 0 && <StepSelectStokvel />}
-            {step === 1 && <StepTerms />}
-            {step === 2 && <StepClaimDetails />}
-            {step === 3 && <StepUploadDocs />}
-            {step === 4 && <StepReview />}
-          </div>
-        </>
-      )}
+      {/* Success screen is removed as per edit hint */}
+      {step === 0 && <StepSelectStokvel />}
+      {step === 1 && <StepTerms />}
+      {step === 2 && <StepClaimDetails />}
+      {step === 3 && <StepUploadDocs />}
+      {step === 4 && <StepReview />}
     </div>
   );
 };

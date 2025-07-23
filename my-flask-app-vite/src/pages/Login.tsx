@@ -1,12 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { login } from '../utils/auth';
 import PageTransition from '../components/PageTransition';
 import { toast } from 'react-hot-toast';
 import api from '../services/api';
 import GoogleLoginButton from '../components/GoogleLoginButton';
-
-const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
 const Login: React.FC = () => {
   const navigate = useNavigate();

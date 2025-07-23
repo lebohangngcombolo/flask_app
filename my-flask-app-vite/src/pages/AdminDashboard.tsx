@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import {
-  Users, Group, AlertCircle, CheckCircle, UserPlus, Plus, Activity, TrendingUp, ChevronDown, CreditCard, ShieldCheck
+  Users, Group, AlertCircle, CheckCircle, UserPlus, Plus, Activity, TrendingUp, CreditCard, ShieldCheck
 } from "lucide-react";
 import { adminAPI, userAPI } from "../services/api";
 import { useNavigate } from "react-router-dom";

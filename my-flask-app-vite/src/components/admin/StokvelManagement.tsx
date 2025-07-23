@@ -7,17 +7,11 @@ import {
   XCircle,
   Plus,
   Search,
-  Users,
-  Calendar,
-  DollarSign,
   Tag,
-  CreditCard,
   ChevronDown,
   ChevronRight,
-  Filter,
   Clock,
   User,
-  Building2,
   PiggyBank,
   Heart,
   TrendingUp,
@@ -27,10 +21,7 @@ import {
   X,
   AlertCircle,
   MessageSquare,
-  Archive,
   RotateCcw,
-  History,
-  RefreshCw,
   ChevronLeft,
 } from "lucide-react";
 import { adminAPI } from "../../services/api";
@@ -46,14 +37,6 @@ const CATEGORIES = [
 ];
 
 const TIERS = ["Bronze", "Silver", "Gold", "Platinum"];
-
-// Request Status Management
-const REQUEST_STATUS = {
-  PENDING: "pending",
-  APPROVED: "approved", 
-  REJECTED: "rejected",
-  ARCHIVED: "archived"
-};
 
 // Status Badge Component
 const StatusBadge = ({ status }: { status: string }) => {

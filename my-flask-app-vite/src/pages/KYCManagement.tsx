@@ -40,7 +40,6 @@ const KYCManagement: React.FC = () => {
   const [selectedSubmission, setSelectedSubmission] = useState<KYCSubmission | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewType, setPreviewType] = useState<'image' | 'pdf' | null>(null);
-  const [previewLabel, setPreviewLabel] = useState<string>('');
   const [actionLoading, setActionLoading] = useState(false);
 
   const backendUrl = import.meta.env.VITE_API_URL || "http://localhost:5001";
@@ -414,10 +413,10 @@ const KYCManagement: React.FC = () => {
             <div className="px-6 py-4">
               <div className="font-semibold text-gray-700 mb-2">Documents</div>
               <div className="grid grid-cols-2 gap-3">
-              <DocPreview docPath={selectedSubmission.id_document_path} label="ID Document" onPreview={(url, type, label) => { setPreviewUrl(url); setPreviewType(type); setPreviewLabel(label); }} />
-              <DocPreview docPath={selectedSubmission.proof_of_address_path} label="Proof of Address" onPreview={(url, type, label) => { setPreviewUrl(url); setPreviewType(type); setPreviewLabel(label); }} />
-              <DocPreview docPath={selectedSubmission.proof_of_income_path} label="Proof of Income" onPreview={(url, type, label) => { setPreviewUrl(url); setPreviewType(type); setPreviewLabel(label); }} />
-              <DocPreview docPath={selectedSubmission.bank_statement_path} label="Bank Statement" onPreview={(url, type, label) => { setPreviewUrl(url); setPreviewType(type); setPreviewLabel(label); }} />
+              <DocPreview docPath={selectedSubmission.id_document_path} label="ID Document" onPreview={(url, type, label) => { setPreviewUrl(url); setPreviewType(type); }} />
+              <DocPreview docPath={selectedSubmission.proof_of_address_path} label="Proof of Address" onPreview={(url, type, label) => { setPreviewUrl(url); setPreviewType(type); }} />
+              <DocPreview docPath={selectedSubmission.proof_of_income_path} label="Proof of Income" onPreview={(url, type, label) => { setPreviewUrl(url); setPreviewType(type); }} />
+              <DocPreview docPath={selectedSubmission.bank_statement_path} label="Bank Statement" onPreview={(url, type, label) => { setPreviewUrl(url); setPreviewType(type); }} />
             </div>
             </div>
 
@@ -488,11 +487,11 @@ const KYCManagement: React.FC = () => {
             >
               &times;
             </button>
-            <div className="mb-4 text-lg font-semibold">{previewLabel}</div>
+            <div className="mb-4 text-lg font-semibold">{previewType === 'image' ? 'Image Preview' : 'PDF Preview'}</div>
             {previewType === 'image' ? (
-              <img src={previewUrl} alt={previewLabel} className="max-h-[70vh] max-w-full rounded shadow" />
+              <img src={previewUrl} alt={previewType === 'image' ? 'Image Preview' : 'PDF Preview'} className="max-h-[70vh] max-w-full rounded shadow" />
             ) : (
-              <iframe src={previewUrl} title={previewLabel} className="w-full h-[70vh] rounded shadow" />
+              <iframe src={previewUrl} title={previewType === 'image' ? 'Image Preview' : 'PDF Preview'} className="w-full h-[70vh] rounded shadow" />
             )}
           </div>
         </div>

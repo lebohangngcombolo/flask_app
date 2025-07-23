@@ -44,15 +44,9 @@ const GroupAdminManagement: React.FC = () => {
   // Active tab state
   const [activeTab, setActiveTab] = useState<'groups' | 'joinRequests'>('groups');
 
-  // New status filter state
-  const [statusFilter, setStatusFilter] = useState('pending');
-
-  // Delete all join requests state
-  const [showDeleteAll, setShowDeleteAll] = useState(false);
-
   // New selection state
   const [selectedRequests, setSelectedRequests] = useState<number[]>([]);
-  const filteredRequests = requests.filter(r => statusFilter === 'all' || r.status === statusFilter);
+  const filteredRequests = requests.filter(r => 'all' === 'all' || r.status === 'all');
   const allSelected = selectedRequests.length === filteredRequests.length && filteredRequests.length > 0;
 
   // View group modal state
@@ -222,11 +216,6 @@ const GroupAdminManagement: React.FC = () => {
   };
 
   // New selection functions
-  const toggleSelectAll = () => {
-    if (allSelected) setSelectedRequests([]);
-    else setSelectedRequests(filteredRequests.map(r => r.id));
-  };
-
   const toggleSelect = (id: number) => {
     setSelectedRequests(prev =>
       prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]

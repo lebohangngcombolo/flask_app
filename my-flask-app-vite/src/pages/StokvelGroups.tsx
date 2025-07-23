@@ -163,7 +163,6 @@ const categoryTiers = {
 const StokvelGroups: React.FC = () => {
   const [search, setSearch] = useState("");
   const [allGroups, setAllGroups] = useState<any[]>([]);
-  const [categories, setCategories] = useState<string[]>([]);
   const [activeCategory, setActiveCategory] = useState<string>("");
   const [joinRequests, setJoinRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -213,7 +212,6 @@ const StokvelGroups: React.FC = () => {
         const groups = res.data;
         setAllGroups(groups);
         const uniqueCategories = [...new Set(groups.map((group: any) => group.category))];
-        setCategories(uniqueCategories);
         if (uniqueCategories.length > 0 && !activeCategory) {
           setActiveCategory(uniqueCategories[0]);
         }
@@ -229,12 +227,6 @@ const StokvelGroups: React.FC = () => {
   useEffect(() => {
     fetchRequests();
   }, []);
-
-  // Filter groups by active category
-  const filteredGroups = allGroups.filter(group => 
-    group.category === activeCategory &&
-    group.name.toLowerCase().includes(search.toLowerCase())
-  );
 
   // Get join request status for a group/tier/amount
   const getRequestStatus = (category: string, tier: string, amount: number) => {
@@ -260,12 +252,6 @@ const StokvelGroups: React.FC = () => {
       }
     }
     return amounts;
-  }
-
-  // Find groupId for a given category/tier
-  function findGroupId(category: string, tier: string) {
-    const group = allGroups.find(g => g.category === category && g.tier === tier);
-    return group ? group.id : null;
   }
 
   // Handle join

@@ -3,7 +3,6 @@ import { Outlet } from 'react-router-dom';
 import AdminSidebar from './AdminSidebar';
 import AdminNavbar from './AdminNavbar';
 import { useAuth } from '../hooks/useAuth';
-import ProfileDropdown from './ProfileDropdown';
 import { Menu, Bell } from 'lucide-react';
 
 const AdminLayout: React.FC = () => {

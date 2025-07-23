@@ -65,16 +65,6 @@ const AddCardModal: React.FC<AddCardModalProps> = ({ open, onClose, onSave }) =>
     }
   };
 
-  const handleDelete = async () => {
-    try {
-      await deleteCardApi(cardId);
-      toast.success('Successfully deleted');
-      // ...other logic, like closing the modal...
-    } catch (error) {
-      toast.error('Failed to delete card');
-    }
-  };
-
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };

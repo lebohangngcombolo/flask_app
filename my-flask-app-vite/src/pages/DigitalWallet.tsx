@@ -180,7 +180,7 @@ const DigitalWallet: React.FC = () => {
       .reduce((sum, tx) => sum + tx.amount, 0);
     const transfers = transactions.filter(tx => tx.transaction_type === "transfer" && tx.status === "completed")
       .reduce((sum, tx) => sum + tx.amount, 0);
-    const withdrawals = transactions.filter(tx => tx.transaction_type === "withdrawal" && tx.status === "completed")
+    const withdrawals = transactions.filter(tx => tx.transaction_type === "stokvel_contribution" && tx.status === "completed")
       .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
     setSummary({ 
       totalDeposits: deposits, 
@@ -236,7 +236,7 @@ const DigitalWallet: React.FC = () => {
   };
 
   // Transfer handler
-  const handleTransfer = async ({ amount, recipient_account_number, note }) => {
+  const handleTransfer = async ({ amount, recipient_account_number, note }: { amount: number; recipient_account_number: string; note: string }) => {
     try {
       console.log("🚀 Starting transfer with data:", { amount, recipient_account_number, note }); // Debug log
       
@@ -264,7 +264,7 @@ const DigitalWallet: React.FC = () => {
   };
 
   // Withdraw handler
-  const handleWithdraw = async ({ amount, bank_account_number, note }) => {
+  const handleWithdraw = async ({ amount, bank_account_number, note }: { amount: number; bank_account_number: string; note: string }) => {
     try {
       const res = await withdraw(amount, bank_account_number, note);
       toast.success(res.message || "Withdrawal successful!");
@@ -281,7 +281,7 @@ const DigitalWallet: React.FC = () => {
   };
 
   // Add card handler
-  const handleAddCard = async (cardData: any) => {
+  const handleAddCard = async (cardData: { cardholder: string; cardNumber: string; expiry: string; cvv: string; primary: boolean }) => {
     setAddCardLoading(true);
     try {
       await addCard(cardData);
@@ -625,8 +625,7 @@ const DigitalWallet: React.FC = () => {
           try {
             const res = await makeDeposit({ 
               amount, 
-              card_id: Number(method),
-              description: note 
+              card_id: Number(method)
             });
             toast.success(res.message || "Deposit successful!");
             setShowDeposit(false);
@@ -655,13 +654,6 @@ const DigitalWallet: React.FC = () => {
         <AddCardModal
           open={!!editingCard}
           onClose={() => setEditingCard(null)}
-          initialCard={{
-            cardholder: editingCard.card_holder,
-            cardNumber: editingCard.card_number,
-            expiry: editingCard.expiry_date,
-            cvv: "", // Don't prefill CVV for security
-            primary: editingCard.is_default,
-          }}
           onSave={async (form) => {
             const payload = {
               cardholder: form.cardholder,

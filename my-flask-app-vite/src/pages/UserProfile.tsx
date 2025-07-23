@@ -27,12 +27,6 @@ import { getCurrentUser } from '../utils/auth'; // Add this import
 
 
 
-const mockSessions = [
-  { id: 1, device: 'Windows 10 - Chrome', location: 'Cape Town, South Africa', time: '2023-10-27T10:00:00Z', current: true },
-  { id: 2, device: 'Android Phone - Chrome', location: 'Johannesburg, South Africa', time: '2023-10-26T18:30:00Z', current: false },
-];
-
-// Define the tabs for the internal horizontal navigation
 const userProfileTabs = [
   { id: 'overview', label: 'Overview' },
   { id: 'your-details', label: 'My details' },

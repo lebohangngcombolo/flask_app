@@ -92,8 +92,8 @@ export const stokvelAPI = {
   joinStokvel: (category: string, tier: string, amount: number) =>
     api.post(`/api/stokvel/join-group`, { category, tier, amount }),
   getMyGroups: () => api.get('/api/groups/my-groups'), // or '/api/groups/available' if that's your endpoint
-  getClaimableAmount: (groupId) => api.get(`/api/groups/${groupId}/claimable-amount`),
-  getGroupRules: (groupId) => api.get(`/api/groups/${groupId}/rules`),
+  getClaimableAmount: (groupId: string) => api.get(`/api/groups/${groupId}/claimable-amount`),
+  getGroupRules: (groupId: string) => api.get(`/api/groups/${groupId}/rules`),
 };
 
 // Admin API calls
@@ -141,18 +141,6 @@ export const dashboardAPI = {
   getMyGroups: () => api.get('/api/groups/available'),
   getContributions: () => api.get('/api/dashboard/contributions')
 };
-
-// Polls and Meetings
-const getPolls = async () => api.get('/api/polls');
-const createPoll = async (pollData: any) => api.post('/api/polls', pollData);
-const getMeetings = async () => api.get('/api/meetings');
-const createMeeting = async (meetingData: any) => api.post('/api/meetings', meetingData);
-
-// Withdrawals
-const getWithdrawals = async () => api.get('/api/withdrawals');
-const createWithdrawal = async (withdrawalData: any) => api.post('/api/withdrawals', withdrawalData);
-const approveWithdrawal = async (withdrawalId: number) => api.post(`/api/withdrawals/${withdrawalId}/approve`);
-const rejectWithdrawal = async (withdrawalId: number) => api.post(`/api/withdrawals/${withdrawalId}/reject`);
 
 // Wallet API calls
 export const walletAPI = {

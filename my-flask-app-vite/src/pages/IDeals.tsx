@@ -52,7 +52,7 @@ const categories = ["All", ...Array.from(new Set(IDEALS.map(d => d.category)))];
 
 const IDeals: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState("All");
-  const [selectedDeal, setSelectedDeal] = useState(null);
+  const [selectedDeal, setSelectedDeal] = useState<any>(null);
 
   const filteredDeals =
     selectedCategory === "All"

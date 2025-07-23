@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Outlet, useLocation, useNavigate, Link } from 'react-router-dom';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { 
   User, 
   CreditCard,
@@ -290,7 +290,6 @@ const DashboardLayout = () => {
         >
           <nav className="flex-1 space-y-2">
             {sidebarItems.map((item) => {
-              const isActive = location.pathname.startsWith(item.path);
               return (
                 <button
                   key={item.label}

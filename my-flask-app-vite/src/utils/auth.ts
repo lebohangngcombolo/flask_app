@@ -12,12 +12,6 @@ interface User {
   profile_picture?: string;
 }
 
-interface AuthResponse {
-  success: boolean;
-  message: string;
-  user?: User;
-}
-
 export const signup = async (userData: {
   fullName: string;
   email: string;

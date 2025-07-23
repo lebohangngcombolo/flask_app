@@ -9,13 +9,13 @@ const STATUS_COLORS = {
 };
 
 const AdminConcerns = () => {
-  const [concerns, setConcerns] = useState([]);
+  const [concerns, setConcerns] = useState<any[]>([]);
   const [status, setStatus] = useState('');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [limit] = useState(20);
   const [total, setTotal] = useState(0);
-  const [selected, setSelected] = useState(null);
+  const [selected, setSelected] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
   const token = localStorage.getItem('token');
@@ -40,7 +40,7 @@ const AdminConcerns = () => {
 
   useEffect(() => { fetchConcerns(); }, [status, search, page]);
 
-  const handleStatusChange = async (id, newStatus) => {
+  const handleStatusChange = async (id: string, newStatus: string) => {
     const res = await fetch(`/api/admin/concerns/${id}/status`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -54,7 +54,7 @@ const AdminConcerns = () => {
     }
   };
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (id: string) => {
     if (!window.confirm('Delete this concern?')) return;
     const res = await fetch(`/api/admin/concerns/${id}`, {
       method: 'DELETE',

@@ -3,8 +3,7 @@ import { adminAPI } from '../services/api';
 import { 
   Plus, Search, Edit, Trash2, Shield, Users, UserPlus, 
   Lock, Unlock, Eye, EyeOff, AlertTriangle, CheckCircle,
-  Clock, Activity, Key, QrCode, Download, Loader, X,
-  Save, RotateCcw, UserCheck, UserX, Settings, Copy
+  Clock, Activity, Key, Loader, X, Copy
 } from 'lucide-react';
 
 interface Admin {
@@ -56,7 +55,6 @@ const AdminTeam: React.FC = () => {
   const [showAddAdmin, setShowAddAdmin] = useState(false);
   const [showAddRole, setShowAddRole] = useState(false);
   const [showMfaSetup, setShowMfaSetup] = useState(false);
-  const [showRoleDetails, setShowRoleDetails] = useState(false);
   const [showEditAdmin, setShowEditAdmin] = useState(false);
   const [showEditRole, setShowEditRole] = useState(false);
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
@@ -285,18 +283,6 @@ const AdminTeam: React.FC = () => {
       fetchData();
     } catch (error) {
       console.error('Error deleting role:', error);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleUpdateAdminRole = async (adminId: number, roleId: number) => {
-    try {
-      setSubmitting(true);
-      await adminAPI.updateAdminRole(adminId, { role_id: roleId });
-      fetchData();
-    } catch (error) {
-      console.error('Error updating admin role:', error);
     } finally {
       setSubmitting(false);
     }
