@@ -70,11 +70,12 @@ function AdminFAQs() {
           toast.error(`Failed to load FAQs: ${err.message}`);
         }
       } else if (typeof err === 'object' && err !== null && 'response' in err) {
-        if (err.response && (err.response.status === 401 || err.response.status === 403)) {
+        const response = (err as any).response;
+        if (response && (response.status === 401 || response.status === 403)) {
           localStorage.removeItem('token');
           localStorage.removeItem('user');
           navigate('/login');
-        } else if (err.response && err.response.status === 404) {
+        } else if (response && response.status === 404) {
           toast.error("FAQ endpoint not found. Please check your backend route.");
         } else {
           toast.error("Failed to load FAQs");
@@ -97,7 +98,8 @@ function AdminFAQs() {
           toast.error(`Failed to load notifications: ${err.message}`);
         }
       } else if (typeof err === 'object' && err !== null && 'response' in err) {
-        if (err.response && (err.response.status === 401 || err.response.status === 403)) {
+        const response = (err as any).response;
+        if (response && (response.status === 401 || response.status === 403)) {
           localStorage.removeItem('token');
           localStorage.removeItem('user');
           navigate('/login');
@@ -154,11 +156,6 @@ function AdminFAQs() {
     }
     setSubmitting(false);
   };
-
-  // Add type guards if needed
-  function hasStatus(obj: any): obj is { status: string } {
-    return obj && typeof obj.status === 'string';
-  }
 
   return (
     <div className="flex min-h-screen bg-gray-50">

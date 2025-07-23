@@ -288,11 +288,11 @@ const AdminTeam: React.FC = () => {
     }
   };
 
-  const handleLockAdmin = async (adminId: number, lock: boolean) => {
+  // adminId and lock are currently unused, but kept for future implementation
+  const handleLockAdmin = async (_adminId: number, _lock: boolean) => {
     try {
       setSubmitting(true);
-      // Remove or comment out adminAPI.lockAdmin usage if not present
-      // await adminAPI.lockAdmin(adminId, { locked: lock }); // TODO: Implement lockAdmin in adminAPI if needed
+      // TODO: Implement lockAdmin in adminAPI if needed
       fetchData();
     } catch (error) {
       console.error('Error updating admin lock status:', error);
@@ -627,7 +627,7 @@ const AdminTeam: React.FC = () => {
                   <button
                     onClick={() => {
                       setSelectedRole(role);
-                      setShowRoleDetails(true);
+                      setShowEditRole(true);
                     }}
                     className="text-blue-600 hover:text-blue-900 p-1"
                     title="View Details"

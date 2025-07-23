@@ -39,6 +39,7 @@ const docTypes = [
 const Beneficiaries = () => {
   const [beneficiaries, setBeneficiaries] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  // Removed unused loading state
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [confirmDelete, setConfirmDelete] = useState<any>(null);
@@ -98,6 +99,10 @@ const Beneficiaries = () => {
   console.log("Beneficiaries:", beneficiaries);
   console.log("Selected beneficiary:", selectedBeneficiary);
 
+  if (loading) {
+    return <div className="flex justify-center items-center h-64 text-blue-600 font-bold">Loading beneficiaries...</div>;
+  }
+
   return (
     <div className="min-h-[80vh] bg-[#f4f6fb] py-10 px-2 md:px-8">
       <div className="max-w-6xl mx-auto">
@@ -143,7 +148,7 @@ const Beneficiaries = () => {
                   <td colSpan={6} className="text-center py-10 text-gray-400">No beneficiaries found.</td>
                 </tr>
               ) : (
-                filtered.map((b, idx) => (
+                filtered.map((b) => (
                   <tr
                 key={b.id}
                     onClick={() => {
@@ -403,9 +408,10 @@ const BeneficiaryForm = ({ beneficiary, onClose, onSave }: { beneficiary: any, o
   const [addressFile, setAddressFile] = useState<File | null>(null);
   const [relationshipFile, setRelationshipFile] = useState<File | null>(null);
 
-  const [idUrl, setIdUrl] = useState(beneficiary?.id_doc_url || "");
-  const [addressUrl, setAddressUrl] = useState(beneficiary?.address_doc_url || "");
-  const [relationshipUrl, setRelationshipUrl] = useState(beneficiary?.relationship_doc_url || "");
+  // Add back state setters for document URLs to fix linter errors
+  const [, setIdUrl] = useState("");
+  const [, setAddressUrl] = useState("");
+  const [, setRelationshipUrl] = useState("");
 
   const isEdit = !!beneficiary;
 

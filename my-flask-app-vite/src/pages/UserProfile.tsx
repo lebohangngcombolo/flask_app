@@ -14,8 +14,7 @@ import {
 } from 'lucide-react'; // Import necessary icons
 import moment from 'moment'; // Import moment for date formatting
 import toast from 'react-hot-toast';
-// Import navigation items from the new file
-import { userNavItems, marketplaceNavItem } from '../navItems';
+// Removed unused imports userNavItems, marketplaceNavItem
 import { authAPI, securityAPI, userAPI } from '../services/api';
 import api from '../services/api'; // <-- Make sure this is here
 import { getCurrentUser } from '../utils/auth'; // Add this import
@@ -290,34 +289,7 @@ const UserProfile: React.FC = () => {
      }
    };
 
-    // Placeholder handler for toggling 2FA
-   const handleToggleTwoFactor = async () => {
-     try {
-       const response = await securityAPI.toggle2FA();
-       setSecuritySettings(prev => ({
-         ...prev,
-         twoFactorEnabled: response.data.two_factor_enabled
-       }));
-       toast.success(response.data.message || 'Two-Factor Authentication updated!');
-     } catch (err: any) {
-       toast.error(
-         err.response?.data?.error ||
-         err.response?.data?.message ||
-         'Failed to update Two-Factor Authentication.'
-       );
-     }
-   };
-
-    // Placeholder handler for logging out a specific session
-   const handleLogoutSession = async (sessionId: number) => {
-     try {
-       await api.post(`/api/user/session/${sessionId}/logout`);
-       toast.success('Session logged out!');
-       fetchSessions(); // Refresh after logout
-     } catch (err: any) {
-       toast.error(err.response?.data?.error || 'Failed to log out session');
-     }
-   };
+    // Removed unused handleToggleTwoFactor
 
     // Placeholder handler for requesting data download
    const handleDownloadData = () => {
@@ -354,17 +326,7 @@ const UserProfile: React.FC = () => {
   const [otpSentMessage, setOtpSentMessage] = useState('');
   const [isSendingOtp, setIsSendingOtp] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
-  const [isResending, setIsResending] = useState(false);
-
-  const handleStart2FA = async () => {
-    try {
-      await securityAPI.start2FA({ method: twoFAMethod });
-      setShow2FAModal(true);
-      toast.success(`OTP sent via ${twoFAMethod.toUpperCase()}`);
-    } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to send OTP');
-    }
-  };
+  // Removed unused isResending state
 
   const handleVerify2FA = async () => {
     setIsVerifying(true);
@@ -384,17 +346,7 @@ const UserProfile: React.FC = () => {
     }
   };
 
-  const handleResend2FAOtp = async () => {
-    setIsResending(true);
-    try {
-      await securityAPI.start2FA({ method: twoFAMethod });
-      toast.success(`OTP resent via ${twoFAMethod.toUpperCase()}`);
-    } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to resend OTP');
-    } finally {
-      setIsResending(false);
-    }
-  };
+  // Removed unused handleResend2FAOtp
 
   const [showDisable2FAModal, setShowDisable2FAModal] = useState(false);
   const [disable2FAPassword, setDisable2FAPassword] = useState('');

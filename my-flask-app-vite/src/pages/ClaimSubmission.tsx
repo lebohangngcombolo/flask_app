@@ -5,21 +5,11 @@ import {
   CheckCircle,
   ArrowLeft,
   ArrowRight,
-  FileText,
-  FileCheck2,
-  FilePlus2,
-  ShieldCheck,
   Users,
 } from "lucide-react";
 import api from "../services/api";
 
-const steps = [
-  { label: "Stokvel", icon: <Users className="w-5 h-5" /> },
-  { label: "Terms", icon: <ShieldCheck className="w-5 h-5" /> },
-  { label: "Details", icon: <FileText className="w-5 h-5" /> },
-  { label: "Documents", icon: <FilePlus2 className="w-5 h-5" /> },
-  { label: "Review", icon: <FileCheck2 className="w-5 h-5" /> },
-];
+// Removed unused steps variable
 
 const gradientBtn =
   "bg-gradient-to-r from-blue-600 via-indigo-500 to-purple-500 hover:from-blue-700 hover:to-purple-600 text-white";
@@ -87,33 +77,7 @@ const ClaimSubmission: React.FC = () => {
   if (!user) return <Navigate to="/login" replace />;
 
   // --- Stepper UI ---
-  const Stepper = () => (
-    <div className="flex items-center justify-between mb-10">
-      {steps.map((stepObj, idx) => (
-        <div key={stepObj.label} className="flex-1 flex flex-col items-center relative">
-          <div
-            className={`w-10 h-10 flex items-center justify-center rounded-full border-2 shadow-lg transition
-              ${step === idx
-                ? "bg-gradient-to-br from-blue-600 to-purple-500 border-blue-600 text-white scale-110"
-                : step > idx
-                ? "bg-green-500 border-green-500 text-white"
-                : "bg-gray-100 border-gray-300 text-gray-400"
-              }`}
-          >
-            {stepObj.icon}
-          </div>
-          <span className={`mt-2 text-xs font-bold tracking-wide ${step === idx ? "text-blue-700" : "text-gray-400"}`}>
-            {stepObj.label}
-          </span>
-          {idx < steps.length - 1 && (
-            <div className="absolute top-5 right-0 w-full h-1 flex items-center">
-              <div className={`flex-1 h-1 ${step > idx ? "bg-green-500" : "bg-gray-200"}`}></div>
-            </div>
-          )}
-          </div>
-        ))}
-      </div>
-  );
+  // Removed unused Stepper variable
 
   // --- Step 0: Select Stokvel ---
   const StepSelectStokvel = () => (

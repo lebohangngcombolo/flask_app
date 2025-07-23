@@ -42,20 +42,6 @@ const topNavItems = [
   { label: 'Learning', path: '/learning' },
 ];
 
-const SEEN_NOTIFICATIONS_KEY = 'seenNotificationIds';
-
-const getSeenNotificationIds = () => {
-  try {
-    return new Set(JSON.parse(localStorage.getItem(SEEN_NOTIFICATIONS_KEY) || '[]'));
-  } catch {
-    return new Set();
-  }
-};
-
-const setSeenNotificationIds = (ids: Set<number>) => {
-  localStorage.setItem(SEEN_NOTIFICATIONS_KEY, JSON.stringify(Array.from(ids)));
-};
-
 const DashboardLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();

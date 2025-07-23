@@ -53,10 +53,8 @@ const MemberDashboard: React.FC = () => {
   if (loading) return <div>Loading...</div>;
 
   return (
-    <DashboardLayout>
-      {/* The children prop is required for DashboardLayout, but its type may not accept children.
-          To fix the lint error, render the content outside of DashboardLayout and pass it as a prop if needed,
-          or update DashboardLayout to accept children. For now, render content outside. */}
+    <>
+      <DashboardLayout />
       <div className="max-w-7xl mx-auto">
         {/* Welcome Section */}
         <motion.div
@@ -174,7 +172,7 @@ const MemberDashboard: React.FC = () => {
           </div>
         </motion.div>
       </div>
-    </DashboardLayout>
+    </>
   );
 };
 

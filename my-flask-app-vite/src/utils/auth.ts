@@ -88,7 +88,7 @@ export const logout = () => {
     localStorage.removeItem('user');
     
     // Attempt to call logout endpoint
-    authAPI.post('/api/auth/logout').catch(error => {
+    api.post('/api/auth/logout').catch((error: any) => {
       console.error('Logout API call failed:', error);
     });
     

@@ -19,7 +19,7 @@ const copyToClipboard = (text: string) => {
 
 const GroupAdminManagement: React.FC = () => {
   const [groups, setGroups] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Removed unused loading state
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [showCreate, setShowCreate] = useState(false);
@@ -49,15 +49,14 @@ const GroupAdminManagement: React.FC = () => {
   }, [activeTab]);
 
   const fetchGroups = () => {
-    setLoading(true);
+    // setLoading(true); // This line was removed
     adminAPI.getGroups()
       .then(res => {
         setGroups(res.data || []);
-        setLoading(false);
+        // setLoading(false); // This line was removed
       })
-      .catch(err => {
-        // setError("Failed to load groups"); // This line was removed
-        setLoading(false);
+      .catch(() => {
+        // setLoading(false); // This line was removed
       });
   };
 
@@ -158,15 +157,11 @@ const GroupAdminManagement: React.FC = () => {
     setShowDelete(true);
   };
 
-  // View group handler
-  const openView = (group: any) => {
-    setSelectedGroup(group);
-    // setShowView(true); // This line was removed
-  };
+  // Removed unused openView function
 
   const handleApprove = async (requestId: number) => {
     try {
-      const res = await adminAPI.approveJoinRequest(requestId);
+      await adminAPI.approveJoinRequest(requestId);
       toast.success("Request approved successfully!");
       fetchRequests(); // Refresh the list
     } catch (err: any) {

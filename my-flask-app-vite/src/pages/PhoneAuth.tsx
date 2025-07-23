@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { sendSmsVerificationCode, verifyPhoneCode, resendSmsVerificationCode, login } from '../utils/auth';
+import { sendSmsVerificationCode, verifyPhoneCode, resendSmsVerificationCode } from '../utils/auth';
 import { toast } from 'react-toastify';
 
 const Spinner = ({ className = "h-5 w-5" }) => (

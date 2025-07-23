@@ -5,15 +5,11 @@ import {
   Heart, // Example icon for My Offers
   Users, // Example icon for Partner Portal
   ShieldCheck, // Example icon for Verified badge
-  User as UserIcon, // Alias User to avoid conflict
-  CreditCard,
-  CheckCircle,
-  ShoppingBag, // Example icon for Marketplace offer card
   Filter // Add Filter icon import
 } from 'lucide-react'; // Import necessary icons
 import { toast } from 'react-hot-toast';
 import { marketplaceAPI } from '../services/api';
-import { useAuth } from '../hooks/useAuth';
+// Removed unused useAuth import
 import MarketplacePurchase from "./MarketplacePurchase";
 import PartnerPortal from "./PartnerPortal";
 import IDeals from "./IDeals";
@@ -32,47 +28,7 @@ interface Offer {
   buttonLink?: string;
 }
 
-const mockOffers: Offer[] = [
-  {
-    id: 1,
-    title: 'R200 OFF Bulk Grocery Combo',
-    description: 'Save big when your stokvel buys in bulk.',
-    logo: '/path/to/marketrw-logo.png', // Placeholder logo path
-    tags: ['Marketrw'],
-    verified: false, // Example, can be true if needed
-    buttonText: 'Use This Offer with My Stokvel',
-    buttonLink: '/marketplace/offer/1' // Example link
-  },
-  {
-    id: 2,
-    title: 'Burial Plan',
-    provider: 'from AVBOB',
-    description: 'Affordable family funeral cover.',
-    tags: ['Tiseficel'], // Example tag
-    verified: false,
-    buttonText: 'Learn More', // Example button for non-direct offers
-    buttonLink: '/marketplace/offer/2' // Example link
-  },
-  {
-    id: 3,
-    title: 'Save R500 on Durban Trip',
-    description: 'Plan your stokvel holiday with us.',
-    tags: ['Travel'],
-    verified: false,
-    buttonText: 'View Packages', // Example button
-    buttonLink: '/marketplace/offer/3' // Example link
-  },
-   {
-    id: 4,
-    title: 'R200 OFF Bulk Grocery Combo', // Duplicating the grocery offer to show the "Verified" version
-    description: 'Save big when your stokvel buys in bulk.\nOffered by Makro Wholesalers', // Added multiline description
-    provider: 'Offered by Makro Wholesalers',
-    verified: true,
-    buttonText: 'Use This Offer with My Stokvel',
-    buttonLink: '/marketplace/offer/4' // Example link
-  }
-  // Add more mock offers as needed
-];
+// Removed unused mockOffers
 
 
 // --- Offer Card Component ---
@@ -108,11 +64,10 @@ const OfferCard: React.FC<OfferCardProps> = ({ offer, navigate }) => {
         {offer.buttonText && offer.buttonLink && (
            <button
              onClick={() => {
-               try {
+               if (typeof offer.buttonLink === 'string') {
                  navigate(offer.buttonLink);
-               } catch (error) {
-                 console.error('Navigation error:', error);
-                 toast.error('Failed to navigate to offer details');
+               } else {
+                 toast.error('Invalid offer link');
                }
              }}
              className="w-full px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors duration-200"
@@ -126,29 +81,16 @@ const OfferCard: React.FC<OfferCardProps> = ({ offer, navigate }) => {
 };
 
 const Marketplace: React.FC = () => {
-  const { user } = useAuth();
+  // Removed unused user
   const [activeTab, setActiveTab] = useState('marketplace');
   const [offers, setOffers] = useState<Offer[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Define the sidebar navigation items
-  const sidebarNavItems = [
-    { id: 'user', label: 'User', icon: UserIcon, path: '/dashboard/profile' },
-    { id: 'digital-wallet', label: 'Digital Wallet', icon: CreditCard, path: '/dashboard/payment' },
-    { id: 'kyc', label: 'KYC', icon: CheckCircle, path: '/dashboard/kyc' },
-    { id: 'beneficiaries', label: 'Beneficiaries', icon: Users, path: '/dashboard/beneficiaries' },
-    { id: 'refer', label: 'Refer & Earn', icon: Users, path: '/dashboard/refer' },
-    { id: 'groups', label: 'Stokvel Groups', icon: Users, path: '/dashboard/groups' },
-    { id: 'separator', separator: true }, // Add a separator
-  ];
+  // Removed unused sidebarNavItems
 
   // Define the marketplace navigation item
-  const marketplaceNavItem = {
-    id: 'marketplace',
-    label: 'Marketplace',
-    icon: ShoppingBag,
-    path: '/dashboard/marketplace'
-  };
+  // Removed unused marketplaceNavItem
 
   useEffect(() => {
     const fetchOffers = async () => {

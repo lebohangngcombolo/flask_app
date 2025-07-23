@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
 import { X, Lock, CheckCircle } from "lucide-react";
-import { toast } from 'react-toastify';
 
 interface AddCardModalProps {
   open: boolean;
@@ -63,10 +62,6 @@ const AddCardModal: React.FC<AddCardModalProps> = ({ open, onClose, onSave }) =>
         onClose();
       }, 1200);
     }
-  };
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
   };
 
   useEffect(() => {

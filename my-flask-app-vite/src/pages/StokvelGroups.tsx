@@ -162,7 +162,6 @@ const categoryTiers: Record<CategoryTierKey, { name: string; amount: string; col
 
 const StokvelGroups: React.FC = () => {
   const [search, setSearch] = useState("");
-  const [allGroups, setAllGroups] = useState<any[]>([]);
   const [activeCategory, setActiveCategory] = useState<string>("");
   const [joinRequests, setJoinRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -210,7 +209,6 @@ const StokvelGroups: React.FC = () => {
       try {
         const res = await groupService.getAvailableGroups();
         const groups = res.data;
-        setAllGroups(groups);
         const uniqueCategories = [...new Set(groups.map((group: any) => group.category))];
         if (uniqueCategories.length > 0 && !activeCategory) {
           setActiveCategory(String(uniqueCategories[0]));

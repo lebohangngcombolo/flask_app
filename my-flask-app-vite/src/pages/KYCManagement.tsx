@@ -223,6 +223,8 @@ const KYCManagement: React.FC = () => {
     );
   }
 
+  // Removed unused isImagePreview and isPdfPreview variables
+
   return (
     <div className="bg-white p-6 rounded-lg shadow-md">
       <div className="flex flex-col md:flex-row md:justify-between md:items-center mb-6 gap-4">
@@ -491,7 +493,7 @@ const KYCManagement: React.FC = () => {
             {previewType === 'image' ? (
               <img src={previewUrl} alt={previewType === 'image' ? 'Image Preview' : 'PDF Preview'} className="max-h-[70vh] max-w-full rounded shadow" />
             ) : (
-              <iframe src={previewUrl} title={previewType === 'image' ? 'Image Preview' : 'PDF Preview'} className="w-full h-[70vh] rounded shadow" />
+              <iframe src={previewUrl} title={previewType === 'pdf' ? 'PDF Preview' : 'Image Preview'} className="w-full h-[70vh] rounded shadow" />
             )}
           </div>
         </div>
