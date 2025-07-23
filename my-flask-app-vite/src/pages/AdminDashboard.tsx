@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Users, Group, AlertCircle, CheckCircle, UserPlus, Plus, Activity, TrendingUp, CreditCard, ShieldCheck
 } from "lucide-react";
@@ -47,16 +47,6 @@ export default function AdminDashboard() {
       </div>
     );
   }
-
-  const summaryCards = [
-    { label: "Total Funds", value: `R${stats?.totalFunds?.toLocaleString() ?? "-"}` },
-    { label: "Active Groups", value: stats?.activeGroups ?? "-" },
-    { label: "New Members", value: stats?.newMembers ?? "-" },
-    { label: "Payouts Due", value: stats?.payoutsDue ?? "-" },
-    { label: "Total Users", value: stats?.totalUsers ?? "-" },
-    { label: "Total Transactions", value: stats?.totalTransactions ?? "-" },
-    { label: "Total Contributions", value: stats?.totalContributions ?? "-" },
-  ];
 
   return (
     <div className="p-8 bg-gray-50 min-h-screen">

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Search, Filter, Download, MessageSquare, 
   CheckCircle, Ban, User, Phone, MoreHorizontal, 
-  Eye, Edit, UserPlus
+  Eye, Edit, UserPlus, AlertTriangle, Users
 } from 'lucide-react';
 import { dashboardAPI } from '../services/api';
 

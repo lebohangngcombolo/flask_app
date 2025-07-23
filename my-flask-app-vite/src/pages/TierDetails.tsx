@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Star, Gift, Users, ShieldCheck, TrendingUp, CheckCircle, ArrowLeft, Calendar, DollarSign } from "lucide-react";
+import { Gift, Users, ShieldCheck, TrendingUp, CheckCircle, Calendar, DollarSign } from "lucide-react";
 import { Link } from "react-router-dom";
-import DashboardLayout from "../components/DashboardLayout";
 import { useAuth } from "../hooks/useAuth";
 // Import or copy your tierDetails, getAmountsInRange, getFeatures, getBenefits helpers here
 
@@ -203,7 +202,7 @@ const TierDetails: React.FC = () => {
         const pending = data.some(req =>
           req.category === category &&
           req.tier === tier &&
-          req.amount === selectedAmount &&
+          req.amount === Number(selectedAmount) &&
           req.status === "pending"
         );
         setIsPending(pending);
@@ -236,7 +235,7 @@ const TierDetails: React.FC = () => {
             const pending = data.some(req =>
               req.category === category &&
               req.tier === tier &&
-              req.amount === selectedAmount &&
+              req.amount === Number(selectedAmount) &&
               req.status === "pending"
             );
             setIsPending(pending);
@@ -443,7 +442,7 @@ const TierDetails: React.FC = () => {
           <button
               className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-xl transition mb-8 mx-auto block"
               onClick={() => {
-                handleJoin(selectedAmount);
+                handleJoin(Number(selectedAmount));
                 setShowModal(false);
                 setShowSuccess(true);
 
@@ -459,7 +458,7 @@ const TierDetails: React.FC = () => {
                     const pending = data.some(req =>
                       req.category === category &&
                       req.tier === tier &&
-                      req.amount === selectedAmount &&
+                      req.amount === Number(selectedAmount) &&
                       req.status === "pending"
                     );
                     setIsPending(pending);

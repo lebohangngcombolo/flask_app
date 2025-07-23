@@ -3,31 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import {
   Archive, // Example icon for Marketplace tab
   Heart, // Example icon for My Offers
-  Package, // Example icon for Track Orders
   Users, // Example icon for Partner Portal
-  PiggyBank, // Example icon for Savings
-  ShoppingBasket, // Example icon for Grocery
-  Cross, // Example icon for Burial
-  Briefcase, // Example icon for Business
-  TrendingUp, // Example icon for Investment
-  ShoppingBag, // Example icon for Marketplace offer card
   ShieldCheck, // Example icon for Verified badge
   User as UserIcon, // Alias User to avoid conflict
   CreditCard,
   CheckCircle,
-  DollarSign,
-  Activity,
-  Shield,
-  ChevronRight,
-  LayoutDashboard,
-  Calendar,
-  BarChart2,
-  MessageSquare,
-  Home,
-  FileText,
-  UserPlus,
-  ArrowLeft, // Import the ArrowLeft icon
-  Search, // Import the Search icon
+  ShoppingBag, // Example icon for Marketplace offer card
   Filter // Add Filter icon import
 } from 'lucide-react'; // Import necessary icons
 import { toast } from 'react-hot-toast';
@@ -157,7 +138,7 @@ const Marketplace: React.FC = () => {
     { id: 'kyc', label: 'KYC', icon: CheckCircle, path: '/dashboard/kyc' },
     { id: 'beneficiaries', label: 'Beneficiaries', icon: Users, path: '/dashboard/beneficiaries' },
     { id: 'refer', label: 'Refer & Earn', icon: Users, path: '/dashboard/refer' },
-    { id: 'groups', label: 'Stokvel Groups', icon: Briefcase, path: '/dashboard/groups' },
+    { id: 'groups', label: 'Stokvel Groups', icon: Users, path: '/dashboard/groups' },
     { id: 'separator', separator: true }, // Add a separator
   ];
 
@@ -241,7 +222,7 @@ const Marketplace: React.FC = () => {
             onClick={() => {/* handle search */}}
             className="flex-1 flex items-center justify-center space-x-2 px-4 py-3 bg-white dark:bg-dark-card border border-gray-200 dark:border-dark-border rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-200"
           >
-            <Search className="h-5 w-5" />
+            {/* <Search className="h-5 w-5" /> */}
             <span>Search Offers</span>
           </button>
 

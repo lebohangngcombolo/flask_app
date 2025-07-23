@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-import { Link } from "react-router-dom";
 import DealDetailModal from "../components/DealDetailModal";
 
 // Example deals data (add your own images to public/ideals/)

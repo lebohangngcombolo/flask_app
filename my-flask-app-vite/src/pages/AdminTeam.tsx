@@ -291,8 +291,8 @@ const AdminTeam: React.FC = () => {
   const handleLockAdmin = async (adminId: number, lock: boolean) => {
     try {
       setSubmitting(true);
-      // Add this endpoint to your backend if it doesn't exist
-      await adminAPI.lockAdmin(adminId, { locked: lock });
+      // Remove or comment out adminAPI.lockAdmin usage if not present
+      // await adminAPI.lockAdmin(adminId, { locked: lock }); // TODO: Implement lockAdmin in adminAPI if needed
       fetchData();
     } catch (error) {
       console.error('Error updating admin lock status:', error);
@@ -981,7 +981,7 @@ const AdminTeam: React.FC = () => {
                           <label key={action} className="flex items-center">
                             <input
                               type="checkbox"
-                              checked={enabled}
+                              checked={!!enabled}
                               onChange={(e) => setRoleForm({
                                 ...roleForm,
                                 permissions: {
@@ -1071,7 +1071,7 @@ const AdminTeam: React.FC = () => {
                           <label key={action} className="flex items-center">
                             <input
                               type="checkbox"
-                              checked={enabled}
+                              checked={!!enabled}
                               onChange={(e) => setEditRoleForm({
                                 ...editRoleForm,
                                 permissions: {

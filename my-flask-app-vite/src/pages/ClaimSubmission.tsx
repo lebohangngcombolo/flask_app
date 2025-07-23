@@ -10,7 +10,6 @@ import {
   FilePlus2,
   ShieldCheck,
   Users,
-  PartyPopper,
 } from "lucide-react";
 import api from "../services/api";
 
@@ -64,7 +63,7 @@ const ClaimSubmission: React.FC = () => {
       .then(res => {
         const data = res.data;
         // Only include Burial and Investments
-        const filtered = data.filter(group => {
+        const filtered = data.filter((group: any) => {
           const cat = group.category?.toLowerCase();
           return cat === "burial" || cat === "investments" || cat === "investment";
         });

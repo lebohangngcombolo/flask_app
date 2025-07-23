@@ -45,7 +45,10 @@ const Login: React.FC = () => {
       if (result.success) {
         console.log('Login successful, redirecting to:', result.redirectTo);
         setLoading(false);
-        navigate(result.redirectTo);
+        // Fix TS2769 by ensuring navigate is only called with a defined string
+        if (result.redirectTo) {
+          navigate(result.redirectTo);
+        }
       } else {
         console.error('Login failed:', result.message);
         setError(result.message);

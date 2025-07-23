@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from "react";
-import { Search, Filter, CheckCircle, Star, Users, ShieldCheck, TrendingUp, Gift } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { groupService } from '../services/groupService';
 import { useNavigate } from "react-router-dom";
@@ -133,7 +132,8 @@ const tierDetails: Record<string, Record<string, {
   }
 };
 
-const categoryTiers = {
+type CategoryTierKey = 'Savings' | 'Burial' | 'Investment' | 'Business' | string;
+const categoryTiers: Record<CategoryTierKey, { name: string; amount: string; color: string; }[]> = {
   Savings: [
     { name: "Bronze", amount: "R300", color: "bg-green-100 text-green-800" },
     { name: "Silver", amount: "R700", color: "bg-green-200 text-green-900" },
@@ -213,7 +213,7 @@ const StokvelGroups: React.FC = () => {
         setAllGroups(groups);
         const uniqueCategories = [...new Set(groups.map((group: any) => group.category))];
         if (uniqueCategories.length > 0 && !activeCategory) {
-          setActiveCategory(uniqueCategories[0]);
+          setActiveCategory(String(uniqueCategories[0]));
         }
       } catch (err) {
         toast.error("Failed to load groups");
@@ -346,7 +346,7 @@ const StokvelGroups: React.FC = () => {
         <div>
           <h2 className="font-semibold text-lg mb-3">{selectedCategory} Tiers</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
-            {categoryTiers[selectedCategory].map((tier) => {
+            {(categoryTiers[selectedCategory as CategoryTierKey] || []).map((tier: any) => {
               const details = tierDetails[selectedCategory][tier.name];
               return (
                 <div

@@ -54,7 +54,7 @@ export const GroupManagement: React.FC = () => {
 
   const handleJoin = async () => {
     try {
-      await groupService.joinGroup(joinGroupCode);
+      await groupService.joinGroup(Number(joinGroupCode));
       setJoinSuccess('Successfully joined the group!');
       setGroupDetails(null);
       setJoinGroupCode('');

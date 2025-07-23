@@ -17,7 +17,6 @@ const PhoneAuth: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [otpError, setOtpError] = useState('');
   const [verifying, setVerifying] = useState(false);
-  const [password, setPassword] = useState('');
   const navigate = useNavigate();
 
   // Helper to mask phone except last 4 digits
@@ -41,14 +40,14 @@ const PhoneAuth: React.FC = () => {
     }
   };
 
-  const handleVerifyOtp = async (e: React.FormEvent, code: string) => {
+  const handleVerifyOtp: React.FormEventHandler<HTMLFormElement> = async (e) => {
     e.preventDefault();
-    if (code.length !== 6) {
+    if (otp.some(digit => !digit)) {
       setOtpError('Please enter the complete 6-digit code');
       return;
     }
     setVerifying(true);
-    const result = await verifyPhoneCode(phone, code);
+    const result = await verifyPhoneCode(phone, otp.join(''));
     if (result.success) {
       // Store token and user info if present
       if (result.access_token && result.user) {
@@ -79,16 +78,6 @@ const PhoneAuth: React.FC = () => {
     setOtp(['', '', '', '', '', '']);
     toast.success('Verification code resent!');
     setIsLoading(false);
-  };
-
-  const handleLoginAfterOtp = async (phone: string, password: string) => {
-    const result = await login(phone, password);
-    if (result.success) {
-      // Store token is handled in your login util
-      navigate('/dashboard');
-    } else {
-      toast.error(result.message || 'Login failed');
-    }
   };
 
   return (
@@ -204,7 +193,7 @@ const PhoneAuth: React.FC = () => {
                       // Optionally, auto-submit if all 6 digits are pasted
                       if (pasted.length === 6) {
                         setTimeout(() => {
-                          handleVerifyOtp(new Event('submit') as any, pasted);
+                          handleVerifyOtp(new Event('submit') as any);
                         }, 100);
                       }
                     }

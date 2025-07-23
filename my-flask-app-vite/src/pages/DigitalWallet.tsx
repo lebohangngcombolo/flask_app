@@ -13,7 +13,7 @@ import {
   withdraw,
 } from "../services/walletService";
 import { toast } from "react-toastify";
-import { Plus, CreditCard, Send, Trash2, Loader2, Clipboard, Check } from "lucide-react";
+import { Plus, CreditCard, Send, Loader2, Clipboard, Check } from "lucide-react";
 import AddCardModal from "../components/AddCardModal";
 import DepositModal from "../components/DepositModal";
 import TransferModal from "../components/TransferModal";
@@ -26,14 +26,6 @@ const Spinner = ({ className = "h-5 w-5" }) => (
     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
   </svg>
 );
-
-// Add this mapping for card icons (update paths as needed)
-const cardTypeIcons: Record<string, string> = {
-  visa: "/icons/visa.svg",
-  mastercard: "/icons/mastercard.svg",
-  amex: "/icons/amex.svg",
-  unknown: "/icons/unknown.svg",
-};
 
 const maskCardNumber = (num: string) => {
   if (!num) return "•••• •••• •••• ••••";
@@ -71,7 +63,6 @@ const DigitalWallet: React.FC = () => {
 
   // Transfer form
   const [transferAmount, setTransferAmount] = useState("");
-  const [recipientEmail, setRecipientEmail] = useState("");
   const [transferDesc, setTransferDesc] = useState("");
   const [transferLoading, setTransferLoading] = useState(false);
 
@@ -89,7 +80,6 @@ const DigitalWallet: React.FC = () => {
   const [summary, setSummary] = useState({ totalDeposits: 0, totalTransfers: 0, totalWithdrawals: 0 });
 
   // Transfer modal
-  const [open, setOpen] = useState(false);
   const [walletBalance, setWalletBalance] = useState(0.0);
 
   // Additional state for editing
@@ -107,7 +97,6 @@ const DigitalWallet: React.FC = () => {
   });
 
   // AddBeneficiaryModal state
-  const [name, setName] = useState('');
   const [accountNumber, setAccountNumber] = useState("");
   const [copied, setCopied] = useState(false);
 

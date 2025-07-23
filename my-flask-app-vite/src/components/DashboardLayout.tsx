@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { 
   User, 
@@ -7,7 +7,6 @@ import {
   Users,
   Gift,
   Briefcase,
-  ShoppingBag,
   Menu,
   Bell,
   DollarSign
@@ -84,8 +83,8 @@ const DashboardLayout = () => {
       if (res.ok) {
         const data = await res.json();
         const newNotifications = Array.isArray(data) ? data : (data.notifications || []);
-        const newIds = new Set(newNotifications.map(n => n.id));
-        const unread = newNotifications.filter(n => !n.is_read);
+        const newIds = new Set<number>(newNotifications.map((n: { id: number }) => n.id));
+        const unread = newNotifications.filter((n: { is_read: boolean }) => !n.is_read);
 
         // --- Play sound only once per session if there are unread notifications on first load ---
         if (!soundPlayedThisSession.current) {
@@ -98,7 +97,7 @@ const DashboardLayout = () => {
         } else {
           // On subsequent polls, play sound for truly new notifications
           const prevIds = prevNotificationIds.current;
-          const isNew = newNotifications.some(n => !prevIds.has(n.id));
+          const isNew = newNotifications.some((n: { id: number }) => !prevIds.has(n.id));
           if (prevIds.size && isNew) {
             const audio = new Audio(notificationSound);
             audio.volume = 0.5;

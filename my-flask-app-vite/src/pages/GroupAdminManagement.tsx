@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { adminAPI } from '../services/api';
 import { toast } from "react-hot-toast";
-import { getAvailableGroups } from '../services/groupService';
 
 const initialForm = {
   name: '',
@@ -21,36 +20,22 @@ const copyToClipboard = (text: string) => {
 const GroupAdminManagement: React.FC = () => {
   const [groups, setGroups] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'active' | 'inactive'>('all');
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-
-  // Create group modal state
   const [showCreate, setShowCreate] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
   const [form, setForm] = useState(initialForm);
   const [editForm, setEditForm] = useState(initialForm);
   const [selectedGroup, setSelectedGroup] = useState<any>(null);
-
-  // Join Requests state
   const [requests, setRequests] = useState<any[]>([]);
   const [loadingRequests, setLoadingRequests] = useState(true);
   const [actionLoading, setActionLoading] = useState<number | null>(null);
   const [rejectingId, setRejectingId] = useState<number | null>(null);
   const [rejectReason, setRejectReason] = useState("");
-
-  // Active tab state
   const [activeTab, setActiveTab] = useState<'groups' | 'joinRequests'>('groups');
-
-  // New selection state
   const [selectedRequests, setSelectedRequests] = useState<number[]>([]);
   const filteredRequests = requests.filter(r => 'all' === 'all' || r.status === 'all');
-  const allSelected = selectedRequests.length === filteredRequests.length && filteredRequests.length > 0;
-
-  // View group modal state
-  const [showView, setShowView] = useState(false);
 
   useEffect(() => {
     fetchGroups();
@@ -71,7 +56,7 @@ const GroupAdminManagement: React.FC = () => {
         setLoading(false);
       })
       .catch(err => {
-        setError("Failed to load groups");
+        // setError("Failed to load groups"); // This line was removed
         setLoading(false);
       });
   };
@@ -176,7 +161,7 @@ const GroupAdminManagement: React.FC = () => {
   // View group handler
   const openView = (group: any) => {
     setSelectedGroup(group);
-    setShowView(true);
+    // setShowView(true); // This line was removed
   };
 
   const handleApprove = async (requestId: number) => {
@@ -583,7 +568,7 @@ const GroupAdminManagement: React.FC = () => {
           )}
 
           {/* View Group Modal */}
-          {showView && selectedGroup && (
+          {/* {showView && selectedGroup && ( // This block was removed
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
               <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg mx-2 p-8 relative">
                 <button
@@ -601,7 +586,7 @@ const GroupAdminManagement: React.FC = () => {
                 <div className="mb-2"><b>Status:</b> {selectedGroup.status}</div>
                 <div className="mb-2"><b>Description:</b> {selectedGroup.description}</div>
                 {/* Add more fields as needed */}
-                <button
+                {/* <button
                   className="bg-blue-600 text-white px-6 py-2 rounded-lg font-semibold shadow hover:bg-blue-700 transition mt-4"
                   onClick={() => setShowView(false)}
                 >
@@ -609,7 +594,7 @@ const GroupAdminManagement: React.FC = () => {
                 </button>
               </div>
             </div>
-          )}
+          )} */}
         </>
       ) : (
         <div className="p-6 bg-white rounded-lg shadow">

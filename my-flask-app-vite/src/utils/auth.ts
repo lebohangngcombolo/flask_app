@@ -1,17 +1,6 @@
 import { authAPI } from '../services/api';
 import api from '../services/api';
 
-interface User {
-  fullName: string;
-  email: string;
-  password: string;
-  phoneNumber?: string;
-  idNumber?: string;
-  role?: string;
-  is_verified?: boolean;
-  profile_picture?: string;
-}
-
 export const signup = async (userData: {
   fullName: string;
   email: string;

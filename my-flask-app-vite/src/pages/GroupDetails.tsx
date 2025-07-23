@@ -26,7 +26,6 @@ const GroupDetails: React.FC = () => {
     const fetchGroup = async () => {
       setLoading(true);
       try {
-        const token = localStorage.getItem("token");
         const groupRes = await api.get(`/api/admin/groups/${groupId}`);
         setGroup(groupRes.data);
 

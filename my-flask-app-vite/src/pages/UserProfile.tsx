@@ -2,13 +2,9 @@ import React, { useState, useEffect } from 'react';
 import {
   User as UserIcon, // Alias to avoid conflict if User is used elsewhere
   Shield,
-  BellRing,
-  Lock,
-  Trash2,
   ChevronRight, // Use ChevronRight for the "View" button icon
   Mail, // for email notification toggle
   Bell, // for push notification toggle
-  ShieldCheck,
   LogOut as LogoutIcon,
   Monitor,
   Download,
@@ -200,7 +196,7 @@ const UserProfile: React.FC = () => {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
+          Authorization: `Bearer ${localStorage.getItem('token')}`
         },
         body: JSON.stringify(payload)
       });
@@ -449,9 +445,9 @@ const UserProfile: React.FC = () => {
   };
 
   // Helper to filter unique sessions by user_agent and ip_address
-  const getUniqueSessions = (sessions) => {
+  const getUniqueSessions = (sessions: any[]) => {
     const seen = new Set();
-    return sessions.filter(session => {
+    return sessions.filter((session: any) => {
       const key = `${session.user_agent}-${session.ip_address}`;
       if (seen.has(key)) return false;
       seen.add(key);
@@ -472,7 +468,7 @@ const UserProfile: React.FC = () => {
               onClick={handleViewDetails}
             />
             <InfoCard
-              icon={Lock}
+              icon={Shield}
               title="Account & security"
               description="Password and active sessions"
               onClick={handleViewAccountSecurity}
@@ -812,9 +808,9 @@ const UserProfile: React.FC = () => {
                     </h3>
                     <p className="text-gray-600 mb-4">Review where you are currently logged in.</p>
                     {getUniqueSessions(sessions)
-                      .filter(s => s.is_active)
+                      .filter((s: any) => s.is_active)
                       .slice(0, 2) // Only show up to 2 unique sessions
-                      .map(session => (
+                      .map((session: any) => (
                         <div key={session.id} className="py-3 flex justify-between items-center">
                                 <div>
                             <p className="font-medium text-gray-800">
@@ -1069,7 +1065,7 @@ const UserProfile: React.FC = () => {
 
   const fetchCommunicationSettings = async () => {
     const res = await fetch('/api/user/communication', {
-      headers: { Authorization: `Bearer ${token}` }
+      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
     });
     const data = await res.json();
     setCommunicationSettings({

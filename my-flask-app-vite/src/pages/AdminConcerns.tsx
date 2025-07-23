@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'react-hot-toast';
 import { HiOutlineSearch, HiOutlineTrash, HiOutlineEye, HiX } from "react-icons/hi"; // Add react-icons for better UI
 
@@ -124,7 +124,7 @@ const AdminConcerns = () => {
                     <td className="p-3">{c.email}</td>
                     <td className="p-3">{c.subject}</td>
                     <td className="p-3">
-                      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${STATUS_COLORS[c.status]}`}>
+                      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${STATUS_COLORS[c.status as keyof typeof STATUS_COLORS]}`}>
                         {/* Optionally add a colored dot or icon here */}
                         {c.status}
                       </span>
