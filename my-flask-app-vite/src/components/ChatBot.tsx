@@ -6,10 +6,11 @@ const BOT_ICON_URL = "https://png.pngtree.com/png-clipart/20230401/original/pngt
 
 const ChatBot: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState<Array<{ text: string; isUser: boolean }>>([
-    { text: "👋 Hi! I'm your i-STOKVEL assistant. How can I help you today?", isUser: false }
-  ]);
+  const [messages, setMessages] = useState<Array<{ text: string; isUser: boolean }>>([{ text: "👋 Hi! I'm your i-STOKVEL assistant. How can I help you today?", isUser: false }]);
   const [inputMessage, setInputMessage] = useState('');
+  
+  // Get API URL from environment variable
+  const apiUrl = import.meta.env.VITE_API_URL || 'https://server-batm.onrender.com';
 
   const handleSendMessage = async () => {
     if (inputMessage.trim()) {
@@ -17,7 +18,7 @@ const ChatBot: React.FC = () => {
       setInputMessage('');
 
       try {
-        const res = await fetch('http://localhost:5001/api/chat', {
+        const res = await fetch(`${apiUrl}/api/chat`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ message: inputMessage }),
@@ -142,4 +143,4 @@ const ChatBot: React.FC = () => {
   );
 };
 
-export default ChatBot; 
+export default ChatBot;

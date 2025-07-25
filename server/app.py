@@ -243,10 +243,11 @@ logger = logging.getLogger(__name__)
 # -------------------- CORS SETUP --------------------
 CORS(app, origins=[
     "http://localhost:5173",
-    "https://vite-jd0u.onrender.com"
+    "https://vite-jd0u.onrender.com",
+    "https://i-stokvel.onrender.com"
 ], supports_credentials=True)
-CORS(app, resources={r"/api/*": {"origins": "http://localhost:5173"}}, supports_credentials=True)
-CORS(app, resources={r"/admin/*": {"origins": "http://localhost:5173"}}, supports_credentials=True)
+CORS(app, resources={r"/api/*": {"origins": ["http://localhost:5173", "https://i-stokvel.onrender.com"]}}, supports_credentials=True)
+CORS(app, resources={r"/admin/*": {"origins": ["http://localhost:5173", "https://i-stokvel.onrender.com"]}}, supports_credentials=True)
 
 # -------------------- UTILITY FUNCTIONS --------------------
 def generate_otp():
@@ -1854,6 +1855,7 @@ def chat():
     try:
         api_key = os.getenv('OPENROUTER_API_KEY')
         if not api_key:
+            print("OpenRouter API key not set in environment variables")
             return jsonify({'error': 'OpenRouter API key not set'}), 500
 
         payload = {
@@ -1866,16 +1868,21 @@ def chat():
         }
         headers = {
             "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://i-stokvel.onrender.com"  # Add your deployed frontend URL
         }
+        
+        print(f"Sending request to OpenRouter API")
         response = requests.post(
             "https://openrouter.ai/api/v1/chat/completions",
             json=payload,
             headers=headers
         )
+        
         if response.status_code != 200:
-            print("OpenRouter error:", response.text)
-            return jsonify({'error': f'OpenRouter error: {response.text}'}), 500
+            error_detail = response.text[:200]  # Limit error text length
+            print(f"OpenRouter error: Status {response.status_code}, Response: {error_detail}")
+            return jsonify({'error': f'AI service error: {response.status_code}'}), 500
 
         data = response.json()
         answer = data['choices'][0]['message']['content']
@@ -2869,7 +2876,21 @@ import os
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads', 'profile_pics')
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-about_us_text = "You are i-STOKVEL, a helpful assistant for stokvel group members and admins in South Africa."
+about_us_text = """
+You are i-STOKVEL, a helpful assistant for stokvel group members and admins in South Africa. 
+Your purpose is to help users understand how to use the i-STOKVEL platform, answer questions about stokvels, 
+and provide guidance on financial management within stokvel groups.
+
+Key features of i-STOKVEL include:
+- Creating and managing stokvel groups
+- Tracking contributions and payouts
+- Managing member information
+- Financial reporting and transparency
+- Secure payment processing
+
+Always be polite, helpful, and provide accurate information about stokvels and the platform.
+If you don't know something, admit it and suggest the user contact support.
+"""
 
 class Transaction(db.Model):
     id = db.Column(db.Integer, primary_key=True)
