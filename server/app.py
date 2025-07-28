@@ -241,13 +241,17 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 # -------------------- CORS SETUP --------------------
-CORS(app, origins=[
+# Define allowed origins
+allowed_origins = [
     "http://localhost:5173",
     "https://istokvelapp.onrender.com",
     "https://stokapp-cmy0.onrender.com"
-], supports_credentials=True)
-CORS(app, resources={r"/api/*": {"origins": ["http://localhost:5173", "https://istokvelapp.onrender.com", "https://stokapp-cmy0.onrender.com"]}}, supports_credentials=True)
-CORS(app, resources={r"/admin/*": {"origins": ["http://localhost:5173", "https://istokvelapp.onrender.com", "https://stokapp-cmy0.onrender.com"]}}, supports_credentials=True)
+]
+
+# Configure CORS for the entire app
+CORS(app, resources={
+    r"/*": {"origins": allowed_origins, "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"], "allow_headers": ["Content-Type", "Authorization"]}
+}, supports_credentials=True)
 
 # -------------------- UTILITY FUNCTIONS --------------------
 def generate_otp(): 
@@ -1842,12 +1846,16 @@ def send_message(current_user):
         })
     except Exception as e:
         import traceback
-        traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        error_traceback = traceback.format_exc()
+        print(f"Unexpected error in chat endpoint: {str(e)}\n{error_traceback}")
+        return jsonify({'error': 'An unexpected error occurred processing your request'}), 500
 
-@app.route('/api/chat', methods=['POST'])
+@app.route('/api/chat', methods=['POST', 'OPTIONS'])
 @cross_origin()
 def chat():
+    # Handle preflight OPTIONS request
+    if request.method == 'OPTIONS':
+        return '', 200
     data = request.get_json()
     user_message = data.get('message')
     if not user_message:
@@ -1856,8 +1864,10 @@ def chat():
     try:
         api_key = os.getenv('OPENROUTER_API_KEY')
         if not api_key:
-            print("OpenRouter API key not set in environment variables")
+            print("ERROR: OpenRouter API key not set in environment variables")
             return jsonify({'error': 'OpenRouter API key not set'}), 500
+        
+        print(f"Using OpenRouter API key: {api_key[:5]}...{api_key[-5:] if len(api_key) > 10 else ''}")
 
         payload = {
             "model": "meta-llama/llama-3-8b-instruct",
@@ -1873,21 +1883,37 @@ def chat():
             "HTTP-Referer": "https://stokapp-cmy0.onrender.com"  # Add your deployed frontend URL
         }
         
-        print(f"Sending request to OpenRouter API")
-        response = requests.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            json=payload,
-            headers=headers
-        )
-        
-        if response.status_code != 200:
-            error_detail = response.text[:200]  # Limit error text length
-            print(f"OpenRouter error: Status {response.status_code}, Response: {error_detail}")
-            return jsonify({'error': f'AI service error: {response.status_code}'}), 500
+        print(f"Sending request to OpenRouter API with model: {payload['model']}")
+        try:
+            response = requests.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                json=payload,
+                headers=headers,
+                timeout=10  # Add timeout to prevent hanging requests
+            )
+            
+            print(f"OpenRouter API response status: {response.status_code}")
+            
+            if response.status_code != 200:
+                error_detail = response.text[:200]  # Limit error text length
+                print(f"OpenRouter error: Status {response.status_code}, Response: {error_detail}")
+                return jsonify({'error': f'AI service error: {response.status_code} - {error_detail}'}), 500
+        except requests.exceptions.RequestException as req_err:
+            print(f"Request error when calling OpenRouter API: {str(req_err)}")
+            return jsonify({'error': f'Connection error to AI service: {str(req_err)}'}), 503
 
-        data = response.json()
-        answer = data['choices'][0]['message']['content']
-        return jsonify({'answer': answer})
+        try:
+            data = response.json()
+            if 'choices' not in data or len(data['choices']) == 0:
+                print(f"Invalid response format from OpenRouter API: {data}")
+                return jsonify({'error': 'Invalid response from AI service'}), 500
+                
+            answer = data['choices'][0]['message']['content']
+            print(f"Successfully received answer from OpenRouter API")
+            return jsonify({'answer': answer})
+        except (KeyError, ValueError, TypeError) as parse_err:
+            print(f"Error parsing OpenRouter API response: {str(parse_err)}. Response: {response.text[:200]}")
+            return jsonify({'error': 'Failed to parse AI service response'}), 500
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -2879,7 +2905,12 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 about_us_text = """
 You are i-STOKVEL, a helpful assistant for stokvel group members and admins in South Africa. 
-Your purpose is to help users understand how to use the i-STOKVEL platform, answer questions about stokvels, 
+Your purpose:
+- Respond in a warm, conversational, and concise way (1-3 sentences).
+- Do NOT greet the user in every response—just answer their question or help them directly.
+- Be welcoming, but not robotic or overly formal.
+- If you don't know something, admit it and suggest the user contact support.
+- to help users understand how to use the i-STOKVEL platform, answer questions about stokvels, 
 and provide guidance on financial management within stokvel groups.
 
 Key features of i-STOKVEL include:
