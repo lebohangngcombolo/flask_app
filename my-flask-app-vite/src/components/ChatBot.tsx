@@ -10,7 +10,7 @@ const ChatBot: React.FC = () => {
   const [inputMessage, setInputMessage] = useState('');
   
   // Get API URL from environment variable
-  const apiUrl = import.meta.env.VITE_API_URL || 'https://server-batm.onrender.com';
+  const apiUrl = import.meta.env.VITE_API_URL || 'https://istokvelapp.onrender.com';
 
   const handleSendMessage = async () => {
     if (inputMessage.trim()) {

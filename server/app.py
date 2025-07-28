@@ -244,10 +244,10 @@ logger = logging.getLogger(__name__)
 CORS(app, origins=[
     "http://localhost:5173",
     "https://vite-jd0u.onrender.com",
-    "https://i-stokvel.onrender.com"
+    "https://istokvelapp.onrender.com"
 ], supports_credentials=True)
-CORS(app, resources={r"/api/*": {"origins": ["http://localhost:5173", "https://i-stokvel.onrender.com"]}}, supports_credentials=True)
-CORS(app, resources={r"/admin/*": {"origins": ["http://localhost:5173", "https://i-stokvel.onrender.com"]}}, supports_credentials=True)
+CORS(app, resources={r"/api/*": {"origins": ["http://localhost:5173", "https://istokvelapp.onrender.com"]}}, supports_credentials=True)
+CORS(app, resources={r"/admin/*": {"origins": ["http://localhost:5173", "https://istokvelapp.onrender.com"]}}, supports_credentials=True)
 
 # -------------------- UTILITY FUNCTIONS --------------------
 def generate_otp():
@@ -1818,7 +1818,7 @@ def send_message(current_user):
     try:
         completion = client.chat.completions.create(
             extra_headers={
-                "HTTP-Referer": os.getenv('FRONTEND_URL', 'http://localhost:3000'),
+                "HTTP-Referer": "https://i-stokvel.onrender.com",
                 "X-Title": "Stokvel Assistant",
             },
             model="meta-llama/llama-3-8b-instruct",
