@@ -48,7 +48,7 @@
     "globals": "^16.0.0",
     "postcss": "^8.4.31",
     "react-modal": "^3.16.3",
-    "typescript": "^5.2.2",
+    "typescript": "^5.8.3",
     "vite": "^6.3.5"
   }
 }
