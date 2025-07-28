@@ -1845,8 +1845,10 @@ def send_message(current_user):
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/chat', methods=['POST'])
+@app.route('/api/chat', methods=['POST', 'OPTIONS'])
 def chat():
+    if request.method == 'OPTIONS':
+        return '', 200
     data = request.get_json()
     user_message = data.get('message')
     if not user_message:
