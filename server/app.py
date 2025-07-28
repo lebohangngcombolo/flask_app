@@ -243,14 +243,14 @@ logger = logging.getLogger(__name__)
 # -------------------- CORS SETUP --------------------
 CORS(app, origins=[
     "http://localhost:5173",
-    "https://vite-jd0u.onrender.com",
-    "https://istokvelapp.onrender.com"
+    "https://istokvelapp.onrender.com",
+    "https://stokapp-cmy0.onrender.com"
 ], supports_credentials=True)
-CORS(app, resources={r"/api/*": {"origins": ["http://localhost:5173", "https://istokvelapp.onrender.com"]}}, supports_credentials=True)
-CORS(app, resources={r"/admin/*": {"origins": ["http://localhost:5173", "https://istokvelapp.onrender.com"]}}, supports_credentials=True)
+CORS(app, resources={r"/api/*": {"origins": ["http://localhost:5173", "https://istokvelapp.onrender.com", "https://stokapp-cmy0.onrender.com"]}}, supports_credentials=True)
+CORS(app, resources={r"/admin/*": {"origins": ["http://localhost:5173", "https://istokvelapp.onrender.com", "https://stokapp-cmy0.onrender.com"]}}, supports_credentials=True)
 
 # -------------------- UTILITY FUNCTIONS --------------------
-def generate_otp():
+def generate_otp(): 
     """Generate a 6-digit OTP"""
     return ''.join([str(random.randint(0, 9)) for _ in range(6)])
 
@@ -1818,7 +1818,7 @@ def send_message(current_user):
     try:
         completion = client.chat.completions.create(
             extra_headers={
-                "HTTP-Referer": "https://i-stokvel.onrender.com",
+                "HTTP-Referer": "https://stokapp-cmy0.onrender.com",
                 "X-Title": "Stokvel Assistant",
             },
             model="meta-llama/llama-3-8b-instruct",
@@ -1869,7 +1869,7 @@ def chat():
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
-            "HTTP-Referer": "https://i-stokvel.onrender.com"  # Add your deployed frontend URL
+            "HTTP-Referer": "https://stokapp-cmy0.onrender.com"  # Add your deployed frontend URL
         }
         
         print(f"Sending request to OpenRouter API")
@@ -2777,7 +2777,7 @@ def bulk_delete_join_requests():
 @token_required
 def get_user_referral_details(current_user):
     referral_code = current_user.referral_code
-    base_frontend_url = "http://localhost:5173"  # Change to your real frontend
+    base_frontend_url = "https://stokapp-cmy0.onrender.com"  # Change to your real frontend
     referral_link = f"{base_frontend_url}/signup?ref={referral_code}"
     return jsonify({
         'referral_code': referral_code,
