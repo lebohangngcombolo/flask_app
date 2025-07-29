@@ -268,10 +268,7 @@ const DigitalWallet: React.FC = () => {
   // UI
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-dark-background py-10 px-4 transition-colors">
-      {/* Debug section for unused state variables */}
-      <div className="mb-4 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
 
-      </div>
       <div className="max-w-4xl mx-auto space-y-8">
         {/* Wallet Overview */}
         <div className="backdrop-blur-md bg-white/70 border border-blue-100 rounded-2xl shadow-2xl p-8 flex flex-col md:flex-row items-center justify-between transition-all">
