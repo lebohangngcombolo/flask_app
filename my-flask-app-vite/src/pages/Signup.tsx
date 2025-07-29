@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { signup, verifyEmailCode, resendEmailVerificationCode, verifyPhoneCode, resendSmsVerificationCode } from '../utils/auth';
 import { toast } from 'react-toastify';
 import PageTransition from '../components/PageTransition';
@@ -19,6 +19,9 @@ interface PasswordRequirement {
 
 const Signup: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const params = new URLSearchParams(location.search);
+  const referralCode = params.get('ref');
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
@@ -350,7 +353,11 @@ const Signup: React.FC = () => {
     setErrors({});
 
     try {
-      const result = await signup(formData);
+      const payload = {
+        ...formData,
+        referralCode, // this will be null if not present
+      };
+      const result = await signup(payload);
       
       if (result.success) {
         setUserEmailForVerification(formData.email);
@@ -527,6 +534,12 @@ const Signup: React.FC = () => {
             {errors.submit && (
               <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-sm">
                 {errors.submit}
+              </div>
+            )}
+
+            {referralCode && (
+              <div className="mb-4 text-green-600">
+                You are signing up with referral code: <b>{referralCode}</b>
               </div>
             )}
 
