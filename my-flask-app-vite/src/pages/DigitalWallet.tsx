@@ -270,12 +270,7 @@ const DigitalWallet: React.FC = () => {
     <div className="min-h-screen bg-gray-100 dark:bg-dark-background py-10 px-4 transition-colors">
       {/* Debug section for unused state variables */}
       <div className="mb-4 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
-        <div><strong>Debug Info:</strong></div>
-        <div>Deposit Amount: {/* Removed unused depositAmount */}</div>
-        <div>Deposit Card: {/* Removed unused depositCard */}</div>
-        <div>Transfer Amount: {/* Removed unused transferAmount */}</div>
-        <div>Transfer Description: {/* Removed unused transferDesc */}</div>
-        <div>Transaction Filters: {/* Removed unused transactionFilters */}</div>
+
       </div>
       <div className="max-w-4xl mx-auto space-y-8">
         {/* Wallet Overview */}
