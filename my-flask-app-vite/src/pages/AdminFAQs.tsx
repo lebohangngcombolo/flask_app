@@ -88,8 +88,8 @@ function AdminFAQs() {
   // Fetch Notifications
   const fetchNotifications = async () => {
     try {
-      const res = await api.get("/api/admin/notifications");
-      setNotifications(res.data.notifications || []);
+      const response = await api.get("/api/admin/notifications");
+      setNotifications(response.data.notifications || []);
     } catch (err: unknown) {
       if (err instanceof Error) {
         if (err.message === "Network Error") {

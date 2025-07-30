@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Bell, ChevronDown, User, LogOut, Settings, UserCircle, Menu } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import logo2 from '../assets/iSTOKVEL2.png';
+import api from '../services/api'; // Import the configured API service
 
 interface Notification {
   id: number;
@@ -31,21 +32,10 @@ const AdminNavbar: React.FC<AdminNavbarProps> = ({ onToggleSidebar }) => {
   useEffect(() => {
     const fetchNotifications = async () => {
       try {
-        const token = localStorage.getItem('token');
-        if (!token) return;
-
-        const res = await fetch('/api/admin/notifications', {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
-        
-        if (res.ok) {
-          const data = await res.json();
-          setNotifications(data);
-          setUnreadCount(data.filter((n: any) => !n.is_read).length);
-        }
+        const response = await api.get('/api/admin/notifications');
+        const data = response.data;
+        setNotifications(Array.isArray(data) ? data : (data.notifications || []));
+        setUnreadCount(data.filter((n: any) => !n.is_read).length);
       } catch (err) {
         console.error('Failed to fetch notifications:', err);
       }
@@ -82,14 +72,7 @@ const AdminNavbar: React.FC<AdminNavbarProps> = ({ onToggleSidebar }) => {
 
   const handleNotificationClick = async (notificationId: number) => {
     try {
-      const token = localStorage.getItem('token');
-      await fetch(`/api/admin/notifications/${notificationId}/read`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      await api.post(`/api/admin/notifications/${notificationId}/read`);
       
       // Update local state
       setNotifications(prev => 

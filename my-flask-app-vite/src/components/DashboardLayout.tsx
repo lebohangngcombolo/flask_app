@@ -1,16 +1,29 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { 
-  User, 
+  Home, 
+  Users, 
+  Settings, 
+  LogOut, 
+  Bell, 
+  Menu, 
+  X,
+  User,
+  Shield,
   CreditCard,
-  CheckCircle,
-  Users,
+  TrendingUp,
+  FileText,
+  HelpCircle,
   Gift,
-  Briefcase,
-  Menu,
-  Bell,
-  DollarSign
+  Target,
+  Building2,
+  Users2,
+  Calendar,
+  MessageSquare,
+  Star
 } from 'lucide-react';
+import { toast } from 'react-hot-toast';
+import api from '../services/api'; // Import the configured API service
 import ProfileDropdown from './ProfileDropdown';
 import { useAuth } from '../hooks/useAuth';
 import notificationSound from '../assets/notification.mp3';
@@ -29,11 +42,11 @@ interface Notification {
 const sidebarItems = [
   { label: 'User Profile', path: '/dashboard/profile', icon: User },
   { label: 'Digital Wallet', path: '/dashboard/digital-wallet', icon: CreditCard },
-  { label: 'KYC', path: '/dashboard/kyc', icon: CheckCircle },
+  { label: 'KYC', path: '/dashboard/kyc', icon: Shield },
   { label: 'Beneficiaries', path: '/dashboard/beneficiaries', icon: Users },
   { label: 'Refer & Earn', path: '/dashboard/refer', icon: Gift },
-  { label: 'Stokvel Groups', path: '/dashboard/stokvel-groups', icon: Briefcase },
-  { label: 'Request Payout', path: '/dashboard/claims/new', icon: DollarSign },
+  { label: 'Stokvel Groups', path: '/dashboard/stokvel-groups', icon: Building2 },
+  { label: 'Request Payout', path: '/dashboard/claims/new', icon: FileText },
 ];
 
 
@@ -58,42 +71,33 @@ const DashboardLayout = () => {
   // Define fetchNotifications at the top level of your component
   const fetchNotifications = async () => {
     try {
-      const token = localStorage.getItem('token');
-      if (!token) return;
-      const res = await fetch('/api/user/notifications', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const newNotifications = Array.isArray(data) ? data : (data.notifications || []);
-        const newIds = new Set<number>(newNotifications.map((n: { id: number }) => n.id));
-        const unread = newNotifications.filter((n: { is_read: boolean }) => !n.is_read);
+      const response = await api.get('/api/user/notifications');
+      const data = response.data;
+      const newNotifications = Array.isArray(data) ? data : (data.notifications || []);
+      const newIds = new Set<number>(newNotifications.map((n: { id: number }) => n.id));
+      const unread = newNotifications.filter((n: { is_read: boolean }) => !n.is_read);
 
-        // --- Play sound only once per session if there are unread notifications on first load ---
-        if (!soundPlayedThisSession.current) {
-          if (unread.length > 0) {
-            const audio = new Audio(notificationSound);
-            audio.volume = 0.5;
-            audio.play();
-          }
-          soundPlayedThisSession.current = true;
-        } else {
-          // On subsequent polls, play sound for truly new notifications
-          const prevIds = prevNotificationIds.current;
-          const isNew = newNotifications.some((n: { id: number }) => !prevIds.has(n.id));
-          if (prevIds.size && isNew) {
-            const audio = new Audio(notificationSound);
-            audio.volume = 0.5;
-            audio.play();
-          }
+      // --- Play sound only once per session if there are unread notifications on first load ---
+      if (!soundPlayedThisSession.current) {
+        if (unread.length > 0) {
+          const audio = new Audio(notificationSound);
+          audio.volume = 0.5;
+          audio.play();
         }
-
-        prevNotificationIds.current = newIds;
-        setNotifications(newNotifications);
+        soundPlayedThisSession.current = true;
+      } else {
+        // On subsequent polls, play sound for truly new notifications
+        const prevIds = prevNotificationIds.current;
+        const isNew = newNotifications.some((n: { id: number }) => !prevIds.has(n.id));
+        if (prevIds.size && isNew) {
+          const audio = new Audio(notificationSound);
+          audio.volume = 0.5;
+          audio.play();
+        }
       }
+
+      prevNotificationIds.current = newIds;
+      setNotifications(newNotifications);
     } catch (err) {
       console.error('Failed to fetch notifications:', err);
     }
@@ -108,15 +112,7 @@ const DashboardLayout = () => {
 
   // Mark as read/unread
   const markAsRead = async (id: number) => {
-    const token = localStorage.getItem('token');
-    await fetch('/api/user/notifications/mark-as-read', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ notification_ids: [id] })
-    });
+    await api.post('/api/user/notifications/mark-as-read', { notification_ids: [id] });
     setNotifications(prev =>
       prev.map(n => n.id === id ? { ...n, is_read: true } : n)
     );
@@ -132,15 +128,7 @@ const DashboardLayout = () => {
 
   // Now you can also use it in markAllAsRead
   const markAllAsRead = async () => {
-    const token = localStorage.getItem('token');
-    await fetch('/api/user/notifications/mark-as-read', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({}) // empty means mark all
-    });
+    await api.post('/api/user/notifications/mark-as-read', {}); // empty means mark all
     fetchNotifications(); // <-- This works now!
   };
 

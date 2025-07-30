@@ -2639,33 +2639,41 @@ def get_admin_notifications():
 @app.route('/api/admin/notifications/<int:notification_id>/read', methods=['POST'])
 @jwt_required()
 def mark_admin_notification_read(notification_id):
-    user_id = get_jwt_identity()
-    user = User.query.get(user_id)
-    
-    if not user or user.role != 'admin':
-        return jsonify({'error': 'Unauthorized'}), 401
-    
-    notification = Notification.query.filter_by(id=notification_id, user_id=user_id).first()
-    
-    if notification:
-        notification.is_read = True
-        db.session.commit()
-    
-    return jsonify({'message': 'Notification marked as read'})
+    notification = Notification.query.get_or_404(notification_id)
+    notification.is_read = True
+    db.session.commit()
+    return jsonify({'message': 'Notification marked as read'}), 200
+
+@app.route('/api/admin/notifications/mark-all-read', methods=['POST'])
+@role_required(['admin'])
+def mark_all_admin_notifications_read():
+    current_user_id = get_jwt_identity()
+    Notification.query.filter_by(user_id=current_user_id, is_read=False).update({'is_read': True})
+    db.session.commit()
+    return jsonify({'message': 'All notifications marked as read'}), 200
 
 @app.route('/api/user/notifications/mark-as-read', methods=['POST'])
 @jwt_required()
 def mark_notifications_as_read():
-    user_id = get_jwt_identity()
-    notification_ids = request.json.get('notification_ids', None)
-    query = Notification.query.filter_by(user_id=user_id)
+    current_user_id = get_jwt_identity()
+    data = request.get_json()
+    notification_ids = data.get('notification_ids', [])
+    
     if notification_ids:
-        query = query.filter(Notification.id.in_(notification_ids))
-    notifications = query.all()
-    for n in notifications:
-        n.is_read = True
+        # Mark specific notifications as read
+        Notification.query.filter(
+            Notification.id.in_(notification_ids),
+            Notification.user_id == current_user_id
+        ).update({'is_read': True}, synchronize_session=False)
+    else:
+        # Mark all notifications as read
+        Notification.query.filter_by(
+            user_id=current_user_id,
+            is_read=False
+        ).update({'is_read': True})
+    
     db.session.commit()
-    return jsonify({'message': 'Notifications marked as read'})
+    return jsonify({'message': 'Notifications marked as read'}), 200
 
 
 
