@@ -1,28 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { 
-  Home, 
   Users, 
-  Settings, 
-  LogOut, 
   Bell, 
   Menu, 
-  X,
   User,
   Shield,
   CreditCard,
-  TrendingUp,
   FileText,
-  HelpCircle,
   Gift,
-  Target,
-  Building2,
-  Users2,
-  Calendar,
-  MessageSquare,
-  Star
+  Building2
 } from 'lucide-react';
-import { toast } from 'react-hot-toast';
 import api from '../services/api'; // Import the configured API service
 import ProfileDropdown from './ProfileDropdown';
 import { useAuth } from '../hooks/useAuth';
