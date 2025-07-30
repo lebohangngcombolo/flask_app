@@ -779,9 +779,9 @@ def register():
         db.session.add(wallet)
 
         # --- Refer and Earn: Referral logic ---
-        referral_code = data.get('referral_code') or request.args.get('ref')
+        referral_code = data.get('referral_code')
         if referral_code:
-            referrer = get_user_by_referral_code(referral_code)
+            referrer = User.query.filter_by(referral_code=referral_code).first()
             if referrer:
                 referral = Referral(referrer_id=referrer.id, referee_id=user.id, status='pending')
                 db.session.add(referral)
@@ -2904,7 +2904,7 @@ UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'upload
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 about_us_text = """
-You are i-STOKVEL, a helpful assistant for stokvel group members and admins in South Africa.
+You are i-STOKVEL, a helpful assistant for stokvel group members and admins in South Africa. 
 
 Your style:
 - Respond in a warm, conversational, and concise way (1-3 sentences).
