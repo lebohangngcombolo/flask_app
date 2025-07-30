@@ -3884,6 +3884,30 @@ def get_all_concerns():
         'concerns': [c.to_dict() for c in concerns]
     }), 200
 
+@app.route('/api/admin/concerns/<int:concern_id>/status', methods=['PUT'])
+@role_required(['admin'])
+def update_concern_status(concern_id):
+    concern = CustomerConcern.query.get_or_404(concern_id)
+    data = request.get_json()
+    new_status = data.get('status')
+    
+    if new_status not in ['open', 'in-progress', 'closed']:
+        return jsonify({'error': 'Invalid status'}), 400
+    
+    concern.status = new_status
+    db.session.commit()
+    
+    return jsonify({'message': 'Status updated successfully', 'concern': concern.to_dict()}), 200
+
+@app.route('/api/admin/concerns/<int:concern_id>', methods=['DELETE'])
+@role_required(['admin'])
+def delete_concern(concern_id):
+    concern = CustomerConcern.query.get_or_404(concern_id)
+    db.session.delete(concern)
+    db.session.commit()
+    
+    return jsonify({'message': 'Concern deleted successfully'}), 200
+
 @app.route('/api/beneficiaries/<int:beneficiary_id>/documents', methods=['POST'])
 @jwt_required()
 def upload_beneficiary_document(beneficiary_id):

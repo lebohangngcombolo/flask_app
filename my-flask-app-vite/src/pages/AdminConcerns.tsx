@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'react-hot-toast';
 import { HiOutlineSearch, HiOutlineTrash, HiOutlineEye, HiX } from "react-icons/hi"; // Add react-icons for better UI
+import api from '../services/api'; // Import the configured API service
 
 const STATUS_COLORS = {
   open: 'bg-blue-100 text-blue-700',
@@ -18,21 +19,18 @@ const AdminConcerns = () => {
   const [selected, setSelected] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
-  const token = localStorage.getItem('token');
-
   const fetchConcerns = async () => {
     setLoading(true);
-    let url = `/api/admin/concerns?page=${page}&limit=${limit}`;
-    if (status) url += `&status=${status}`;
-    if (search) url += `&search=${encodeURIComponent(search)}`;
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (res.ok) {
-      const data = await res.json();
-      setConcerns(data.concerns);
-      setTotal(data.total);
-    } else {
+    try {
+      let url = `/api/admin/concerns?page=${page}&limit=${limit}`;
+      if (status) url += `&status=${status}`;
+      if (search) url += `&search=${encodeURIComponent(search)}`;
+      
+      const response = await api.get(url);
+      setConcerns(response.data.concerns);
+      setTotal(response.data.total);
+    } catch (error) {
+      console.error('Failed to fetch concerns:', error);
       toast.error('Failed to load concerns');
     }
     setLoading(false);
@@ -41,29 +39,24 @@ const AdminConcerns = () => {
   useEffect(() => { fetchConcerns(); }, [status, search, page]);
 
   const handleStatusChange = async (id: string, newStatus: string) => {
-    const res = await fetch(`/api/admin/concerns/${id}/status`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ status: newStatus }),
-    });
-    if (res.ok) {
+    try {
+      await api.put(`/api/admin/concerns/${id}/status`, { status: newStatus });
       toast.success('Status updated');
       fetchConcerns();
-    } else {
+    } catch (error) {
+      console.error('Failed to update status:', error);
       toast.error('Failed to update status');
     }
   };
 
   const handleDelete = async (id: string) => {
     if (!window.confirm('Delete this concern?')) return;
-    const res = await fetch(`/api/admin/concerns/${id}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (res.ok) {
+    try {
+      await api.delete(`/api/admin/concerns/${id}`);
       toast.success('Concern deleted');
       fetchConcerns();
-    } else {
+    } catch (error) {
+      console.error('Failed to delete concern:', error);
       toast.error('Failed to delete concern');
     }
   };
