@@ -150,7 +150,7 @@ export default function AdminDashboard() {
           {activity.length === 0 ? (
             <div className="text-gray-400 text-sm">No recent activity.</div>
           ) : (
-            activity.map((a, i) => (
+            Array.isArray(activity) && activity.map((a, i) => (
               <div key={i} className="flex items-center gap-3 py-2 border-b last:border-b-0">
                 <Activity className="w-5 h-5 text-gray-400" />
                 <div>
@@ -184,7 +184,7 @@ export default function AdminDashboard() {
           {announcements.length === 0 ? (
             <div className="text-gray-400 text-sm">No announcements.</div>
           ) : (
-            announcements.map((a, i) => (
+            Array.isArray(announcements) && announcements.map((a, i) => (
               <div key={i} className="mb-2">
                 <div className="font-semibold">{a.title}</div>
                 <div className="text-gray-600 text-sm">{a.body}</div>

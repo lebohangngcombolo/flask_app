@@ -241,7 +241,7 @@ function AdminFAQs() {
               {notifications.length === 0 ? (
                 <div className="text-gray-400 text-sm">No notifications.</div>
               ) : (
-                notifications.slice(0, 5).map(n => (
+                Array.isArray(notifications) && notifications.slice(0, 5).map(n => (
                   <div key={n.id} className="bg-white rounded-lg p-4 shadow border">
                     <div className="font-semibold">{n.title}</div>
                     <div className="text-gray-600 text-sm truncate">{n.message}</div>
