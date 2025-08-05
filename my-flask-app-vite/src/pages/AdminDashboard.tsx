@@ -48,9 +48,6 @@ export default function AdminDashboard() {
     );
   }
 
-  const safeActivity = Array.isArray(activity) ? activity : [];
-  const safeAnnouncements = Array.isArray(announcements) ? announcements : [];
-
   return (
     <div className="p-8 bg-gray-50 min-h-screen">
       {/* Large Welcome Message */}
@@ -150,10 +147,10 @@ export default function AdminDashboard() {
       <div className="mb-8">
         <h2 className="text-xl font-bold mb-4">Live Activity</h2>
         <div className="bg-white rounded-xl shadow-sm p-4 max-h-64 overflow-y-auto">
-          {safeActivity.length === 0 ? (
+          {activity.length === 0 ? (
             <div className="text-gray-400 text-sm">No recent activity.</div>
           ) : (
-            safeActivity.map((a, i) => (
+            activity.map((a, i) => (
               <div key={i} className="flex items-center gap-3 py-2 border-b last:border-b-0">
                 <Activity className="w-5 h-5 text-gray-400" />
                 <div>
@@ -184,10 +181,10 @@ export default function AdminDashboard() {
       <div className="mb-8">
         <h2 className="text-xl font-bold mb-4">Announcements</h2>
         <div className="bg-white rounded-xl shadow-sm p-4">
-          {safeAnnouncements.length === 0 ? (
+          {announcements.length === 0 ? (
             <div className="text-gray-400 text-sm">No announcements.</div>
           ) : (
-            safeAnnouncements.map((a, i) => (
+            announcements.map((a, i) => (
               <div key={i} className="mb-2">
                 <div className="font-semibold">{a.title}</div>
                 <div className="text-gray-600 text-sm">{a.body}</div>

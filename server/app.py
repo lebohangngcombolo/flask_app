@@ -202,7 +202,7 @@ load_dotenv()
 # Config
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key')
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
+app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:Ayanda%4023@192.168.0.147:5432/stokvel_db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['MAIL_SERVER'] = os.getenv('MAIL_SERVER')
 app.config['MAIL_PORT'] = int(os.getenv('MAIL_PORT')) if os.getenv('MAIL_PORT') else None
@@ -241,20 +241,15 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 # -------------------- CORS SETUP --------------------
-# Define allowed origins
-allowed_origins = [
+CORS(app, origins=[
     "http://localhost:5173",
-    "https://istokvelapp.onrender.com",
-    "https://stokapp-cmy0.onrender.com"
-]
-
-# Configure CORS for the entire app
-CORS(app, resources={
-    r"/*": {"origins": allowed_origins, "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"], "allow_headers": ["Content-Type", "Authorization"]}
-}, supports_credentials=True)
+   # "https://vite-jd0u.onrender.com"
+], supports_credentials=True)
+CORS(app, resources={r"/api/*": {"origins": "http://localhost:5173"}}, supports_credentials=True)
+CORS(app, resources={r"/admin/*": {"origins": "http://localhost:5173"}}, supports_credentials=True)
 
 # -------------------- UTILITY FUNCTIONS --------------------
-def generate_otp(): 
+def generate_otp():
     """Generate a 6-digit OTP"""
     return ''.join([str(random.randint(0, 9)) for _ in range(6)])
 
@@ -749,6 +744,9 @@ def test():
 def register():
     try:
         data = request.get_json()
+        print("Received registration data:", data)  # <--- ADD THIS
+        referral_code = data.get('referral_code') or request.args.get('ref')
+        print("Referral code received:", referral_code)  # <--- ADD THIS
         if not data:
             return jsonify({'error': 'No data provided'}), 400
 
@@ -779,9 +777,8 @@ def register():
         db.session.add(wallet)
 
         # --- Refer and Earn: Referral logic ---
-        referral_code = data.get('referral_code')
         if referral_code:
-            referrer = User.query.filter_by(referral_code=referral_code).first()
+            referrer = get_user_by_referral_code(referral_code)
             if referrer:
                 referral = Referral(referrer_id=referrer.id, referee_id=user.id, status='pending')
                 db.session.add(referral)
@@ -1822,7 +1819,7 @@ def send_message(current_user):
     try:
         completion = client.chat.completions.create(
             extra_headers={
-                "HTTP-Referer": "https://stokapp-cmy0.onrender.com",
+                "HTTP-Referer": os.getenv('FRONTEND_URL', 'http://localhost:3000'),
                 "X-Title": "Stokvel Assistant",
             },
             model="meta-llama/llama-3-8b-instruct",
@@ -1846,16 +1843,11 @@ def send_message(current_user):
         })
     except Exception as e:
         import traceback
-        error_traceback = traceback.format_exc()
-        print(f"Unexpected error in chat endpoint: {str(e)}\n{error_traceback}")
-        return jsonify({'error': 'An unexpected error occurred processing your request'}), 500
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
 
-@app.route('/api/chat', methods=['POST', 'OPTIONS'])
-@cross_origin()
+@app.route('/api/chat', methods=['POST'])
 def chat():
-    # Handle preflight OPTIONS request
-    if request.method == 'OPTIONS':
-        return '', 200
     data = request.get_json()
     user_message = data.get('message')
     if not user_message:
@@ -1864,10 +1856,7 @@ def chat():
     try:
         api_key = os.getenv('OPENROUTER_API_KEY')
         if not api_key:
-            print("ERROR: OpenRouter API key not set in environment variables")
             return jsonify({'error': 'OpenRouter API key not set'}), 500
-        
-        print(f"Using OpenRouter API key: {api_key[:5]}...{api_key[-5:] if len(api_key) > 10 else ''}")
 
         payload = {
             "model": "meta-llama/llama-3-8b-instruct",
@@ -1879,41 +1868,20 @@ def chat():
         }
         headers = {
             "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-            "HTTP-Referer": "https://stokapp-cmy0.onrender.com"  # Add your deployed frontend URL
+            "Content-Type": "application/json"
         }
-        
-        print(f"Sending request to OpenRouter API with model: {payload['model']}")
-        try:
-            response = requests.post(
-                "https://openrouter.ai/api/v1/chat/completions",
-                json=payload,
-                headers=headers,
-                timeout=10  # Add timeout to prevent hanging requests
-            )
-            
-            print(f"OpenRouter API response status: {response.status_code}")
-            
-            if response.status_code != 200:
-                error_detail = response.text[:200]  # Limit error text length
-                print(f"OpenRouter error: Status {response.status_code}, Response: {error_detail}")
-                return jsonify({'error': f'AI service error: {response.status_code} - {error_detail}'}), 500
-        except requests.exceptions.RequestException as req_err:
-            print(f"Request error when calling OpenRouter API: {str(req_err)}")
-            return jsonify({'error': f'Connection error to AI service: {str(req_err)}'}), 503
+        response = requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            json=payload,
+            headers=headers
+        )
+        if response.status_code != 200:
+            print("OpenRouter error:", response.text)
+            return jsonify({'error': f'OpenRouter error: {response.text}'}), 500
 
-        try:
-            data = response.json()
-            if 'choices' not in data or len(data['choices']) == 0:
-                print(f"Invalid response format from OpenRouter API: {data}")
-                return jsonify({'error': 'Invalid response from AI service'}), 500
-                
-            answer = data['choices'][0]['message']['content']
-            print(f"Successfully received answer from OpenRouter API")
-            return jsonify({'answer': answer})
-        except (KeyError, ValueError, TypeError) as parse_err:
-            print(f"Error parsing OpenRouter API response: {str(parse_err)}. Response: {response.text[:200]}")
-            return jsonify({'error': 'Failed to parse AI service response'}), 500
+        data = response.json()
+        answer = data['choices'][0]['message']['content']
+        return jsonify({'answer': answer})
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -2346,6 +2314,7 @@ def approve_kyc(submission_id):
         user = User.query.get(kyc.user_id)
         if user:
             user.is_verified = True
+            user.kyc_completed = True  # <-- Add this line
         
         db.session.commit()
 
@@ -2639,41 +2608,33 @@ def get_admin_notifications():
 @app.route('/api/admin/notifications/<int:notification_id>/read', methods=['POST'])
 @jwt_required()
 def mark_admin_notification_read(notification_id):
-    notification = Notification.query.get_or_404(notification_id)
-    notification.is_read = True
-    db.session.commit()
-    return jsonify({'message': 'Notification marked as read'}), 200
-
-@app.route('/api/admin/notifications/mark-all-read', methods=['POST'])
-@role_required(['admin'])
-def mark_all_admin_notifications_read():
-    current_user_id = get_jwt_identity()
-    Notification.query.filter_by(user_id=current_user_id, is_read=False).update({'is_read': True})
-    db.session.commit()
-    return jsonify({'message': 'All notifications marked as read'}), 200
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    
+    if not user or user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    notification = Notification.query.filter_by(id=notification_id, user_id=user_id).first()
+    
+    if notification:
+        notification.is_read = True
+        db.session.commit()
+    
+    return jsonify({'message': 'Notification marked as read'})
 
 @app.route('/api/user/notifications/mark-as-read', methods=['POST'])
 @jwt_required()
 def mark_notifications_as_read():
-    current_user_id = get_jwt_identity()
-    data = request.get_json()
-    notification_ids = data.get('notification_ids', [])
-    
+    user_id = get_jwt_identity()
+    notification_ids = request.json.get('notification_ids', None)
+    query = Notification.query.filter_by(user_id=user_id)
     if notification_ids:
-        # Mark specific notifications as read
-        Notification.query.filter(
-            Notification.id.in_(notification_ids),
-            Notification.user_id == current_user_id
-        ).update({'is_read': True}, synchronize_session=False)
-    else:
-        # Mark all notifications as read
-        Notification.query.filter_by(
-            user_id=current_user_id,
-            is_read=False
-        ).update({'is_read': True})
-    
+        query = query.filter(Notification.id.in_(notification_ids))
+    notifications = query.all()
+    for n in notifications:
+        n.is_read = True
     db.session.commit()
-    return jsonify({'message': 'Notifications marked as read'}), 200
+    return jsonify({'message': 'Notifications marked as read'})
 
 
 
@@ -2812,7 +2773,7 @@ def bulk_delete_join_requests():
 @token_required
 def get_user_referral_details(current_user):
     referral_code = current_user.referral_code
-    base_frontend_url = "https://stokapp-cmy0.onrender.com"  # Change to your real frontend
+    base_frontend_url = "http://localhost:5173"  # Change to your real frontend
     referral_link = f"{base_frontend_url}/signup?ref={referral_code}"
     return jsonify({
         'referral_code': referral_code,
@@ -2911,29 +2872,7 @@ import os
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads', 'profile_pics')
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-about_us_text = """
-You are i-STOKVEL, a helpful assistant for stokvel group members and admins in South Africa. 
-
-Your style:
-- Respond in a warm, conversational, and concise way (1-3 sentences).
-- Do NOT greet the user in every response. Only greet in the very first message if needed; after that, just answer or help directly.
-- Be welcoming, friendly, and natural—not robotic or overly formal.
-- Use simple, clear language and avoid repeating the same phrases.
-- If you don't know something, admit it and suggest the user contact support.
-
-Your purpose:
-- Help users understand how to use the i-STOKVEL platform, answer questions about stokvels, and provide guidance on financial management within stokvel groups.
-
-Key features of i-STOKVEL include:
-- Creating and managing stokvel groups
-- Tracking contributions and payouts
-- Managing member information
-- Financial reporting and transparency
-- Secure payment processing
-
-Always be polite, helpful, and provide accurate information about stokvels and the platform.
-If you don't know something, admit it and suggest the user contact support.
-"""
+about_us_text = "You are i-STOKVEL, a helpful assistant for stokvel group members and admins in South Africa."
 
 class Transaction(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -3892,30 +3831,6 @@ def get_all_concerns():
         'concerns': [c.to_dict() for c in concerns]
     }), 200
 
-@app.route('/api/admin/concerns/<int:concern_id>/status', methods=['PUT'])
-@role_required(['admin'])
-def update_concern_status(concern_id):
-    concern = CustomerConcern.query.get_or_404(concern_id)
-    data = request.get_json()
-    new_status = data.get('status')
-    
-    if new_status not in ['open', 'in-progress', 'closed']:
-        return jsonify({'error': 'Invalid status'}), 400
-    
-    concern.status = new_status
-    db.session.commit()
-    
-    return jsonify({'message': 'Status updated successfully', 'concern': concern.to_dict()}), 200
-
-@app.route('/api/admin/concerns/<int:concern_id>', methods=['DELETE'])
-@role_required(['admin'])
-def delete_concern(concern_id):
-    concern = CustomerConcern.query.get_or_404(concern_id)
-    db.session.delete(concern)
-    db.session.commit()
-    
-    return jsonify({'message': 'Concern deleted successfully'}), 200
-
 @app.route('/api/beneficiaries/<int:beneficiary_id>/documents', methods=['POST'])
 @jwt_required()
 def upload_beneficiary_document(beneficiary_id):
@@ -4205,63 +4120,212 @@ class MarketTransaction(db.Model):
     status = db.Column(db.String(20), default='pending')  # pending, successful, failed
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     reference = db.Column(db.String(100), unique=True)
+    
+    # NEW: Additional fields
+    meter_number = db.Column(db.String(50), nullable=True)  # For electricity
+    phone_number = db.Column(db.String(20), nullable=True)  # For airtime/data
+    generated_code = db.Column(db.String(100), nullable=True)  # The actual code/token
+    code_type = db.Column(db.String(20), nullable=True)  # token, recharge_code, voucher_code
 
 @app.route('/market/purchase', methods=['POST'])
 @jwt_required()
 def purchase():
-    user_id = get_jwt_identity()
-    data = request.json
-
-    item_type = data.get('item_type')
-    provider = data.get('provider')
-    amount = data.get('amount')
-    payment_method = data.get('payment_method')
-    card_id = data.get('card_id')
-
-    if not all([item_type, provider, amount, payment_method]):
-        return jsonify({"error": "Missing required fields"}), 400
-
     try:
-        amount = float(amount)
-    except (TypeError, ValueError):
-        return jsonify({"error": "Invalid amount format"}), 400
+        data = request.get_json()
+        user_id = get_jwt_identity()
+        
+        # Validate required fields
+        required_fields = ['item_type', 'provider', 'amount', 'payment_method']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({'error': f'Missing required field: {field}'}), 400
+        
+        item_type = data['item_type']
+        provider = data['provider']
+        amount = float(data['amount'])
+        payment_method = data['payment_method']
+        
+        # Validate item type
+        valid_item_types = ['airtime', 'data', 'electricity', 'voucher']
+        if item_type not in valid_item_types:
+            return jsonify({'error': 'Invalid item type'}), 400
+        
+        # Validate payment method
+        valid_payment_methods = ['wallet', 'card']
+        if payment_method not in valid_payment_methods:
+            return jsonify({'error': 'Invalid payment method'}), 400
+        
+        # Check wallet balance if using wallet payment
+        if payment_method == 'wallet':
+            wallet = get_or_create_wallet(user_id)
+            if wallet.balance < amount:
+                return jsonify({'error': 'Insufficient wallet balance'}), 400
+        
+        # Generate appropriate code based on item type
+        generated_code = None
+        code_type = None
+        
+        if item_type == 'electricity':
+            # Validate meter number for electricity
+            meter_number = data.get('meter_number')
+            if not meter_number:
+                return jsonify({'error': 'Meter number is required for electricity purchases'}), 400
+            generated_code = generate_electricity_token()
+            code_type = 'token'
+            
+        elif item_type == 'airtime':
+            # Validate phone number for airtime
+            phone_number = data.get('phone_number')
+            if not phone_number:
+                return jsonify({'error': 'Phone number is required for airtime purchases'}), 400
+            generated_code = generate_airtime_code()
+            code_type = 'recharge_code'
+            
+        elif item_type == 'data':
+            # Validate phone number for data
+            phone_number = data.get('phone_number')
+            if not phone_number:
+                return jsonify({'error': 'Phone number is required for data purchases'}), 400
+            generated_code = generate_data_code()
+            code_type = 'recharge_code'
+            
+        elif item_type == 'voucher':
+            generated_code = generate_voucher_code()
+            code_type = 'voucher_code'
+        
+        # Create transaction record
+        transaction = MarketTransaction(
+            user_id=user_id,
+            item_type=item_type,
+            provider=provider,
+            amount=amount,
+            payment_method=payment_method,
+            status='successful',
+            reference=generate_reference(),
+            generated_code=generated_code,
+            code_type=code_type,
+            meter_number=data.get('meter_number'),
+            phone_number=data.get('phone_number')
+        )
+        
+        db.session.add(transaction)
+        
+        # Deduct from wallet if using wallet payment
+        if payment_method == 'wallet':
+            wallet.balance -= amount
+            wallet.updated_at = datetime.utcnow()
+        
+        db.session.commit()
+        
+        # Generate instructions for the user
+        instructions = get_provider_instructions(
+            item_type, 
+            provider, 
+            generated_code, 
+            amount, 
+            data.get('phone_number')
+        )
+        
+        return jsonify({
+            'success': True,
+            'message': 'Purchase successful',
+            'transaction': {
+                'id': transaction.id,
+                'reference': transaction.reference,
+                'amount': transaction.amount,
+                'status': transaction.status,
+                'timestamp': transaction.timestamp.isoformat(),
+                'generated_code': generated_code,
+                'code_type': code_type,
+                'instructions': instructions
+            }
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
 
-    # --- Digital Wallet ---
-    if payment_method == "wallet":
-        wallet = Wallet.query.filter_by(user_id=user_id).first()
-        if not wallet:
-            return jsonify({"error": "Wallet not found"}), 404
-        if wallet.balance < amount:
-            return jsonify({"error": "Insufficient wallet balance"}), 400
-        wallet.balance -= amount
-
-    # --- Card Payment ---
-    elif payment_method == "card":
-        card = Card.query.filter_by(id=card_id, user_id=user_id).first()
-        if not card:
-            return jsonify({"error": "Card not found"}), 404
-        # Simulate card payment
-        print(f"Charging card **** **** **** {card.card_number_last4} for R{amount}")
+# NEW: Function to get provider-specific instructions with real USSD codes
+def get_provider_instructions(item_type, provider, code, amount, phone_number):
+    """Get accurate instructions for each provider and item type with real USSD codes"""
+    
+    if item_type == "electricity":
+        if provider == "Eskom":
+            return f"Enter the token on your prepaid meter: {code}"
+        elif provider == "City Power":
+            return f"Enter the token on your prepaid meter: {code}"
+        else:
+            return f"Enter the token on your prepaid meter: {code}"
+    
+    elif item_type == "airtime":
+        if provider == "MTN":
+            return f"Airtime of R{amount} has been successfully loaded to {phone_number}"
+        elif provider == "Vodacom":
+            return f"Airtime of R{amount} has been successfully loaded to {phone_number}"
+        elif provider == "Cell C":
+            return f"Airtime of R{amount} has been successfully loaded to {phone_number}"
+        elif provider == "Telkom":
+            return f"Airtime of R{amount} has been successfully loaded to {phone_number}"
+        else:
+            return f"Airtime of R{amount} has been successfully loaded to {phone_number}"
+    
+    elif item_type == "data":
+        if provider == "MTN":
+            return f"Dial *136*{code}# to activate your data bundle"
+        elif provider == "Vodacom":
+            return f"Dial *100*{code}# to activate your data bundle"
+        elif provider == "Cell C":
+            return f"Dial *147*{code}# to activate your data bundle"
+        elif provider == "Telkom":
+            return f"Dial *180*{code}# to activate your data bundle"
+        else:
+            return f"Use the code: {code}"
+    
+    elif item_type == "voucher":
+        if provider == "Netflix":
+            return f"Go to netflix.com/redeem and enter code: {code}"
+        elif provider == "Google Play":
+            return f"Open Google Play Store → Menu → Redeem → Enter code: {code}"
+        elif provider == "Takealot":
+            return f"Go to takealot.com → My Account → Gift Cards → Redeem code: {code}"
+        else:
+            return f"Redeem the voucher code on the provider's website: {code}"
+    
     else:
-        return jsonify({"error": "Invalid payment method"}), 400
+        return f"Use the code: {code}"
 
-    # --- Record Transaction ---
-    txn = MarketTransaction(
-        user_id=user_id,
-        item_type=item_type,
-        provider=provider,
-        amount=amount,
-        payment_method=payment_method,
-        status='successful',
-        reference=generate_reference()
-    )
-    db.session.add(txn)
-    db.session.commit()
+# NEW: Helper functions to generate codes/tokens
+def generate_electricity_token():
+    """Generate a 20-digit electricity token (Eskom standard)"""
+    import random
+    # South African electricity tokens are exactly 20 digits, no hyphens
+    # Format: 20 consecutive digits (e.g., 12345678901234567890)
+    token = ''.join([str(random.randint(0, 9)) for _ in range(20)])
+    return token
 
-    # --- Send Notification (optional) ---
-    send_notification(user_id, f"Your purchase of {item_type} for R{amount} was successful.")
+def generate_data_code():
+    """Generate a 16-digit data bundle code (South African standard)"""
+    import random
+    # South African data codes are exactly 16 digits, no hyphens
+    # Format: 16 consecutive digits (e.g., 1234567890123456)
+    code = ''.join([str(random.randint(0, 9)) for _ in range(16)])
+    return code
 
-    return jsonify({"message": "Purchase successful!", "reference": txn.reference}), 200
+def generate_voucher_code():
+    """Generate a 12-digit voucher code (South African standard)"""
+    import random
+    # South African voucher codes are exactly 12 digits, no hyphens
+    # Format: 12 consecutive digits (e.g., 123456789012)
+    code = ''.join([str(random.randint(0, 9)) for _ in range(12)])
+    return code
+
+def generate_airtime_code():
+    """Generate a 14-digit airtime code (South African standard)"""
+    import random
+    # South African airtime codes are exactly 14 digits, no hyphens
+    # Format: 14 consecutive digits (e.g., 12345678901234)
+    code = ''.join([str(random.randint(0, 9)) for _ in range(14)])
+    return code
 
 def generate_reference():
     return f"TXN-{uuid.uuid4().hex[:12]}"
@@ -5458,3 +5522,19 @@ def reject_withdrawal(withdrawal_id):
         db.session.add(notification)
         db.session.commit()
     return jsonify({'message': 'Withdrawal request rejected'}), 200
+
+@app.route('/api/user/referrals', methods=['GET'])
+@token_required
+def get_user_referrals(current_user):
+    referrals = Referral.query.filter_by(referrer_id=current_user.id).all()
+    result = []
+    for r in referrals:
+        referee = User.query.get(r.referee_id)
+        result.append({
+            "name": referee.full_name if referee else "Unknown",
+            "email": referee.email if referee else "Unknown",
+            "status": r.status,
+            "date": r.created_at.strftime('%Y-%m-%d') if r.created_at else "",
+            "points": 20 if r.status == 'completed' and current_user.valid_referrals == 1 else (30 if r.status == 'completed' else 0)
+        })
+    return jsonify(result)

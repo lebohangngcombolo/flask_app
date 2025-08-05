@@ -24,18 +24,26 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Response interceptor: Handle verification errors
+// Response interceptor: Handle authentication errors
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    // SECURITY FIX: Handle verification errors
+    // Only redirect on specific verification errors, not all 403s
     if (error.response?.status === 403 && 
-        error.response?.data?.error?.includes('verify your email')) {
+        error.response?.data?.error?.includes('verify your email') &&
+        error.response?.data?.error?.includes('verification required')) {
       // Clear authentication data and redirect to login
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.location.href = '/login';
     }
+    
+    // Handle 401 errors more gracefully
+    if (error.response?.status === 401) {
+      // Don't immediately redirect, let the component handle it
+      console.log('401 error detected, token may be invalid');
+    }
+    
     return Promise.reject(error);
   }
 );

@@ -1,4 +1,5 @@
 import React from 'react';
+import Layout from '../components/Layout';
 import { motion } from 'framer-motion';
 import { 
   PiggyBank, 
@@ -115,72 +116,8 @@ const Programs: React.FC = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Navigation Bar */}
-      <nav className="bg-white shadow-md fixed w-full top-0 z-50">
-        <div className="container mx-auto px-4">
-          <div className="flex justify-between items-center h-16">
-            <Link to="/" className="text-2xl font-bold text-blue-600">
-              i-STOKVEL
-            </Link>
-
-            {/* Desktop Navigation */}
-            <div className="hidden md:flex space-x-8">
-              <Link
-                to="/programs"
-                className={`text-gray-600 hover:text-blue-700 transition-colors duration-200 ${
-                  window.location.pathname === '/programs' ? 'font-semibold text-blue-600' : ''
-                }`}
-              >
-                Programs
-              </Link>
-              <Link
-                to="/about"
-                className={`text-gray-600 hover:text-blue-700 transition-colors duration-200 ${
-                  window.location.pathname === '/about' ? 'font-semibold text-blue-600' : ''
-                }`}
-              >
-                About Us
-              </Link>
-              <Link
-                to="/news"
-                className={`text-gray-600 hover:text-blue-700 transition-colors duration-200 ${
-                  window.location.pathname === '/news' ? 'font-semibold text-blue-600' : ''
-                }`}
-              >
-                News
-              </Link>
-              <Link
-                to="/contact"
-                className={`text-gray-600 hover:text-blue-700 transition-colors duration-200 ${
-                  window.location.pathname === '/contact' ? 'font-semibold text-blue-600' : ''
-                }`}
-              >
-                Contact
-              </Link>
-            </div>
-
-            {/* Auth Buttons */}
-            <div className="hidden md:flex space-x-4">
-              <Link
-                to="/login"
-                className="bg-white text-blue-600 border-2 border-blue-600 hover:bg-blue-50 px-6 py-2 rounded-lg text-base"
-              >
-                Login
-              </Link>
-              <Link
-                to="/signup"
-                className="bg-blue-600 text-white hover:bg-blue-700 px-6 py-2 rounded-lg text-base"
-              >
-                Sign Up
-              </Link>
-            </div>
-          </div>
-        </div>
-      </nav>
-
-      {/* Main Content */}
-      <div className="container mx-auto px-4 pt-24 pb-12">
+    <Layout>
+      <div className="container mx-auto px-4 py-16 md:py-24">
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -228,7 +165,7 @@ const Programs: React.FC = () => {
           </Link>
         </motion.div>
       </div>
-    </div>
+    </Layout>
   );
 };
 

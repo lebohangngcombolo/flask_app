@@ -50,6 +50,38 @@ const provinces = ["Eastern Cape", "Free State", "Gauteng", "KwaZulu-Natal", "Li
 const employmentTypes = ["Full-time", "Part-time", "Self-employed", "Contract", "Internship", "Unemployed", "Student"];
 const bankNames = ["Absa", "African Bank", "Capitec", "Discovery Bank", "FNB", "Nedbank", "Standard Bank", "TymeBank"];
 const accountTypes = ["Cheque / Current", "Savings", "Credit", "Transmission"];
+
+// Add South African universities list
+const universities = [
+  "University of Cape Town",
+  "University of the Witwatersrand", 
+  "Stellenbosch University",
+  "University of Pretoria",
+  "University of KwaZulu-Natal",
+  "University of Johannesburg",
+  "University of the Western Cape",
+  "University of Limpopo",
+  "University of Fort Hare",
+  "University of Venda",
+  "University of Zululand",
+  "University of the Free State",
+  "North-West University",
+  "University of Mpumalanga",
+  "Sol Plaatje University",
+  "Sefako Makgatho Health Sciences University",
+  "Cape Peninsula University of Technology",
+  "Central University of Technology",
+  "Durban University of Technology",
+  "Mangosuthu University of Technology",
+  "Tshwane University of Technology",
+  "Vaal University of Technology",
+  "Walter Sisulu University",
+  "Nelson Mandela University",
+  "Rhodes University",
+  "University of South Africa (UNISA)",
+  "Other"
+];
+
 const bankBranchCodes: { [key: string]: string } = {
   "Absa": "632005",
   "African Bank": "430000",
@@ -78,14 +110,129 @@ const KYC = () => {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [modalMessage, setModalMessage] = useState('');
-  const [showCongrats, setShowCongrats] = useState(true); // Add this state
+  const [showCongrats, setShowCongrats] = useState(true);
+
+  // Function to extract date from ID number
+  const extractDateFromID = (idNumber: string) => {
+    if (idNumber.length !== 13) return null;
+    
+    const year = idNumber.substring(0, 2);
+    const month = idNumber.substring(2, 4);
+    const day = idNumber.substring(4, 6);
+    
+    // Determine century based on year
+    const currentYear = new Date().getFullYear();
+    const currentYearLastTwo = currentYear % 100;
+    const idYear = parseInt(year);
+    
+    let fullYear;
+    if (idYear <= currentYearLastTwo) {
+      fullYear = 2000 + idYear;
+    } else {
+      fullYear = 1900 + idYear;
+    }
+    
+    return `${fullYear}-${month}-${day}`;
+  };
+
+  // Function to validate ID number format
+  const validateIDNumber = (idNumber: string) => {
+    if (idNumber.length !== 13) return false;
+    
+    // Check if all characters are digits
+    if (!/^\d{13}$/.test(idNumber)) return false;
+    
+    // Extract date components
+    const month = parseInt(idNumber.substring(2, 4));
+    const day = parseInt(idNumber.substring(4, 6));
+    
+    // Validate month (1-12)
+    if (month < 1 || month > 12) return false;
+    
+    // Validate day (1-31)
+    if (day < 1 || day > 31) return false;
+    
+    // Additional validation for specific months
+    const daysInMonth = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    if (day > daysInMonth[month - 1]) return false;
+    
+    return true;
+  };
+
+  // Validation functions
+  const validatePersonal = () => {
+    const errors: string[] = [];
+    if (!formData.personal.fullName.trim()) errors.push('Full Name is required');
+    if (!formData.personal.dateOfBirth) errors.push('Date of Birth is required');
+    if (!formData.personal.idNumber.trim()) errors.push('ID Number is required');
+    if (formData.personal.idNumber.trim().length !== 13) errors.push('ID Number must be exactly 13 digits');
+    
+    // Validate ID number format
+    if (formData.personal.idNumber.length === 13 && !validateIDNumber(formData.personal.idNumber)) {
+      errors.push('ID Number contains invalid date information');
+    }
+    
+    // Check alignment between DOB and ID number
+    if (formData.personal.dateOfBirth && formData.personal.idNumber.length === 13) {
+      const idDate = extractDateFromID(formData.personal.idNumber);
+      if (idDate && formData.personal.dateOfBirth !== idDate) {
+        errors.push('Date of Birth does not match the date in your ID Number');
+      }
+    }
+    
+    if (!formData.personal.phone.trim()) errors.push('Phone is required');
+    if (!formData.personal.email.trim()) errors.push('Email is required');
+    if (!formData.personal.employmentStatus) errors.push('Employment Status is required');
+    
+    // Validate employer/university based on employment status
+    if (formData.personal.employmentStatus === 'employed' && !formData.personal.employerName.trim()) {
+      errors.push('Employer Name is required');
+    }
+    if (formData.personal.employmentStatus === 'student' && !formData.personal.employerName.trim()) {
+      errors.push('University is required');
+    }
+    
+    return errors;
+  };
+
+  const validateAddress = () => {
+    const errors: string[] = [];
+    if (!formData.address.streetAddress.trim()) errors.push('Street Address is required');
+    if (!formData.address.city.trim()) errors.push('City is required');
+    if (!formData.address.province) errors.push('Province is required');
+    if (!formData.address.postalCode.trim()) errors.push('Postal Code is required');
+    return errors;
+  };
+
+  const validateIncome = () => {
+    const errors: string[] = [];
+    if (!formData.income.monthlyIncome.trim()) errors.push('Monthly Income is required');
+    if (!formData.income.incomeSource.trim()) errors.push('Source of Income is required');
+    if (!formData.income.employmentType) errors.push('Employment Type is required');
+    return errors;
+  };
+
+  const validateBank = () => {
+    const errors: string[] = [];
+    if (!formData.bank.bankName) errors.push('Bank Name is required');
+    if (!formData.bank.accountNumber.trim()) errors.push('Account Number is required');
+    if (!formData.bank.accountType) errors.push('Account Type is required');
+    if (!formData.bank.branchCode.trim()) errors.push('Branch Code is required');
+    return errors;
+  };
+
+  const validateDocuments = () => {
+    const errors: string[] = [];
+    if (!formData.documents.idDocument) errors.push('ID Document is required');
+    if (!formData.documents.proofOfAddress) errors.push('Proof of Address is required');
+    return errors;
+  };
 
   // --- Data Fetching ---
   const fetchUserProfile = useCallback(async () => {
     try {
       const { data: userData } = await api.get('/api/user/profile');
       
-      // Autofill personal information from user profile
       setFormData(prev => ({
         ...prev,
         personal: {
@@ -112,7 +259,6 @@ const KYC = () => {
           submitted_at: data.created_at,
         });
         
-        // Map backend data to frontend form structure
         setFormData(prev => ({
           ...prev,
           personal: {
@@ -142,14 +288,8 @@ const KYC = () => {
             accountType: data.account_type || '',
             branchCode: data.branch_code || '',
           },
-          documents: prev.documents, // Keep documents state separate
+          documents: prev.documents,
         }));
-
-        // Show message that existing documents exist
-        const hasExistingDocs = data.id_document_path || data.proof_of_address_path || data.proof_of_income_path || data.bank_statement_path;
-        if (hasExistingDocs) {
-          toast.info('Existing documents found. You can upload new documents to replace them.');
-        }
       } else {
         setKycStatus({ status: 'draft' });
       }
@@ -190,6 +330,33 @@ const KYC = () => {
   };
 
   const handleSaveAndContinue = async (nextTab: string) => {
+    // Validate current section before proceeding
+    let errors: string[] = [];
+    
+    switch (activeTab) {
+      case 'personal':
+        errors = validatePersonal();
+        break;
+      case 'address':
+        errors = validateAddress();
+        break;
+      case 'income':
+        errors = validateIncome();
+        break;
+      case 'bank':
+        errors = validateBank();
+        break;
+      case 'documents':
+        errors = validateDocuments();
+        break;
+    }
+
+    if (errors.length > 0) {
+      setModalMessage(`Please fill in all required fields:\n${errors.join('\n')}`);
+      setShowErrorModal(true);
+      return;
+    }
+
     // Save current section data before moving to next tab
     const currentSection = activeTab as keyof Omit<KYCFormData, 'documents'>;
     await saveKYCData(currentSection);
@@ -199,7 +366,6 @@ const KYC = () => {
   const handleDocumentUpload = async (field: keyof KYCFormData['documents'], file: File | null) => {
     handleFileChange(field, file);
     
-    // If a file was selected, save it immediately
     if (file) {
       setUploadingDocuments(prev => ({ ...prev, [field]: true }));
       
@@ -211,7 +377,6 @@ const KYC = () => {
           headers: { 'Content-Type': 'multipart/form-data' }
         });
         
-        // Update uploaded documents status
         setUploadedDocuments(prev => ({ ...prev, [field]: 'Uploaded' }));
         
         const fieldName = field.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
@@ -220,52 +385,28 @@ const KYC = () => {
         console.error('Error uploading document:', error);
         const errorMessage = error.response?.data?.error || 'Failed to upload document. Please try again.';
         toast.error(errorMessage);
-        // Remove the file from state if upload failed
         handleFileChange(field, null);
         setUploadedDocuments(prev => ({ ...prev, [field]: '' }));
       } finally {
         setUploadingDocuments(prev => ({ ...prev, [field]: false }));
       }
     } else {
-      // If file was removed, clear the uploaded status
       setUploadedDocuments(prev => ({ ...prev, [field]: '' }));
     }
   };
 
   const handleSubmitForVerification = async () => {
-    // Validate required fields
-    if (!formData.personal.fullName.trim()) {
-      setModalMessage('Please enter your full name.');
-      setShowErrorModal(true);
-      return;
-    }
+    // Validate all sections
+    const personalErrors = validatePersonal();
+    const addressErrors = validateAddress();
+    const incomeErrors = validateIncome();
+    const bankErrors = validateBank();
+    const documentErrors = validateDocuments();
 
-    if (!formData.personal.idNumber.trim()) {
-      setModalMessage('Please enter your ID number.');
-      setShowErrorModal(true);
-      return;
-    }
+    const allErrors = [...personalErrors, ...addressErrors, ...incomeErrors, ...bankErrors, ...documentErrors];
 
-    if (formData.personal.idNumber.length < 11) {
-      setModalMessage('ID Number must be at least 11 digits.');
-      setShowErrorModal(true);
-      return;
-    }
-
-    if (!formData.personal.phone.trim()) {
-      setModalMessage('Please enter your phone number.');
-      setShowErrorModal(true);
-      return;
-    }
-
-    if (!formData.personal.email.trim()) {
-      setModalMessage('Please enter your email address.');
-      setShowErrorModal(true);
-      return;
-    }
-
-    if (!formData.documents.proofOfAddress) {
-      setModalMessage('Proof of Address is required.');
+    if (allErrors.length > 0) {
+      setModalMessage(`Please complete all required fields before submitting:\n${allErrors.join('\n')}`);
       setShowErrorModal(true);
       return;
     }
@@ -337,7 +478,7 @@ const KYC = () => {
         </div>
         <div className="flex items-center mb-4">
           <XCircle className="h-8 w-8 text-red-500 mr-3" />
-          <p className="text-gray-700 dark:text-dark-text">{modalMessage}</p>
+          <p className="text-gray-700 dark:text-dark-text whitespace-pre-line">{modalMessage}</p>
         </div>
         <button 
           onClick={() => setShowErrorModal(false)}
@@ -360,16 +501,158 @@ const KYC = () => {
     </div>
   );
 
-  const renderPersonalDetails = () => (
+  const renderPersonalDetails = () => {
+    // Extract date from ID number for comparison
+    const idDate = formData.personal.idNumber.length === 13 ? extractDateFromID(formData.personal.idNumber) : null;
+    const isDateMismatch = formData.personal.dateOfBirth && idDate && formData.personal.dateOfBirth !== idDate;
+    const isIDValid = formData.personal.idNumber.length === 13 && validateIDNumber(formData.personal.idNumber);
+
+    return (
     <div className="space-y-4">
         <h3 className="text-lg font-semibold text-gray-800 dark:text-dark-text">Personal Information</h3>
-        <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Full Name</label><input type="text" value={formData.personal.fullName} onChange={e => handleInputChange('personal', 'fullName', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" /></div>
-        <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Date of Birth</label><input type="date" value={formData.personal.dateOfBirth} onChange={e => handleInputChange('personal', 'dateOfBirth', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" /></div>
-        <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300">ID Number</label><input type="text" value={formData.personal.idNumber} onChange={e => handleInputChange('personal', 'idNumber', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" /></div>
-        <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Phone</label><input type="text" value={formData.personal.phone} onChange={e => handleInputChange('personal', 'phone', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" /></div>
-        <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Email</label><input type="email" value={formData.personal.email} onChange={e => handleInputChange('personal', 'email', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" /></div>
-        <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Employment Status</label><select value={formData.personal.employmentStatus} onChange={e => handleInputChange('personal', 'employmentStatus', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm"><option value="">Select...</option><option value="employed">Employed</option><option value="unemployed">Unemployed</option><option value="student">Student</option></select></div>
-        <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Employer Name</label><input type="text" value={formData.personal.employerName} onChange={e => handleInputChange('personal', 'employerName', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" /></div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Full Name <span className="text-red-600">*</span>
+            </label>
+            <input 
+              type="text" 
+              value={formData.personal.fullName} 
+              onChange={e => handleInputChange('personal', 'fullName', e.target.value)} 
+              className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" 
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Date of Birth <span className="text-red-600">*</span>
+            </label>
+            <input 
+              type="date" 
+              value={formData.personal.dateOfBirth} 
+              onChange={e => handleInputChange('personal', 'dateOfBirth', e.target.value)} 
+              className={`mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm ${
+                isDateMismatch ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''
+              }`}
+            />
+            {isDateMismatch && (
+              <p className="mt-1 text-sm text-red-600">
+                Date of Birth does not match the date in your ID Number
+              </p>
+            )}
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              ID Number <span className="text-red-600">*</span>
+            </label>
+            <input 
+              type="text" 
+              value={formData.personal.idNumber} 
+              onChange={e => {
+                // Only allow numbers and limit to 13 digits
+                const value = e.target.value.replace(/\D/g, '').slice(0, 13);
+                handleInputChange('personal', 'idNumber', value);
+              }}
+              maxLength={13}
+              placeholder="Enter 13-digit ID number (YYMMDD)"
+              className={`mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm ${
+                formData.personal.idNumber.length > 0 && (formData.personal.idNumber.length !== 13 || !isIDValid) 
+                  ? 'border-red-500 focus:border-red-500 focus:ring-red-500' 
+                  : ''
+              }`}
+            />
+            {formData.personal.idNumber.length > 0 && formData.personal.idNumber.length !== 13 && (
+              <p className="mt-1 text-sm text-red-600">
+                ID Number must be exactly 13 digits
+              </p>
+            )}
+            {formData.personal.idNumber.length === 13 && !isIDValid && (
+              <p className="mt-1 text-sm text-red-600">
+                ID Number contains invalid date information
+              </p>
+            )}
+            {formData.personal.idNumber.length === 13 && isIDValid && idDate && (
+              <p className="mt-1 text-sm text-green-600">
+                ID Number date: {new Date(idDate).toLocaleDateString()}
+              </p>
+            )}
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Phone <span className="text-red-600">*</span>
+            </label>
+            <input 
+              type="text" 
+              value={formData.personal.phone} 
+              onChange={e => handleInputChange('personal', 'phone', e.target.value)} 
+              className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" 
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Email <span className="text-red-600">*</span>
+            </label>
+            <input 
+              type="email" 
+              value={formData.personal.email} 
+              onChange={e => handleInputChange('personal', 'email', e.target.value)} 
+              className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" 
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Employment Status <span className="text-red-600">*</span>
+            </label>
+            <select 
+              value={formData.personal.employmentStatus} 
+              onChange={e => {
+                handleInputChange('personal', 'employmentStatus', e.target.value);
+                // Clear employer/university when status changes
+                if (e.target.value !== 'employed' && e.target.value !== 'student') {
+                  handleInputChange('personal', 'employerName', '');
+                }
+              }} 
+              className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm"
+            >
+              <option value="">Select...</option>
+              <option value="employed">Employed</option>
+              <option value="unemployed">Unemployed</option>
+              <option value="student">Student</option>
+            </select>
+          </div>
+          
+          {/* Show employer name field only for employed */}
+          {formData.personal.employmentStatus === 'employed' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Employer Name <span className="text-red-600">*</span>
+              </label>
+              <input 
+                type="text" 
+                value={formData.personal.employerName} 
+                onChange={e => handleInputChange('personal', 'employerName', e.target.value)} 
+                className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" 
+              />
+            </div>
+          )}
+
+          {/* Show university dropdown only for students */}
+          {formData.personal.employmentStatus === 'student' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                University <span className="text-red-600">*</span>
+              </label>
+              <select 
+                value={formData.personal.employerName} 
+                onChange={e => handleInputChange('personal', 'employerName', e.target.value)} 
+                className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm"
+              >
+                <option value="">Select University...</option>
+                {universities.map(university => (
+                  <option key={university} value={university}>{university}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
         <div className="flex justify-end mt-6">
           <button
             onClick={() => handleSaveAndContinue('address')}
@@ -380,22 +663,67 @@ const KYC = () => {
         </div>
     </div>
   );
+  };
 
   const renderAddress = () => (
     <div>
       <h3 className="text-xl font-semibold mb-4 text-gray-800 dark:text-dark-text">Residential Address</h3>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Street Address</label><input type="text" value={formData.address.streetAddress} onChange={e => handleInputChange('address', 'streetAddress', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" /></div>
-        <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300">City</label><input type="text" value={formData.address.city} onChange={e => handleInputChange('address', 'city', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" /></div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Province</label>
-          <select value={formData.address.province} onChange={e => handleInputChange('address', 'province', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Street Address <span className="text-red-600">*</span>
+          </label>
+          <input 
+            type="text" 
+            value={formData.address.streetAddress} 
+            onChange={e => handleInputChange('address', 'streetAddress', e.target.value)} 
+            className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" 
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            City <span className="text-red-600">*</span>
+          </label>
+          <input 
+            type="text" 
+            value={formData.address.city} 
+            onChange={e => handleInputChange('address', 'city', e.target.value)} 
+            className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" 
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Province <span className="text-red-600">*</span>
+          </label>
+          <select 
+            value={formData.address.province} 
+            onChange={e => handleInputChange('address', 'province', e.target.value)} 
+            className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm"
+          >
             <option value="">Select Province...</option>
             {provinces.map(province => <option key={province} value={province}>{province}</option>)}
           </select>
         </div>
-        <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Postal Code</label><input type="text" value={formData.address.postalCode} onChange={e => handleInputChange('address', 'postalCode', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" /></div>
-        <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Country</label><input type="text" value={formData.address.country} readOnly className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 shadow-sm" /></div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Postal Code <span className="text-red-600">*</span>
+          </label>
+          <input 
+            type="text" 
+            value={formData.address.postalCode} 
+            onChange={e => handleInputChange('address', 'postalCode', e.target.value)} 
+            className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" 
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Country</label>
+          <input 
+            type="text" 
+            value={formData.address.country} 
+            readOnly 
+            className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 shadow-sm" 
+          />
+        </div>
       </div>
       <div className="flex justify-between mt-6">
         <button onClick={() => setActiveTab('personal')} className="px-6 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600">
@@ -412,11 +740,37 @@ const KYC = () => {
     <div>
       <h3 className="text-xl font-semibold mb-4 text-gray-800 dark:text-dark-text">Income Information</h3>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Estimated Monthly Income (ZAR)</label><input type="number" value={formData.income.monthlyIncome} onChange={e => handleInputChange('income', 'monthlyIncome', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" /></div>
-      <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Source of Income</label><input type="text" value={formData.income.incomeSource} onChange={e => handleInputChange('income', 'incomeSource', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" /></div>
       <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Employment Type</label>
-        <select value={formData.income.employmentType} onChange={e => handleInputChange('income', 'employmentType', e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Estimated Monthly Income (ZAR) <span className="text-red-600">*</span>
+          </label>
+          <input 
+            type="number" 
+            value={formData.income.monthlyIncome} 
+            onChange={e => handleInputChange('income', 'monthlyIncome', e.target.value)} 
+            className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" 
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Source of Income <span className="text-red-600">*</span>
+          </label>
+          <input 
+            type="text" 
+            value={formData.income.incomeSource} 
+            onChange={e => handleInputChange('income', 'incomeSource', e.target.value)} 
+            className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" 
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Employment Type <span className="text-red-600">*</span>
+          </label>
+          <select 
+            value={formData.income.employmentType} 
+            onChange={e => handleInputChange('income', 'employmentType', e.target.value)} 
+            className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm"
+          >
             <option value="">Select Employment Type...</option>
             {employmentTypes.map(type => <option key={type} value={type}>{type}</option>)}
         </select>
@@ -438,7 +792,9 @@ const KYC = () => {
       <h3 className="text-xl font-semibold mb-4 text-gray-800 dark:text-dark-text">Bank Details</h3>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Bank Name</label>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Bank Name <span className="text-red-600">*</span>
+          </label>
           <select
             value={formData.bank.bankName}
             onChange={e => handleBankChange(e.target.value)}
@@ -449,7 +805,9 @@ const KYC = () => {
           </select>
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Account Number</label>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Account Number <span className="text-red-600">*</span>
+          </label>
           <input
             type="text"
             value={formData.bank.accountNumber}
@@ -458,7 +816,9 @@ const KYC = () => {
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Account Type</label>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Account Type <span className="text-red-600">*</span>
+          </label>
           <select
             value={formData.bank.accountType}
             onChange={e => handleInputChange('bank', 'accountType', e.target.value)}
@@ -469,7 +829,9 @@ const KYC = () => {
           </select>
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Branch Code</label>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Branch Code <span className="text-red-600">*</span>
+          </label>
           <input
             type="text"
             value={formData.bank.branchCode}
@@ -596,7 +958,9 @@ const KYC = () => {
 
         {/* Proof of Income */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Proof of Income</label>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Proof of Income <span className="text-red-600">*</span>
+          </label>
           <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 dark:border-gray-600 border-dashed rounded-md hover:border-blue-400 dark:hover:border-blue-500 transition-colors">
             <div className="space-y-1 text-center">
               <FileUp className="mx-auto h-12 w-12 text-gray-400" />
@@ -642,7 +1006,9 @@ const KYC = () => {
 
         {/* Bank Statement */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Bank Statement</label>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Bank Statement <span className="text-red-600">*</span>
+          </label>
           <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 dark:border-gray-600 border-dashed rounded-md hover:border-blue-400 dark:hover:border-blue-500 transition-colors">
             <div className="space-y-1 text-center">
               <FileUp className="mx-auto h-12 w-12 text-gray-400" />
@@ -939,7 +1305,9 @@ const KYC = () => {
 
         {/* Proof of Income */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Proof of Income</label>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Proof of Income <span className="text-red-600">*</span>
+          </label>
           <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 dark:border-gray-600 border-dashed rounded-md hover:border-blue-400 dark:hover:border-blue-500 transition-colors">
             <div className="space-y-1 text-center">
               <FileUp className="mx-auto h-12 w-12 text-gray-400" />
@@ -985,7 +1353,9 @@ const KYC = () => {
 
         {/* Bank Statement */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Bank Statement</label>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Bank Statement <span className="text-red-600">*</span>
+          </label>
           <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 dark:border-gray-600 border-dashed rounded-md hover:border-blue-400 dark:hover:border-blue-500 transition-colors">
             <div className="space-y-1 text-center">
               <FileUp className="mx-auto h-12 w-12 text-gray-400" />

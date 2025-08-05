@@ -74,7 +74,9 @@ const ClaimSubmission: React.FC = () => {
   }, [selectedGroup]);
 
   if (loading) return <div className="flex justify-center items-center h-96">Loading...</div>;
-  if (!user) return <Navigate to="/login" replace />;
+  
+  // FIXED: Only redirect if user is completely null and not loading
+  if (!user && !loading) return <Navigate to="/login" replace />;
 
   // --- Stepper UI ---
   // Removed unused Stepper variable

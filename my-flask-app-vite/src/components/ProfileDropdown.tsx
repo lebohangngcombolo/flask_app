@@ -14,10 +14,6 @@ interface ProfileDropdownProps {
 }
 
 const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ user }) => {
-  if (!user) {
-    return <div>Loading...</div>;
-  }
-
   const { theme, setTheme } = useTheme();
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState({
@@ -251,6 +247,15 @@ const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ user }) => {
 
   const backendUrl = "http://localhost:5001";
 
+  // Show loading state if no user
+  if (!user) {
+    return (
+      <div className="flex items-center space-x-2 p-2 rounded-full">
+        <div className="w-8 h-8 rounded-full bg-gray-200 animate-pulse"></div>
+      </div>
+    );
+  }
+
   return (
     <div className="relative" ref={dropdownRef}>
       {/* Profile Button with Hover Effect */}
@@ -260,22 +265,20 @@ const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ user }) => {
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center space-x-2 p-2 rounded-full hover:bg-gray-100 transition-colors"
       >
-        <>
-          {user.profilePicture ? (
-            <img
-              src={user.profilePicture && user.profilePicture.startsWith('http') 
-                ? user.profilePicture 
-                : backendUrl + user.profilePicture}
-              alt="Profile"
-              className="w-8 h-8 rounded-full object-cover ring-2 ring-blue-500"
-              onError={e => { e.currentTarget.src = '/default-avatar.png'; }}
-            />
-          ) : (
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white">
-              <User className="w-5 h-5" />
-            </div>
-          )}
-        </>
+        {user.profilePicture ? (
+          <img
+            src={user.profilePicture && user.profilePicture.startsWith('http') 
+              ? user.profilePicture 
+              : backendUrl + user.profilePicture}
+            alt="Profile"
+            className="w-8 h-8 rounded-full object-cover ring-2 ring-blue-500"
+            onError={e => { e.currentTarget.src = '/default-avatar.png'; }}
+          />
+        ) : (
+          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white">
+            <User className="w-5 h-5" />
+          </div>
+        )}
       </motion.button>
 
       {/* Dropdown Menu */}
@@ -295,19 +298,17 @@ const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ user }) => {
                   className="relative group cursor-pointer"
                   onClick={handleProfilePictureClick}
                 >
-                  <>
-                    {user.profilePicture ? (
-                      <img
-                        src={user.profilePicture.startsWith('http') ? user.profilePicture : backendUrl + user.profilePicture}
-                        alt="Profile"
-                        className="w-12 h-12 rounded-full object-cover ring-2 ring-blue-500"
-                      />
-                    ) : (
-                      <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white">
-                        <User className="w-6 h-6" />
-                      </div>
-                    )}
-                  </>
+                  {user.profilePicture ? (
+                    <img
+                      src={user.profilePicture.startsWith('http') ? user.profilePicture : backendUrl + user.profilePicture}
+                      alt="Profile"
+                      className="w-12 h-12 rounded-full object-cover ring-2 ring-blue-500"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white">
+                      <User className="w-6 h-6" />
+                    </div>
+                  )}
                   <div className="absolute inset-0 rounded-full bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
                     <Camera className="w-6 h-6 text-white" />
                   </div>

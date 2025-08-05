@@ -16,7 +16,6 @@ import ChatBot from './components/ChatBot';
 import ForgotPassword from './pages/ForgotPassword';
 import Programs from './pages/Programs';
 import DigitalWallet from './pages/DigitalWallet';
-import PhoneAuth from './pages/PhoneAuth';
 import KYCPage from './pages/KYC';
 import { getCurrentUser as getCurrentUserService } from './utils/auth';
 import DashboardLayout from './components/DashboardLayout';
@@ -47,6 +46,7 @@ import AdminTeam from './pages/AdminTeam';
 import Learning from './pages/Learning';
 import AdminPayouts from './pages/AdminPayouts';
 import AdminRoute from './components/AdminRoute';
+import ScrollToTop from './components/ScrollToTop';
 
 const App: React.FC = () => {
   // Removed unused user state
@@ -80,6 +80,8 @@ const App: React.FC = () => {
       <Toaster position="top-center" reverseOrder={false} />
       <ToastContainer />
       <Router>
+        {/* ScrollToTop component to handle scroll behavior */}
+        <ScrollToTop />
         {/* ChatBot is placed outside of Routes so it's always visible */}
         {/* You might want to conditionally render this based on user login status */}
         <ChatBot />
@@ -99,51 +101,39 @@ const App: React.FC = () => {
           <Route path="/dashboard" element={<DashboardLayout />}>
             <Route index element={<Dashboard />} />
             <Route path="profile" element={<UserProfile />} />
-            <Route path="digital-wallet" element={<DigitalWallet />} />
-            <Route path="kyc" element={<KYCPage />} />
-            <Route path="marketplace" element={<Marketplace />} />
-            <Route path="stokvel-groups" element={<StokvelGroups />} />
-            <Route path="stokvel-groups/:groupId" element={<GroupDetails />} />
-            <Route path="refer" element={<ReferralDashboard />} />
-            <Route path="referral-history" element={<ReferralHistory />} />
-            <Route path="stokvel-groups/:category/:tier" element={<TierDetails />} />
-            <Route path="claims/new" element={<ClaimSubmission />} />
-            <Route path="beneficiaries" element={<Beneficiaries />} />
-            {/* Add more dashboard sub-pages here if needed */}
+            <Route path="wallet" element={<DigitalWallet />} />
+            <Route path="groups" element={<StokvelGroups />} />
             <Route path="my-groups" element={<MyGroups />} />
+            <Route path="group/:groupId" element={<GroupDetails />} />
+            <Route path="group-admin" element={<GroupAdminManagement />} />
+            <Route path="kyc" element={<KYCPage />} />
+            <Route path="referrals" element={<ReferralDashboard />} />
+            <Route path="referral-history" element={<ReferralHistory />} />
+            <Route path="tier/:tierId" element={<TierDetails />} />
+            <Route path="claims" element={<ClaimSubmission />} />
+            <Route path="beneficiaries" element={<Beneficiaries />} />
+            <Route path="transactions" element={<Transactions />} />
+            <Route path="marketplace" element={<Marketplace />} />
+            <Route path="deals" element={<IDeals />} />
+            <Route path="deal/:dealId" element={<DealDetail />} />
+            <Route path="learning" element={<Learning />} />
           </Route>
 
-          {/* Admin routes - ONLY NESTED UNDER /admin */}
-          <Route path="/admin" element={<AdminLayout />}>
-            <Route path="dashboard" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
-            <Route path="kyc-management" element={<KYCManagement />} />
-            <Route path="groups" element={<StokvelManagement />} />
-            <Route path="group-admin-management" element={<GroupAdminManagement />} />
+          {/* Admin routes */}
+          <Route path="/admin" element={<AdminRoute><AdminLayout /></AdminRoute>}>
+            <Route index element={<AdminDashboard />} />
+            <Route path="dashboard" element={<AdminDashboard />} />
             <Route path="users" element={<UserManagement />} />
-            <Route path="/admin/users/transactions" element={<Transactions />} />
             <Route path="stokvels" element={<StokvelManagement />} />
-            <Route path="support/concerns" element={<AdminRoute><AdminConcerns /></AdminRoute>} />
-            <Route path="concerns" element={<AdminRoute><AdminConcerns /></AdminRoute>} />
-            <Route path="beneficiary-approvals" element={<BeneficiaryApprovals />} />
-            <Route path="faqs" element={<AdminRoute><AdminFAQs /></AdminRoute>} />
-            <Route path="analytics" element={<AdminAnalytics />} />
-            <Route path="analytics/reports" element={<AdminReports />} />
+            <Route path="kyc" element={<KYCManagement />} />
+            <Route path="concerns" element={<AdminConcerns />} />
+            <Route path="beneficiaries" element={<BeneficiaryApprovals />} />
+            <Route path="faqs" element={<AdminFAQs />} />
             <Route path="team" element={<AdminTeam />} />
-            <Route path="payouts" element={<AdminRoute><AdminPayouts /></AdminRoute>} />
+            <Route path="analytics" element={<AdminAnalytics />} />
+            <Route path="reports" element={<AdminReports />} />
+            <Route path="payouts" element={<AdminPayouts />} />
           </Route>
-          
-          {/* Phone Auth route */}
-          <Route path="/phone-auth" element={<PhoneAuth />} />
-
-          {/* Group Details route */}
-          {/* This route is now nested inside the /dashboard layout */}
-
-          {/* My Groups route */}
-          {/* This route is now nested inside the /dashboard layout */}
-
-          {/* i-Deals routes */}
-          <Route path="/i-deals" element={<IDeals />} />
-          <Route path="/i-deals/:id" element={<DealDetail />} />
 
           {/* Catch all route */}
           <Route path="*" element={<Navigate to="/" replace />} />
