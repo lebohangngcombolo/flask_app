@@ -243,10 +243,10 @@ logger = logging.getLogger(__name__)
 # -------------------- CORS SETUP --------------------
 CORS(app, origins=[
     "http://localhost:5173",
-    "https://vite-jd0u.onrender.com"
+    "https://stokapp-cmy0.onrender.com"
 ], supports_credentials=True)
-CORS(app, resources={r"/api/*": {"origins": ["http://localhost:5173", "https://vite-jd0u.onrender.com"]}}, supports_credentials=True)
-CORS(app, resources={r"/admin/*": {"origins": ["http://localhost:5173", "https://vite-jd0u.onrender.com"]}}, supports_credentials=True)
+CORS(app, resources={r"/api/*": {"origins": ["http://localhost:5173", "https://stokapp-cmy0.onrender.com"]}}, supports_credentials=True)
+CORS(app, resources={r"/admin/*": {"origins": ["http://localhost:5173", "https://stokapp-cmy0.onrender.com"]}}, supports_credentials=True)
 
 # -------------------- UTILITY FUNCTIONS --------------------
 def generate_otp():
@@ -1962,7 +1962,7 @@ def verify_2fa_login():
     return jsonify({'message': '2FA login successful', 'access_token': access_token}), 200
 
 @app.route("/api/auth/google", methods=["POST", "OPTIONS"])
-@cross_origin(origin=["http://localhost:5173", "https://vite-jd0u.onrender.com"], supports_credentials=True)
+@cross_origin(origin=["http://localhost:5173", "https://stokapp-cmy0.onrender.com"], supports_credentials=True)
 def google_login():
     if request.method == "OPTIONS":
         return '', 200
