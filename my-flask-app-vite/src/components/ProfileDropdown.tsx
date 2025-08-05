@@ -89,7 +89,7 @@ const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ user }) => {
     formData.append('file', selectedFile);
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch('http://localhost:5001/api/user/profile-picture', {
+      const res = await fetch('https://istokvelapp.onrender.com/api/user/profile-picture', {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -245,7 +245,7 @@ const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ user }) => {
     </motion.div>
   );
 
-  const backendUrl = "http://localhost:5001";
+  const backendUrl = "https://istokvelapp.onrender.com";
 
   // Show loading state if no user
   if (!user) {
