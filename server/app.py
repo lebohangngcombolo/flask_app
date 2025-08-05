@@ -202,7 +202,7 @@ load_dotenv()
 # Config
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key')
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:Ayanda%4023@192.168.0.147:5432/stokvel_db'
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'postgresql://postgres:Ayanda%4023@192.168.0.147:5432/stokvel_db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['MAIL_SERVER'] = os.getenv('MAIL_SERVER')
 app.config['MAIL_PORT'] = int(os.getenv('MAIL_PORT')) if os.getenv('MAIL_PORT') else None
@@ -243,10 +243,10 @@ logger = logging.getLogger(__name__)
 # -------------------- CORS SETUP --------------------
 CORS(app, origins=[
     "http://localhost:5173",
-   # "https://vite-jd0u.onrender.com"
+    "https://vite-jd0u.onrender.com"
 ], supports_credentials=True)
-CORS(app, resources={r"/api/*": {"origins": "http://localhost:5173"}}, supports_credentials=True)
-CORS(app, resources={r"/admin/*": {"origins": "http://localhost:5173"}}, supports_credentials=True)
+CORS(app, resources={r"/api/*": {"origins": ["http://localhost:5173", "https://vite-jd0u.onrender.com"]}}, supports_credentials=True)
+CORS(app, resources={r"/admin/*": {"origins": ["http://localhost:5173", "https://vite-jd0u.onrender.com"]}}, supports_credentials=True)
 
 # -------------------- UTILITY FUNCTIONS --------------------
 def generate_otp():
@@ -1962,7 +1962,7 @@ def verify_2fa_login():
     return jsonify({'message': '2FA login successful', 'access_token': access_token}), 200
 
 @app.route("/api/auth/google", methods=["POST", "OPTIONS"])
-@cross_origin(origin="http://localhost:5173", supports_credentials=True)
+@cross_origin(origin=["http://localhost:5173", "https://vite-jd0u.onrender.com"], supports_credentials=True)
 def google_login():
     if request.method == "OPTIONS":
         return '', 200
