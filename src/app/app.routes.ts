@@ -14,6 +14,8 @@ import { Kyc } from './kyc/kyc';
 import { Beneficiaries } from './beneficiaries/beneficiaries';
 import { ReferralComponent } from './referral/referral';
 import { StokvelGroupsComponent } from './stokvel-groups/stokvel-groups';
+import { PayoutRequestComponent } from './payout-request/payout-request';
+import { LearningComponent } from './learning/learning';
 
 export const routes: Routes = [
   { path: '', component: LandingPageComponent },
@@ -23,6 +25,7 @@ export const routes: Routes = [
   { path: 'contact', component: Contact },
   { path: 'login', component: LoginComponent },
   { path: 'signup', component: SignupComponent },
+  { path: 'learning', component: LearningComponent }, // Moved outside dashboard
   {
     path: 'dashboard',
     component: DashboardLayoutComponent,
@@ -34,6 +37,7 @@ export const routes: Routes = [
       { path: 'kyc', component: Kyc },
       { path: 'beneficiaries', component: Beneficiaries },
       { path: 'referrals', component: ReferralComponent },
+      { path: 'payout', component: PayoutRequestComponent },
       { path: 'claims', component: Contact },
     ]
   },

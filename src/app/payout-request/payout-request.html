@@ -1,0 +1,255 @@
+<div *ngIf="loading" class="min-h-screen bg-gray-50 flex items-center justify-center">
+  <div class="text-center">
+    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+    <p class="mt-4 text-gray-600">Loading payout options...</p>
+  </div>
+</div>
+
+<div *ngIf="!loading" class="min-h-screen bg-gray-50 p-4 sm:p-6">
+  <div class="max-w-4xl mx-auto space-y-6 sm:space-y-8">
+    <!-- Header -->
+    <div class="text-center sm:text-left">
+      <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">Payout Request</h1>
+      <p class="text-gray-600 text-sm sm:text-base">Withdraw funds from your stokvel account</p>
+    </div>
+
+    <!-- Step 0: Select Destination -->
+    <div *ngIf="step === 0" class="bg-white rounded-xl shadow-lg p-4 sm:p-6">
+      <form (ngSubmit)="nextStep()" class="space-y-6 sm:space-y-8">
+        <div>
+          <h2 class="text-xl sm:text-2xl font-bold mb-2 text-gray-800">Payout Destination</h2>
+          <p class="text-gray-500 mb-6 text-sm sm:text-base">Choose where you want us to send your payout.</p>
+
+          <!-- Toggle for manual entry -->
+          <div class="flex items-center justify-between mb-4 sm:mb-6">
+            <span class="text-sm text-gray-600">Use manual bank details</span>
+            <label class="inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                class="sr-only peer"
+                [(ngModel)]="useManual"
+                name="useManual"
+              />
+              <div class="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-indigo-600 relative transition">
+                <div class="absolute top-0.5 left-0.5 h-5 w-5 bg-white rounded-full transition peer-checked:translate-x-5"></div>
+              </div>
+            </label>
+          </div>
+
+          <!-- Saved accounts -->
+          <div *ngIf="!useManual" class="space-y-4">
+            <div *ngIf="accounts.length === 0" class="text-gray-500 text-center py-8">
+              No saved payout destinations. Toggle manual entry above.
+            </div>
+            
+            <div *ngIf="accounts.length > 0" class="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+              <div
+                *ngFor="let account of accounts"
+                class="rounded-2xl border-2 p-4 sm:p-6 text-left shadow-xl transition-all cursor-pointer"
+                [ngClass]="selectedAccountId === account.id
+                  ? 'border-blue-600 bg-gradient-to-br from-blue-50 to-purple-50 ring-2 ring-blue-200'
+                  : 'border-gray-200 bg-white hover:border-blue-300'"
+                (click)="selectedAccountId = account.id"
+              >
+                <div class="flex items-center gap-2 mb-2">
+                  <svg class="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                  </svg>
+                  <span class="font-bold text-base sm:text-lg">{{ account.label }}</span>
+                </div>
+                <div *ngIf="selectedAccountId === account.id" class="mt-2 text-blue-600 text-xs font-bold flex items-center gap-1">
+                  <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                  </svg>
+                  Selected
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Manual entry form -->
+          <div *ngIf="useManual" class="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+            <div>
+              <label class="block text-sm font-medium mb-1">Bank Name</label>
+              <input
+                type="text"
+                [(ngModel)]="bankName"
+                name="bankName"
+                class="w-full border border-gray-300 rounded-xl px-4 py-3 bg-white text-sm sm:text-base"
+                placeholder="e.g. FNB"
+              />
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Account Holder</label>
+              <input
+                type="text"
+                [(ngModel)]="accountHolder"
+                name="accountHolder"
+                class="w-full border border-gray-300 rounded-xl px-4 py-3 bg-white text-sm sm:text-base"
+                placeholder="e.g. John Dlamini"
+              />
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Account Number</label>
+              <input
+                type="text"
+                [(ngModel)]="accountNumber"
+                name="accountNumber"
+                class="w-full border border-gray-300 rounded-xl px-4 py-3 bg-white text-sm sm:text-base"
+                placeholder="e.g. 123456789"
+              />
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Branch Code (optional)</label>
+              <input
+                type="text"
+                [(ngModel)]="branchCode"
+                name="branchCode"
+                class="w-full border border-gray-300 rounded-xl px-4 py-3 bg-white text-sm sm:text-base"
+                placeholder="e.g. 250655"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div class="flex justify-end">
+          <button
+            type="submit"
+            class="inline-flex items-center gap-2 px-6 sm:px-8 py-2 sm:py-3 rounded-xl font-bold shadow-lg text-base sm:text-lg bg-gradient-to-r from-blue-600 via-indigo-500 to-purple-500 hover:from-blue-700 hover:to-purple-600 text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            [disabled]="!canGoNextFromStep0"
+          >
+            Next
+            <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Step 1: Amount Details -->
+    <div *ngIf="step === 1" class="bg-white rounded-xl shadow-lg p-4 sm:p-6">
+      <form (ngSubmit)="nextStep()" class="space-y-6 sm:space-y-8">
+        <h2 class="text-xl sm:text-2xl font-bold mb-2 text-gray-800">Payout Details</h2>
+        
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+          <div>
+            <label class="block font-semibold mb-1 text-sm sm:text-base">Amount</label>
+            <div class="relative">
+              <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">R</span>
+              <input
+                type="number"
+                [(ngModel)]="amount"
+                name="amount"
+                min="1"
+                step="0.01"
+                class="w-full border border-gray-300 rounded-xl pl-8 pr-12 py-3 bg-gray-50 text-lg font-bold"
+                placeholder="0.00"
+                required
+              />
+              <svg class="w-5 h-5 text-green-600 absolute right-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+              </svg>
+            </div>
+          </div>
+          <div>
+            <label class="block font-semibold mb-1 text-sm sm:text-base">Note (optional)</label>
+            <input
+              type="text"
+              [(ngModel)]="note"
+              name="note"
+              class="w-full border border-gray-300 rounded-xl px-4 py-3 bg-white text-sm sm:text-base"
+              placeholder="e.g. Monthly payout"
+            />
+          </div>
+        </div>
+
+        <div class="flex justify-between">
+          <button
+            type="button"
+            class="inline-flex items-center gap-2 bg-gray-200 text-gray-700 px-6 sm:px-8 py-2 sm:py-3 rounded-xl font-bold hover:bg-gray-300 transition text-base sm:text-lg"
+            (click)="prevStep()"
+          >
+            <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+            </svg>
+            Back
+          </button>
+          <button
+            type="submit"
+            class="inline-flex items-center gap-2 px-6 sm:px-8 py-2 sm:py-3 rounded-xl font-bold shadow-lg text-base sm:text-lg bg-gradient-to-r from-blue-600 via-indigo-500 to-purple-500 hover:from-blue-700 hover:to-purple-600 text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            [disabled]="!isAmountValid()"
+          >
+            Next
+            <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Step 2: Review & Submit -->
+    <div *ngIf="step === 2" class="bg-white rounded-xl shadow-lg p-4 sm:p-6">
+      <div class="space-y-6 sm:space-y-8">
+        <h2 class="text-xl sm:text-2xl font-bold mb-2 text-gray-800">Review & Submit</h2>
+        
+        <div class="bg-gray-50 rounded-2xl p-4 sm:p-6 space-y-2 text-sm sm:text-base">
+          <div><span class="font-semibold">Destination:</span> {{ useManual ? 'Manual bank account' : selectedAccount?.label }}</div>
+          <div *ngIf="useManual">
+            <div><span class="font-semibold">Bank:</span> {{ bankName || '-' }}</div>
+            <div><span class="font-semibold">Account Holder:</span> {{ accountHolder || '-' }}</div>
+            <div><span class="font-semibold">Account Number:</span> {{ accountNumber || '-' }}</div>
+            <div><span class="font-semibold">Branch Code:</span> {{ branchCode || '-' }}</div>
+          </div>
+          <div><span class="font-semibold">Amount:</span> R{{ amount || 0 }}</div>
+          <div><span class="font-semibold">Note:</span> {{ note || '-' }}</div>
+        </div>
+        
+        <div *ngIf="error" class="text-red-500 text-sm sm:text-base">{{ error }}</div>
+        
+        <div class="flex justify-between">
+          <button
+            type="button"
+            class="inline-flex items-center gap-2 bg-gray-200 text-gray-700 px-6 sm:px-8 py-2 sm:py-3 rounded-xl font-bold hover:bg-gray-300 transition text-base sm:text-lg"
+            (click)="prevStep()"
+          >
+            <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+            </svg>
+            Back
+          </button>
+          <button
+            class="inline-flex items-center gap-2 px-6 sm:px-8 py-2 sm:py-3 rounded-xl font-bold shadow-lg text-base sm:text-lg bg-gradient-to-r from-blue-600 via-indigo-500 to-purple-500 hover:from-blue-700 hover:to-purple-600 text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            (click)="submit()"
+            [disabled]="!canSubmit || isSubmitting"
+          >
+            {{ isSubmitting ? 'Submitting...' : 'Submit Payout' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 3: Success -->
+    <div *ngIf="step === 3" class="bg-white rounded-xl shadow-lg p-4 sm:p-6">
+      <div class="text-center space-y-4">
+        <div class="inline-flex items-center justify-center w-14 h-14 rounded-full bg-green-100">
+          <svg class="w-8 h-8 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+          </svg>
+        </div>
+        <h2 class="text-xl sm:text-2xl font-bold text-gray-800">Payout Request Submitted</h2>
+        <p class="text-gray-600 text-sm sm:text-base">We're processing your withdrawal. You'll be notified when it's completed.</p>
+        
+        <div class="pt-4">
+          <button
+            class="inline-flex items-center gap-2 px-6 sm:px-8 py-2 sm:py-3 rounded-xl font-bold shadow-lg text-base sm:text-lg bg-gradient-to-r from-blue-600 via-indigo-500 to-purple-500 hover:from-blue-700 hover:to-purple-600 text-white transition-all"
+            (click)="resetForm()"
+          >
+            New Payout Request
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

@@ -43,3 +43,6 @@ Thumbs.db
 .angular
 dist
 node_modules
+.angular
+dist
+node_modules

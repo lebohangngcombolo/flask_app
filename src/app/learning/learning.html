@@ -1,0 +1,532 @@
+<!-- Loader -->
+<div *ngIf="showLoader && selectedCategory === null" class="flex flex-col items-center justify-center h-[60vh]">
+  <div class="animate-spin w-12 h-12 text-blue-600 mb-6 border-4 border-blue-200 border-t-blue-600 rounded-full"></div>
+  <h2 class="text-xl font-semibold text-blue-800 mb-2 text-center">
+    Redirecting you to the learning platform…
+  </h2>
+  <p class="text-gray-600 mb-6 text-center">
+    Please wait while we prepare your learning experience.
+  </p>
+</div>
+
+<!-- Main Learning Platform (Udemy-style with horizontal categories) -->
+<div *ngIf="selectedCategory === null && !showLoader" class="min-h-screen bg-gray-50">
+  <!-- Navigation Header -->
+  <header class="bg-white shadow-sm border-b sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex justify-between items-center h-16">
+        <div class="flex items-center">
+          <button
+            class="p-2 rounded-full text-gray-500 hover:bg-gray-100 transition mr-4"
+            (click)="goToDashboard()"
+            title="Go to Dashboard">
+            🏠
+          </button>
+          <h1 class="text-2xl font-bold text-gray-900">Learning Hub</h1>
+        </div>
+        
+        <!-- Search Bar -->
+        <div class="flex-1 max-w-2xl mx-8">
+          <div class="relative">
+            <input
+              type="text"
+              placeholder="Search for courses..."
+              class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              [(ngModel)]="searchQuery"
+              (input)="onSearch()">
+            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              🔍
+            </div>
+          </div>
+        </div>
+        
+        <!-- User Menu -->
+        <div class="flex items-center space-x-4">
+          <div class="relative">
+            <button class="flex items-center space-x-2 text-gray-700 hover:text-gray-900">
+              <div class="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white font-semibold">
+                U
+              </div>
+              <span class="hidden md:block">User</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Horizontal Category Navigation -->
+  <nav class="bg-white border-b shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex space-x-8 overflow-x-auto py-4">
+        <div
+          *ngFor="let category of categories"
+          class="flex flex-col items-center space-y-2 cursor-pointer group min-w-0 flex-shrink-0"
+          (click)="selectCategory(category.id)">
+          
+          <div class="w-12 h-12 rounded-full flex items-center justify-center text-2xl group-hover:scale-110 transition-transform"
+               [class]="category.color">
+            {{ category.icon }}
+          </div>
+          
+          <div class="text-center">
+            <div class="text-sm font-medium text-gray-900 group-hover:text-blue-600 transition">
+              {{ category.name }}
+            </div>
+            <div class="text-xs text-gray-500">
+              {{ category.courses.length }} courses
+            </div>
+          </div>
+          
+          <!-- Progress indicator -->
+          <div class="w-full max-w-16">
+            <div class="h-1 bg-gray-200 rounded-full">
+              <div
+                class="h-1 rounded-full transition-all duration-300"
+                [class]="category.color"
+                [style.width.%]="getCategoryProgress(category.id)">
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero Section -->
+  <section class="bg-gradient-to-r from-blue-600 to-purple-700 text-white py-16">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+      <h1 class="text-4xl md:text-6xl font-bold mb-6">
+        Unlock Your Potential
+      </h1>
+      <p class="text-xl md:text-2xl mb-8 max-w-3xl mx-auto">
+        Master new skills with our comprehensive learning platform. Choose from our curated categories above.
+      </p>
+    </div>
+  </section>
+
+  <!-- Main Content -->
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+    <!-- Continue Learning Section -->
+    <section class="mb-16" *ngIf="getInProgressCourses().length > 0">
+      <div class="flex items-center justify-between mb-8">
+        <h2 class="text-3xl font-bold text-gray-900">Continue Learning</h2>
+        <button class="text-blue-600 hover:text-blue-800 font-semibold">
+          View All →
+        </button>
+      </div>
+      
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div
+          *ngFor="let course of getInProgressCourses()"
+          class="bg-white rounded-lg shadow-md hover:shadow-lg transition cursor-pointer transform hover:-translate-y-1"
+          (click)="selectCourse(course.id)">
+          
+          <div class="p-6">
+            <div class="flex items-center justify-between mb-4">
+              <span class="text-3xl">{{ course.icon }}</span>
+              <span class="px-3 py-1 bg-blue-100 text-blue-800 text-sm rounded-full">In Progress</span>
+            </div>
+            
+            <h3 class="font-semibold text-gray-900 mb-2">{{ course.title }}</h3>
+            <p class="text-sm text-gray-600 mb-4">{{ course.description }}</p>
+            
+            <div class="mb-4">
+              <div class="flex justify-between text-sm text-gray-500 mb-2">
+                <span>Progress</span>
+                <span>{{ getCourseProgress(course.id) }}%</span>
+              </div>
+              <div class="w-full bg-gray-200 rounded-full h-2">
+                <div
+                  class="h-2 bg-blue-500 rounded-full transition-all duration-300"
+                  [style.width.%]="getCourseProgress(course.id)">
+                </div>
+              </div>
+            </div>
+            
+            <button class="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition">
+              Continue
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Featured Courses from All Categories -->
+    <section class="mb-16">
+      <h2 class="text-3xl font-bold text-gray-900 mb-8">Featured Courses</h2>
+      
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div
+          *ngFor="let course of getFeaturedCourses()"
+          class="bg-white rounded-lg shadow-md hover:shadow-lg transition cursor-pointer transform hover:-translate-y-1"
+          (click)="selectCourse(course.id)">
+          
+          <div class="p-6">
+            <div class="flex items-center justify-between mb-4">
+              <span class="text-3xl">{{ course.icon }}</span>
+              <span *ngIf="course.isLocked" class="text-gray-400">🔒</span>
+            </div>
+            
+            <h3 class="font-semibold text-gray-900 mb-2">{{ course.title }}</h3>
+            <p class="text-sm text-gray-600 mb-4 line-clamp-2">{{ course.description }}</p>
+            
+            <div class="flex items-center justify-between text-sm text-gray-500 mb-4">
+              <span>{{ course.duration }}</span>
+              <span>{{ course.lessons.length }} lessons</span>
+            </div>
+            
+            <button
+              *ngIf="!course.isLocked"
+              class="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition">
+              Start Learning
+            </button>
+            
+            <button
+              *ngIf="course.isLocked"
+              class="w-full bg-gray-300 text-gray-600 py-2 rounded-lg cursor-not-allowed">
+              Coming Soon
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Learning Paths Section -->
+    <section class="mb-16">
+      <h2 class="text-3xl font-bold text-gray-900 mb-8">Popular Learning Paths</h2>
+      
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <!-- Financial Freedom Path -->
+        <div class="bg-gradient-to-br from-green-50 to-emerald-100 rounded-2xl p-8 border border-green-200">
+          <div class="flex items-center mb-4">
+            <div class="w-12 h-12 bg-green-600 rounded-full flex items-center justify-center text-white text-2xl mr-4">
+              💰
+            </div>
+            <div>
+              <h3 class="text-xl font-bold text-gray-900">Financial Freedom Path</h3>
+              <p class="text-green-700 text-sm">3 courses • 45 min total</p>
+            </div>
+          </div>
+          <p class="text-gray-600 mb-4">Start your journey to financial independence with budgeting, saving, and smart money management.</p>
+          <button class="text-green-700 hover:text-green-800 font-semibold flex items-center">
+            Start Path → <span class="ml-1">💰</span>
+          </button>
+        </div>
+
+        <!-- Business Success Path -->
+        <div class="bg-gradient-to-br from-blue-50 to-indigo-100 rounded-2xl p-8 border border-blue-200">
+          <div class="flex items-center mb-4">
+            <div class="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center text-white text-2xl mr-4">
+              🚀
+            </div>
+            <div>
+              <h3 class="text-xl font-bold text-gray-900">Business Success Path</h3>
+              <p class="text-blue-700 text-sm">2 courses • 30 min total</p>
+            </div>
+          </div>
+          <p class="text-gray-600 mb-4">Build your entrepreneurial skills and learn to manage your stokvel business effectively.</p>
+          <button class="text-blue-700 hover:text-blue-800 font-semibold flex items-center">
+            Start Path → <span class="ml-1">🚀</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Success Stories Section -->
+    <section class="mb-16">
+      <h2 class="text-3xl font-bold text-gray-900 mb-8">What Our Members Say</h2>
+      
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="bg-white rounded-xl p-6 shadow-md border border-gray-100">
+          <div class="flex items-center mb-4">
+            <div class="w-10 h-10 bg-purple-600 rounded-full flex items-center justify-center text-white font-semibold mr-3">
+              T
+            </div>
+            <div>
+              <div class="font-semibold text-gray-900">Thabo M.</div>
+              <div class="text-sm text-gray-500">Johannesburg</div>
+            </div>
+          </div>
+          <p class="text-gray-600 text-sm">"The budgeting course helped me save R5000 in just 3 months. My stokvel contributions are now consistent!"</p>
+        </div>
+
+        <div class="bg-white rounded-xl p-6 shadow-md border border-gray-100">
+          <div class="flex items-center mb-4">
+            <div class="w-10 h-10 bg-green-600 rounded-full flex items-center justify-center text-white font-semibold mr-3">
+              N
+            </div>
+            <div>
+              <div class="font-semibold text-gray-900">Nokuthula D.</div>
+              <div class="text-sm text-gray-500">Cape Town</div>
+            </div>
+          </div>
+          <p class="text-gray-600 text-sm">"Learning about time management improved my productivity at work and helped me balance my stokvel responsibilities."</p>
+        </div>
+
+        <div class="bg-white rounded-xl p-6 shadow-md border border-gray-100">
+          <div class="flex items-center mb-4">
+            <div class="w-10 h-10 bg-orange-600 rounded-full flex items-center justify-center text-white font-semibold mr-3">
+              S
+            </div>
+            <div>
+              <div class="font-semibold text-gray-900">Sipho K.</div>
+              <div class="text-sm text-gray-500">Durban</div>
+            </div>
+          </div>
+          <p class="text-gray-600 text-sm">"The communication skills I learned here made me a better stokvel leader. Our group is more organized now."</p>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<!-- Category Detail View (Keep existing structure) -->
+<div *ngIf="selectedCategory && selectedCourse === null" class="min-h-screen bg-gray-50">
+  <!-- Breadcrumb Navigation -->
+  <nav class="bg-white shadow-sm border-b">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center space-x-4 h-16">
+        <button
+          class="text-gray-500 hover:text-gray-700"
+          (click)="backToCategories()">
+          ← Back to Categories
+        </button>
+        <span class="text-gray-400">/</span>
+        <span class="text-gray-900 font-medium">{{ getCurrentCategory()?.name }}</span>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Category Header -->
+  <div class="bg-white border-b">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div class="flex items-center mb-6">
+        <div class="text-5xl mr-6">{{ getCurrentCategory()?.icon }}</div>
+        <div>
+          <h1 class="text-4xl font-bold text-gray-900 mb-2">{{ getCurrentCategory()?.name }}</h1>
+          <p class="text-xl text-gray-600 mb-4">{{ getCurrentCategory()?.description }}</p>
+          
+          <!-- Progress Stats -->
+          <div class="flex items-center space-x-6">
+            <div class="flex items-center">
+              <div class="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mr-3">
+                <span class="text-blue-600 font-bold">{{ getCategoryProgress(selectedCategory!) }}%</span>
+              </div>
+              <div>
+                <div class="text-sm text-gray-500">Overall Progress</div>
+                <div class="font-semibold">{{ getCategoryCompletedCourses(selectedCategory!) }}/{{ getCurrentCategoryCoursesCount() }} courses</div>
+              </div>
+            </div>
+            
+            <div class="flex items-center">
+              <div class="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mr-3">
+                <span class="text-green-600 font-bold">{{ getCategoryCompletedCourses(selectedCategory!) }}</span>
+              </div>
+              <div>
+                <div class="text-sm text-gray-500">Completed</div>
+                <div class="font-semibold">Courses</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Course Grid -->
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+      <div
+        *ngFor="let course of getCurrentCategory()?.courses"
+        class="bg-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
+        
+        <!-- Course Header -->
+        <div class="p-6">
+          <div class="flex items-center justify-between mb-4">
+            <span class="text-4xl">{{ course.icon }}</span>
+            <div class="flex space-x-2">
+              <span *ngIf="course.isLocked" class="px-3 py-1 bg-gray-100 text-gray-600 text-sm rounded-full">🔒 Locked</span>
+              <span *ngIf="getCourseProgress(course.id) === 100" class="px-3 py-1 bg-green-100 text-green-800 text-sm rounded-full">✓ Completed</span>
+              <span *ngIf="getCourseProgress(course.id) > 0 && getCourseProgress(course.id) < 100" class="px-3 py-1 bg-blue-100 text-blue-800 text-sm rounded-full">🔄 In Progress</span>
+            </div>
+          </div>
+          
+          <h3 class="text-xl font-bold text-gray-900 mb-3">{{ course.title }}</h3>
+          <p class="text-gray-600 mb-4">{{ course.description }}</p>
+          
+          <!-- Course Stats -->
+          <div class="grid grid-cols-3 gap-4 mb-6">
+            <div class="text-center">
+              <div class="text-lg font-bold text-gray-900">{{ course.lessons.length }}</div>
+              <div class="text-sm text-gray-500">Lessons</div>
+            </div>
+            <div class="text-center">
+              <div class="text-lg font-bold text-gray-900">{{ course.duration }}</div>
+              <div class="text-sm text-gray-500">Duration</div>
+            </div>
+            <div class="text-center">
+              <div class="text-lg font-bold text-gray-900">{{ getCourseProgress(course.id) }}%</div>
+              <div class="text-sm text-gray-500">Progress</div>
+            </div>
+          </div>
+          
+          <!-- Progress Bar -->
+          <div class="mb-6">
+            <div class="flex justify-between text-sm text-gray-500 mb-2">
+              <span>Course Progress</span>
+              <span>{{ getCompletedLessons(course.id) }}/{{ course.lessons.length }} lessons</span>
+            </div>
+            <div class="w-full bg-gray-200 rounded-full h-3">
+              <div
+                class="h-3 bg-blue-500 rounded-full transition-all duration-300"
+                [style.width.%]="getCourseProgress(course.id)">
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Course Footer -->
+        <div class="px-6 py-4 border-t border-gray-100">
+          <button
+            *ngIf="!course.isLocked"
+            class="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition font-semibold"
+            (click)="selectCourse(course.id)">
+            <span *ngIf="getCourseProgress(course.id) === 100">Review Course</span>
+            <span *ngIf="getCourseProgress(course.id) > 0 && getCourseProgress(course.id) < 100">Continue Learning</span>
+            <span *ngIf="getCourseProgress(course.id) === 0">Start Learning</span>
+          </button>
+          
+          <button
+            *ngIf="course.isLocked"
+            class="w-full bg-gray-300 text-gray-600 py-3 rounded-lg cursor-not-allowed font-semibold">
+            🔒 Coming Soon
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Course Detail View (Keep existing structure) -->
+<div *ngIf="selectedCourse && !showLoader" class="max-w-5xl mx-auto px-4 flex flex-col md:flex-row gap-8 pt-8 w-full">
+  <!-- Sidebar -->
+  <aside class="bg-white rounded-xl shadow-lg p-6 w-full md:w-1/3 mb-8 md:mb-0">
+    <button
+      class="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 text-gray-700 bg-white hover:bg-gray-100 transition mb-4"
+      (click)="backToCatalog()"
+      title="Back to Course List">
+      ← <span>Back</span>
+    </button>
+    
+    <h2 class="text-xl font-bold text-blue-800 mb-4">{{ getCurrentCourse()?.title }}</h2>
+    
+    <ul>
+      <li
+        *ngFor="let lesson of getCurrentCourse()?.lessons; let idx = index"
+        class="mb-3 px-2 py-2 rounded cursor-pointer flex items-center transition"
+        [class]="idx === currentLesson ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-blue-50 text-gray-700'"
+        (click)="selectLesson(idx)">
+        <span class="mr-2">{{ idx + 1 }}.</span> {{ lesson.title }}
+        <span *ngIf="isLessonCompleted(idx)" class="ml-auto text-green-500 font-bold">✓</span>
+      </li>
+      
+      <li
+        class="mt-6 px-2 py-2 rounded cursor-pointer font-semibold transition"
+        [class]="showQuiz ? 'bg-blue-200 text-blue-900' : 'hover:bg-blue-50 text-blue-700'"
+        (click)="showQuiz = true">
+        Quiz & Certificate
+      </li>
+    </ul>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="flex-1 bg-white rounded-xl shadow-lg p-6">
+    <div class="flex items-center mb-6">
+      <button
+        class="p-2 rounded-full border border-gray-300 text-gray-700 bg-white hover:bg-gray-100 transition shadow-sm"
+        (click)="goToDashboard()"
+        title="Go to Dashboard"
+        aria-label="Go to Dashboard">
+        🏠
+      </button>
+      <span class="ml-2 text-gray-500 text-sm">Learning Platform</span>
+    </div>
+
+    <!-- Lesson Content -->
+    <div *ngIf="!showQuiz">
+      <div class="mb-2 text-sm text-blue-600 font-semibold">
+        Lesson {{ currentLesson + 1 }} of {{ getCurrentLessonCount() }}
+      </div>
+      
+      <h3 class="text-2xl font-bold mb-4">{{ getCurrentLesson()?.title }}</h3>
+      
+      <iframe
+        *ngIf="getCurrentLesson()?.videoUrl"
+        width="100%"
+        height="300"
+        [src]="getCurrentLessonVideoUrl() | safe"
+        [title]="getCurrentLesson()?.title"
+        frameborder="0"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        allowfullscreen
+        class="rounded-lg mb-4">
+      </iframe>
+      
+      <div class="mb-6 text-lg">{{ getCurrentLesson()?.content }}</div>
+      
+      <div class="flex justify-between items-center">
+        <button
+          class="px-4 py-2 rounded bg-gray-200 text-gray-700 hover:bg-gray-300 transition disabled:opacity-50"
+          (click)="goToPreviousLesson()"
+          [disabled]="currentLesson === 0">
+          Previous
+        </button>
+        
+        <button
+          class="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 transition disabled:opacity-50"
+          (click)="completeLesson()"
+          [disabled]="isLessonCompleted(currentLesson)">
+          <span *ngIf="isLastLesson()">Finish & Take Quiz</span>
+          <span *ngIf="!isLastLesson()">Complete & Next</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Quiz Content -->
+    <div *ngIf="showQuiz">
+      <h3 class="text-2xl font-bold mb-4">Quiz: {{ getCurrentCourse()?.title }}</h3>
+      
+      <div *ngFor="let question of getCurrentQuizQuestions(); let idx = index" class="mb-6">
+        <div class="mb-2 font-semibold">{{ idx + 1 }}. {{ question.q }}</div>
+        <div class="flex flex-col gap-2">
+          <label *ngFor="let option of question.options; let oidx = index" class="flex items-center cursor-pointer">
+            <input
+              type="radio"
+              [name]="'quiz-' + idx"
+              [checked]="quizAnswers[idx] === oidx"
+              (change)="quizAnswers[idx] = oidx"
+              class="mr-2">
+            {{ option }}
+          </label>
+        </div>
+      </div>
+      
+      <div *ngIf="quizResult === null">
+        <button
+          class="bg-blue-600 text-white px-6 py-2 rounded font-semibold hover:bg-blue-700 transition"
+          (click)="submitQuiz()">
+          Submit Quiz
+        </button>
+      </div>
+      
+      <div *ngIf="quizResult === true" class="text-green-600 font-bold text-lg mt-4">
+        🎉 Congratulations! You passed the quiz!
+      </div>
+      
+      <div *ngIf="quizResult === false" class="text-red-600 font-bold text-lg mt-4">
+        Some answers are incorrect. Please review and try again.
+      </div>
+    </div>
+  </main>
+</div>
