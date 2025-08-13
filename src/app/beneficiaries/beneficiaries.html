@@ -1,0 +1,230 @@
+<div class="min-h-[80vh] bg-[#f4f6fb] py-10 px-2 md:px-8">
+  <div class="max-w-6xl mx-auto">
+    <!-- Page Header -->
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-6 gap-4">
+      <h1 class="text-3xl font-bold text-[#1a237e]">Beneficiaries</h1>
+      <button class="bg-[#2563eb] hover:bg-[#1d4ed8] text-white px-6 py-2 rounded-lg font-semibold shadow transition"
+              (click)="openForm()">
+        <span class="inline w-5 h-5 mr-2">👤</span>
+        Add Beneficiary
+      </button>
+    </div>
+
+    <!-- Alerts -->
+    <div *ngIf="infoMsg" class="mb-4 rounded bg-green-50 border border-green-200 text-green-700 px-4 py-2">{{ infoMsg }}</div>
+    <div *ngIf="errorMsg" class="mb-4 rounded bg-red-50 border border-red-200 text-red-700 px-4 py-2">{{ errorMsg }}</div>
+
+    <!-- Search Bar -->
+    <div class="flex items-center mb-4">
+      <input type="text" placeholder="Search beneficiaries..."
+             [(ngModel)]="search"
+             class="w-full md:w-80 px-4 py-2 border border-gray-200 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white"/>
+    </div>
+
+    <!-- Loading -->
+    <div *ngIf="loading" class="flex justify-center items-center h-64 text-blue-600 font-bold">
+      Loading beneficiaries...
+    </div>
+
+    <!-- Table -->
+    <div *ngIf="!loading" class="rounded-2xl bg-white shadow border border-gray-200 overflow-hidden">
+      <table class="w-full min-w-[700px]">
+        <thead class="bg-[#3B4CCA]">
+          <tr>
+            <th class="px-4 py-3 text-left text-xs font-semibold text-white uppercase">Beneficiary ID</th>
+            <th class="px-4 py-3 text-left text-xs font-semibold text-white uppercase">Name</th>
+            <th class="px-4 py-3 text-left text-xs font-semibold text-white uppercase">Phone Number</th>
+            <th class="px-4 py-3 text-left text-xs font-semibold text-white uppercase">Relationship</th>
+            <th class="px-4 py-3 text-left text-xs font-semibold text-white uppercase">Email</th>
+            <th class="px-4 py-3 text-center text-xs font-semibold text-white uppercase">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngIf="filteredBeneficiaries.length === 0">
+            <td colspan="6" class="text-center py-10 text-gray-400">No beneficiaries found.</td>
+          </tr>
+          <tr *ngFor="let b of filteredBeneficiaries"
+              (click)="selectBeneficiary(b)"
+              class="cursor-pointer hover:bg-blue-50 border-t border-gray-100 transition">
+            <td class="px-4 py-3 font-semibold text-[#2563eb]">{{ b.id_number || b.id }}</td>
+            <td class="px-4 py-3 flex items-center gap-3">
+              <img *ngIf="b.profile_pic_url" [src]="b.profile_pic_url" [alt]="b.name" class="w-8 h-8 rounded-full object-cover"/>
+              <div *ngIf="!b.profile_pic_url" class="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-indigo-400 flex items-center justify-center text-base font-extrabold text-white shadow border-2 border-white">
+                {{ getInitials(b.name) }}
+              </div>
+              <span class="font-medium text-gray-900">{{ b.name }}</span>
+            </td>
+            <td class="px-4 py-3 text-gray-700">{{ b.phone || '-' }}</td>
+            <td class="px-4 py-3">
+              <span class="px-2 py-0.5 rounded-full text-xs font-semibold" [ngClass]="getRelationshipColor(b.relationship)">
+                {{ b.relationship }}
+              </span>
+            </td>
+            <td class="px-4 py-3 text-gray-700">{{ b.email || '-' }}</td>
+            <td class="px-4 py-3 text-center">
+              <div class="flex justify-center gap-2">
+                <button class="p-2 rounded-full hover:bg-blue-100 transition"
+                        (click)="$event.stopPropagation(); openForm(b)"
+                        title="Edit">
+                  <span class="w-5 h-5 text-[#2563eb]">✏️</span>
+                </button>
+                <button class="p-2 rounded-full hover:bg-red-100 transition"
+                        (click)="$event.stopPropagation(); confirmDelete = b"
+                        title="Remove">
+                  <span class="w-5 h-5 text-red-500">🗑️</span>
+                </button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Documents Section -->
+    <div *ngIf="selectedBeneficiary" class="mt-8 p-6 bg-white rounded-xl shadow max-w-lg">
+      <h2 class="text-lg font-bold mb-4">Documents for {{ selectedBeneficiary.name }}</h2>
+      <div class="flex gap-8">
+        <div *ngFor="let doc of docTypes" class="flex flex-col items-center">
+          <span class="text-3xl text-blue-600 cursor-pointer hover:scale-110"
+                (click)="previewDocument(getDocumentUrl(selectedBeneficiary, doc.key) || '', doc.key, doc.label)"
+                [title]="doc.label">
+            {{ doc.icon }}
+          </span>
+          <span class="text-xs mt-2">{{ doc.label }}</span>
+          <span *ngIf="getDocumentUrl(selectedBeneficiary, doc.key)" class="text-green-600 text-xs mt-1">Uploaded</span>
+          <span *ngIf="!getDocumentUrl(selectedBeneficiary, doc.key)" class="text-gray-400 text-xs mt-1">Not uploaded</span>
+        </div>
+      </div>
+      <div *ngIf="previewDoc" class="mt-4 p-2 border rounded bg-gray-50 max-w-xs">
+        <img *ngIf="previewDoc.type === 'image'" [src]="previewDoc.url" alt="Preview" class="max-w-[180px] max-h-[120px] rounded"/>
+        <iframe *ngIf="previewDoc.type === 'pdf'" [src]="previewDoc.url" title="Preview" class="w-40 h-28"></iframe>
+        <span *ngIf="previewDoc.type !== 'image' && previewDoc.type !== 'pdf'">Cannot preview this file type.</span>
+        <button (click)="previewDoc = null" class="block mt-2 text-blue-600 underline">Close</button>
+      </div>
+    </div>
+
+    <!-- Floating Add Button (Mobile) -->
+    <button class="fixed bottom-8 right-8 z-40 bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-4 rounded-full shadow-lg md:hidden"
+            (click)="openForm()"
+            title="Add Beneficiary">
+      <span class="w-6 h-6">👤</span>
+    </button>
+
+    <!-- Add/Edit Form Modal -->
+    <div *ngIf="showForm" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <form (ngSubmit)="saveBeneficiary()" class="bg-white rounded-2xl shadow-xl max-w-3xl w-full mx-auto p-8 space-y-6">
+        <h2 class="text-2xl font-bold mb-4 text-center text-[#1a237e]">Beneficiary Details</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label class="block font-medium mb-1">Full Name</label>
+            <input type="text" [(ngModel)]="form.name" name="name"
+                   class="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-200" required/>
+          </div>
+          <div>
+            <label class="block font-medium mb-1">Relationship</label>
+            <select [(ngModel)]="form.relationship" name="relationship"
+                    class="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-200" required>
+              <option value="">Select...</option>
+              <option *ngFor="let r of relationships" [ngValue]="r.label">{{ r.label }}</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-medium mb-1">ID Number</label>
+            <input type="text" [(ngModel)]="form.id_number" name="id_number"
+                   (ngModelChange)="onFormChange('id_number', $event)"
+                   class="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-200"/>
+          </div>
+          <div>
+            <label class="block font-medium mb-1">Date of Birth</label>
+            <input type="date" [(ngModel)]="form.date_of_birth" name="date_of_birth"
+                   class="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-200"/>
+          </div>
+          <div>
+            <label class="block font-medium mb-1">Phone</label>
+            <input type="text" [(ngModel)]="form.phone" name="phone"
+                   class="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-200"/>
+          </div>
+          <div>
+            <label class="block font-medium mb-1">Email</label>
+            <input type="email" [(ngModel)]="form.email" name="email"
+                   class="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-200"/>
+          </div>
+        </div>
+
+        <!-- Document Uploads -->
+        <div>
+          <h3 class="text-lg font-semibold mb-2 text-[#2563eb]">Upload Documents</h3>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div>
+              <label class="block font-medium mb-1">ID Document</label>
+              <input type="file" accept="image/*,application/pdf"
+                     (change)="onFileChange('idFile', $event)" class="w-full"/>
+            </div>
+            <div>
+              <label class="block font-medium mb-1">Proof of Address</label>
+              <input type="file" accept="image/*,application/pdf"
+                     (change)="onFileChange('addressFile', $event)" class="w-full"/>
+            </div>
+            <div>
+              <label class="block font-medium mb-1">Proof of Relationship</label>
+              <input type="file" accept="image/*,application/pdf"
+                     (change)="onFileChange('relationshipFile', $event)" class="w-full"/>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-4 mt-6">
+          <button type="button" (click)="closeForm()"
+                  class="px-5 py-2 rounded-lg bg-gray-200 text-gray-700 font-semibold">
+            Cancel
+          </button>
+          <button type="submit"
+                  class="px-5 py-2 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 transition"
+                  [disabled]="formLoading">
+            {{ formLoading ? 'Saving...' : 'Save Beneficiary' }}
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Delete Confirmation -->
+    <div *ngIf="confirmDelete" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm mx-2 p-8 flex flex-col items-center">
+        <h2 class="text-xl font-bold mb-4 text-center">Remove Beneficiary?</h2>
+        <div class="mb-6 text-gray-600 text-center">
+          Are you sure you want to remove <b>{{ confirmDelete.name }}</b> as a beneficiary?
+        </div>
+        <div class="flex gap-4">
+          <button class="bg-gray-200 text-gray-700 px-5 py-2 rounded-lg font-semibold"
+                  (click)="confirmDelete = null">
+            Cancel
+          </button>
+          <button class="bg-red-600 text-white px-5 py-2 rounded-lg font-semibold"
+                  (click)="deleteBeneficiary(confirmDelete)">
+            Remove
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Document Preview Modal -->
+    <div *ngIf="previewDoc" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+         (click)="previewDoc = null">
+      <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-6 relative flex flex-col items-center"
+           (click)="$event.stopPropagation()">
+        <button class="absolute top-3 right-3 p-2 rounded-full bg-gray-200 hover:bg-gray-300"
+                (click)="previewDoc = null" title="Close">
+          <span class="w-5 h-5">✖</span>
+        </button>
+        <h3 class="text-lg font-bold mb-4">{{ previewDoc.label }}</h3>
+        <img *ngIf="previewDoc.type === 'image'" [src]="previewDoc.url" alt="Document"
+             class="max-h-[70vh] rounded-lg shadow"/>
+        <iframe *ngIf="previewDoc.type === 'pdf'" [src]="previewDoc.url" title="PDF Preview"
+                class="w-full h-[70vh] rounded-lg border"></iframe>
+        <div *ngIf="previewDoc.type !== 'image' && previewDoc.type !== 'pdf'" class="text-gray-500">
+          Cannot preview this file type.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

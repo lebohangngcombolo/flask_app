@@ -1,0 +1,393 @@
+<div class="min-h-screen bg-gray-100">
+  <div class="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+    <div class="mb-6">
+      <h1 class="text-3xl font-bold text-gray-900">User Profile</h1>
+      <p class="mt-1 text-lg text-gray-600">Manage your account details, security, and preferences.</p>
+    </div>
+
+    <!-- Alerts -->
+    <div *ngIf="infoMsg" class="mb-4 rounded bg-green-50 border border-green-200 text-green-700 px-4 py-2">{{ infoMsg }}</div>
+    <div *ngIf="errorMsg" class="mb-4 rounded bg-red-50 border border-red-200 text-red-700 px-4 py-2">{{ errorMsg }}</div>
+
+    <!-- Tabs -->
+    <div class="border-b border-gray-200 mb-8">
+      <nav class="flex space-x-6 overflow-x-auto" aria-label="Tabs">
+        <button (click)="setTab('overview')"
+                class="pb-3 px-1 text-lg font-medium transition-colors"
+                [class.text-blue-700]="activeTab()==='overview'"
+                [class.border-b-4]="activeTab()==='overview'"
+                [class.border-blue-600]="activeTab()==='overview'">
+          Overview
+        </button>
+        <button (click)="setTab('your-details')" class="pb-3 px-1 text-lg font-medium"
+                [class.text-blue-700]="activeTab()==='your-details'"
+                [class.border-b-4]="activeTab()==='your-details'"
+                [class.border-blue-600]="activeTab()==='your-details'">
+          My details
+        </button>
+        <button (click)="setTab('account-security')" class="pb-3 px-1 text-lg font-medium"
+                [class.text-blue-700]="activeTab()==='account-security'"
+                [class.border-b-4]="activeTab()==='account-security'"
+                [class.border-blue-600]="activeTab()==='account-security'">
+          Account & security
+        </button>
+        <button (click)="setTab('communication')" class="pb-3 px-1 text-lg font-medium"
+                [class.text-blue-700]="activeTab()==='communication'"
+                [class.border-b-4]="activeTab()==='communication'"
+                [class.border-blue-600]="activeTab()==='communication'">
+          Communication
+        </button>
+        <button (click)="setTab('privacy')" class="pb-3 px-1 text-lg font-medium"
+                [class.text-blue-700]="activeTab()==='privacy'"
+                [class.border-b-4]="activeTab()==='privacy'"
+                [class.border-blue-600]="activeTab()==='privacy'">
+          Privacy
+        </button>
+      </nav>
+    </div>
+
+    <!-- Content -->
+    <div [ngSwitch]="activeTab()">
+      <!-- Overview -->
+      <div *ngSwitchCase="'overview'">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <button (click)="setTab('your-details')" class="bg-white shadow rounded-lg p-6 text-left transition transform hover:scale-[1.02]">
+            <div class="mb-3 text-blue-600 text-2xl">👤</div>
+            <h3 class="text-lg font-semibold text-gray-900">My details</h3>
+            <p class="text-sm text-gray-600">Your profile information</p>
+            <span class="mt-4 inline-flex items-center text-sm font-medium text-blue-600">View →</span>
+          </button>
+          <button (click)="setTab('account-security')" class="bg-white shadow rounded-lg p-6 text-left transition transform hover:scale-[1.02]">
+            <div class="mb-3 text-blue-600 text-2xl">🛡️</div>
+            <h3 class="text-lg font-semibold text-gray-900">Account & security</h3>
+            <p class="text-sm text-gray-600">Password and active sessions</p>
+            <span class="mt-4 inline-flex items-center text-sm font-medium text-blue-600">View →</span>
+          </button>
+          <button (click)="setTab('communication')" class="bg-white shadow rounded-lg p-6 text-left transition transform hover:scale-[1.02]">
+            <div class="mb-3 text-blue-600 text-2xl">📧</div>
+            <h3 class="text-lg font-semibold text-gray-900">Communication</h3>
+            <p class="text-sm text-gray-600">Email and SMS communication</p>
+            <span class="mt-4 inline-flex items-center text-sm font-medium text-blue-600">View →</span>
+          </button>
+          <button (click)="setTab('privacy')" class="bg-white shadow rounded-lg p-6 text-left transition transform hover:scale-[1.02]">
+            <div class="mb-3 text-blue-600 text-2xl">🔒</div>
+            <h3 class="text-lg font-semibold text-gray-900">Privacy</h3>
+            <p class="text-sm text-gray-600">T&Cs and your data</p>
+            <span class="mt-4 inline-flex items-center text-sm font-medium text-blue-600">View →</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- My details -->
+      <div *ngSwitchCase="'your-details'">
+        <h2 class="text-2xl font-bold text-gray-800 mb-4">My Details</h2>
+        <div class="bg-white p-6 rounded-lg shadow">
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700">Full Name</label>
+            <input type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
+                   [(ngModel)]="userDetails.name" placeholder="Enter your full name" />
+          </div>
+
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700">Email Address</label>
+            <input type="email" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100 cursor-not-allowed"
+                   [ngModel]="userEmail" disabled />
+          </div>
+
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700">Phone Number</label>
+            <input type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
+                   [(ngModel)]="userDetails.phone" placeholder="Enter your phone number" />
+          </div>
+
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700">Date of Birth</label>
+            <input type="date" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
+                   [(ngModel)]="userDetails.dateOfBirth" />
+          </div>
+
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700">Gender</label>
+            <select class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
+                    [(ngModel)]="userDetails.gender">
+              <option [ngValue]="''" disabled hidden>Select Gender</option>
+              <option>Male</option>
+              <option>Female</option>
+              <option>Other</option>
+              <option>Prefer not to say</option>
+            </select>
+          </div>
+
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700">Employment Status</label>
+            <select class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
+                    [(ngModel)]="userDetails.employmentStatus">
+              <option [ngValue]="''" disabled hidden>Select Employment Status</option>
+              <option>Full time</option>
+              <option>Part time</option>
+              <option>Work at home</option>
+              <option>Self-employed</option>
+              <option>Unemployed</option>
+              <option>Retired</option>
+              <option>Student</option>
+            </select>
+          </div>
+
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700">Registration Date</label>
+            <input type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100 cursor-not-allowed"
+                   [ngModel]="currentRegistrationDate" disabled />
+          </div>
+
+          <div class="mt-6">
+            <button (click)="saveDetails()" class="w-full md:w-auto px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700">
+              Save Changes
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Account & security -->
+      <div *ngSwitchCase="'account-security'">
+        <h2 class="text-2xl font-bold text-gray-800 mb-4">Account & Security</h2>
+        <div class="bg-white p-6 rounded-lg shadow space-y-8">
+          <!-- Change Password -->
+          <div>
+            <h3 class="text-xl font-semibold text-gray-900 mb-2">Change Password</h3>
+            <p class="text-gray-600 mb-4">Update your password to keep your account secure.</p>
+            <div class="mb-4">
+              <label class="block text-sm font-medium text-gray-700">Current Password</label>
+              <input type="password" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
+                     [(ngModel)]="securitySettings.currentPassword" placeholder="Enter your current password" />
+            </div>
+            <div class="mb-6">
+              <label class="block text-sm font-medium text-gray-700">New Password</label>
+              <input type="password" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
+                     [(ngModel)]="securitySettings.newPassword" placeholder="Enter your new password" />
+            </div>
+            <button (click)="changePassword()" class="px-6 py-2 bg-blue-600 text-white rounded-md font-semibold hover:bg-blue-700">
+              Change Password
+            </button>
+          </div>
+
+          <!-- 2FA -->
+          <div>
+            <h3 class="text-xl font-semibold text-gray-900 mb-2">
+              Two-Factor Authentication (2FA)
+              <span class="ml-2 px-2 py-1 rounded text-xs font-semibold"
+                    [class.bg-green-100]="securitySettings.twoFactorEnabled"
+                    [class.text-green-700]="securitySettings.twoFactorEnabled"
+                    [class.bg-red-100]="!securitySettings.twoFactorEnabled"
+                    [class.text-red-700]="!securitySettings.twoFactorEnabled">
+                {{ securitySettings.twoFactorEnabled ? 'ENABLED' : 'DISABLED' }}
+              </span>
+            </h3>
+            <p class="text-gray-600 mb-4">Add an extra layer of security to your account by enabling two-factor authentication.</p>
+            <div class="flex gap-4 flex-wrap">
+              <button (click)="show2FAModal = true"
+                      class="px-6 py-2 rounded-md font-semibold"
+                      [class.bg-gray-200]="securitySettings.twoFactorEnabled"
+                      [class.text-gray-500]="securitySettings.twoFactorEnabled"
+                      [class.cursor-not-allowed]="securitySettings.twoFactorEnabled"
+                      [class.bg-green-600]="!securitySettings.twoFactorEnabled"
+                      [class.text-white]="!securitySettings.twoFactorEnabled"
+                      [disabled]="securitySettings.twoFactorEnabled">
+                Enable 2FA
+              </button>
+              <button (click)="showDisable2FAModal = true"
+                      class="px-6 py-2 rounded-md font-semibold"
+                      [class.bg-gray-200]="!securitySettings.twoFactorEnabled"
+                      [class.text-gray-500]="!securitySettings.twoFactorEnabled"
+                      [class.cursor-not-allowed]="!securitySettings.twoFactorEnabled"
+                      [class.bg-red-600]="securitySettings.twoFactorEnabled"
+                      [class.text-white]="securitySettings.twoFactorEnabled"
+                      [disabled]="!securitySettings.twoFactorEnabled">
+                Disable 2FA
+              </button>
+            </div>
+
+            <!-- Enable 2FA Modal -->
+            <div *ngIf="show2FAModal" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50">
+              <div class="bg-white p-6 rounded-lg shadow-lg w-full max-w-sm">
+                <h2 class="text-lg font-bold mb-4">Enable Two-Factor Authentication</h2>
+                <div class="mb-4">
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Choose 2FA Method:</label>
+                  <div class="flex gap-6">
+                    <label class="flex items-center gap-2">
+                      <input type="radio" name="twoFAMethod" value="email" [(ngModel)]="twoFAMethod" [disabled]="isSendingOtp" />
+                      <span>Email</span>
+                    </label>
+                    <label class="flex items-center gap-2">
+                      <input type="radio" name="twoFAMethod" value="sms" [(ngModel)]="twoFAMethod" [disabled]="isSendingOtp" />
+                      <span>SMS</span>
+                    </label>
+                  </div>
+                </div>
+
+                <p *ngIf="otpSentMessage" class="mb-4 text-green-600">{{ otpSentMessage }}</p>
+
+                <input type="text" placeholder="Enter OTP" [(ngModel)]="otp" class="w-full border rounded p-2 mb-4" />
+                <button (click)="sendOtp(twoFAMethod)" class="text-blue-600 hover:underline mb-4" [disabled]="isSendingOtp">
+                  {{ isSendingOtp ? 'Sending...' : 'Resend OTP' }}
+                </button>
+
+                <button (click)="verify2FA()" class="w-full bg-green-600 text-white py-2 rounded mt-2" [disabled]="isVerifying">
+                  {{ isVerifying ? 'Verifying...' : 'Enable 2FA' }}
+                </button>
+                <button (click)="show2FAModal = false" class="w-full mt-2 text-gray-500">Cancel</button>
+              </div>
+            </div>
+
+            <!-- Disable 2FA Modal -->
+            <div *ngIf="showDisable2FAModal" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50">
+              <div class="bg-white p-6 rounded-lg shadow-lg w-full max-w-sm">
+                <h2 class="text-lg font-bold mb-4">Disable Two-Factor Authentication</h2>
+                <p class="mb-4 text-gray-600">For your security, please enter your password to disable 2FA.</p>
+                <input type="password" placeholder="Enter your password" [(ngModel)]="disable2FAPassword"
+                       class="w-full border rounded p-2 mb-4" />
+                <button (click)="disable2FA()" class="w-full bg-red-600 text-white py-2 rounded" [disabled]="isDisabling2FA">
+                  {{ isDisabling2FA ? 'Disabling...' : 'Disable 2FA' }}
+                </button>
+                <button (click)="showDisable2FAModal = false" class="w-full mt-2 text-gray-500">Cancel</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Active Sessions -->
+          <div>
+            <h3 class="text-xl font-semibold text-gray-900 mb-2">Active Sessions</h3>
+            <p class="text-gray-600 mb-4">Review where you are currently logged in.</p>
+            <div *ngFor="let s of topActiveUniqueSessions()" class="py-3 flex justify-between items-center">
+              <div>
+                <p class="font-medium text-gray-800">{{ s.user_agent || 'Unknown Device' }}</p>
+                <p class="text-sm text-gray-600">{{ s.ip_address || 'Unknown Location' }} - {{ s.login_time | date:'yyyy-MM-dd HH:mm' }}</p>
+              </div>
+            </div>
+            <div class="mt-4">
+              <button (click)="logoutAllSessions()" class="px-6 py-2 bg-red-600 text-white rounded-md font-semibold hover:bg-red-700">
+                Logout All Other Sessions
+              </button>
+            </div>
+          </div>
+
+          <!-- Delete Account -->
+          <div>
+            <h3 class="text-xl font-semibold text-gray-900 mb-2 text-red-600">Delete Account</h3>
+            <p class="text-gray-600 mb-4">Permanently close your account and remove your data.</p>
+            <button (click)="showDeleteModal = true" class="px-6 py-2 bg-red-600 text-white rounded-md font-semibold hover:bg-red-700">
+              Delete Account
+            </button>
+          </div>
+        </div>
+
+        <!-- Delete Modal -->
+        <div *ngIf="showDeleteModal" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50">
+          <div class="bg-white p-6 rounded-lg shadow-lg w-full max-w-sm">
+            <h2 class="text-lg font-bold mb-4 text-red-600">Delete Account</h2>
+            <p class="mb-4 text-gray-600">Are you sure you want to permanently delete your account? This action cannot be undone.</p>
+            <input type="password" placeholder="Enter your password to confirm" [(ngModel)]="deletePassword"
+                   class="w-full border rounded p-2 mb-4" [disabled]="isDeleting" />
+            <button (click)="deleteAccount()" class="w-full bg-red-600 text-white py-2 rounded mb-2" [disabled]="isDeleting || !deletePassword">
+              {{ isDeleting ? 'Deleting...' : 'Delete Account' }}
+            </button>
+            <button (click)="showDeleteModal = false" class="w-full text-gray-500" [disabled]="isDeleting">Cancel</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Communication -->
+      <div *ngSwitchCase="'communication'">
+        <h2 class="text-2xl font-bold text-gray-800 mb-4">Communication</h2>
+        <div class="bg-white p-6 rounded-lg shadow space-y-6">
+          <div>
+            <h3 class="text-xl font-semibold text-gray-900 mb-3">Email Notifications</h3>
+            <p class="text-gray-600 mb-4">Manage the types of emails you receive.</p>
+
+            <div class="space-y-3">
+              <div class="flex items-center justify-between">
+                <span class="text-gray-700">General Announcements</span>
+                <input type="checkbox" class="h-5 w-10" [checked]="communicationSettings.emailAnnouncements"
+                       (change)="toggleCommunication('emailAnnouncements')" />
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-gray-700">Stokvel Updates</span>
+                <input type="checkbox" class="h-5 w-10" [checked]="communicationSettings.emailStokvelUpdates"
+                       (change)="toggleCommunication('emailStokvelUpdates')" />
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-gray-700">Marketplace Offers</span>
+                <input type="checkbox" class="h-5 w-10" [checked]="communicationSettings.emailMarketplaceOffers"
+                       (change)="toggleCommunication('emailMarketplaceOffers')" />
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <h3 class="text-xl font-semibold text-gray-900 mb-3">Push Notifications</h3>
+            <p class="text-gray-600 mb-4">Manage the types of push notifications you receive.</p>
+
+            <div class="space-y-3">
+              <div class="flex items-center justify-between">
+                <span class="text-gray-700">General Announcements</span>
+                <input type="checkbox" class="h-5 w-10" [checked]="communicationSettings.pushAnnouncements"
+                       (change)="toggleCommunication('pushAnnouncements')" />
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-gray-700">Stokvel Updates</span>
+                <input type="checkbox" class="h-5 w-10" [checked]="communicationSettings.pushStokvelUpdates"
+                       (change)="toggleCommunication('pushStokvelUpdates')" />
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-gray-700">Marketplace Offers</span>
+                <input type="checkbox" class="h-5 w-10" [checked]="communicationSettings.pushMarketplaceOffers"
+                       (change)="toggleCommunication('pushMarketplaceOffers')" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Privacy -->
+      <div *ngSwitchCase="'privacy'">
+        <h2 class="text-2xl font-bold text-gray-800 mb-4">Privacy</h2>
+        <div class="bg-white p-6 rounded-lg shadow space-y-6">
+          <div>
+            <h3 class="text-xl font-semibold text-gray-900 mb-3">Data Usage Preferences</h3>
+            <p class="text-gray-600 mb-4">Control how your data is used to personalize your experience.</p>
+            <div class="space-y-3">
+              <div class="flex items-center justify-between">
+                <span class="text-gray-700">Use data for personalization</span>
+                <input type="checkbox" class="h-5 w-10" [(ngModel)]="privacySettings.dataForPersonalization" />
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-gray-700">Use data for analytics (anonymized)</span>
+                <input type="checkbox" class="h-5 w-10" [(ngModel)]="privacySettings.dataForAnalytics" />
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-gray-700">Allow data sharing with select third parties</span>
+                <input type="checkbox" class="h-5 w-10" [(ngModel)]="privacySettings.dataForThirdParties" />
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <h3 class="text-xl font-semibold text-gray-900 mb-3">Access Your Data</h3>
+            <p class="text-gray-600 mb-4">Request a copy of the personal data we hold about you.</p>
+            <button class="px-6 py-2 bg-blue-600 text-white rounded-md font-semibold hover:bg-blue-700"
+                    (click)="infoMsg = 'Request data download functionality not implemented yet.'">
+              Download Data
+            </button>
+          </div>
+
+          <div>
+            <h3 class="text-xl font-semibold text-gray-900 mb-3">Legal Information</h3>
+            <div class="space-y-2">
+              <a routerLink="/privacy-policy" class="text-blue-600 hover:underline">Privacy Policy</a>
+              <a routerLink="/terms-of-service" class="text-blue-600 hover:underline">Terms of Service</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

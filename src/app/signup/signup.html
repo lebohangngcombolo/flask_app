@@ -1,0 +1,294 @@
+<div class="h-screen bg-gradient-to-br from-blue-50 via-white to-blue-50 relative overflow-hidden">
+  <!-- Animated Coins Background -->
+  <div class="absolute inset-0 overflow-hidden">
+    <div
+      *ngFor="let item of animatedItems; let i = index"
+      class="absolute animate-float"
+      [style.left]="item.left"
+      [style.top]="item.top"
+      [style.animation-delay]="item.animationDelay"
+      [style.animation-duration]="item.animationDuration"
+    >
+      <div class="w-8 h-8 bg-blue-500 rounded-full opacity-20 transform rotate-45"></div>
+    </div>
+  </div>
+
+  <!-- Animated Savings Jar -->
+  <div class="absolute top-10 right-10 w-24 h-32 opacity-10 animate-bounce">
+    <div class="w-full h-full bg-blue-600 rounded-full border-4 border-blue-800 relative">
+      <div class="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-8 h-2 bg-blue-800 rounded-full"></div>
+    </div>
+  </div>
+
+  <div class="relative z-10 flex items-center justify-center h-screen p-4">
+    <div class="w-full max-w-[600px] bg-white/80 backdrop-blur-lg rounded-2xl shadow-xl p-6">
+      <div class="mb-4 text-center">
+        <button
+          (click)="handleBackToHome()"
+          class="absolute top-4 left-4 text-gray-600 hover:text-blue-600 transition-colors duration-200"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          </svg>
+        </button>
+        <h2 class="text-2xl font-bold text-gray-900 mb-1">
+          {{ showOtpVerification
+            ? verificationMethod === 'email'
+              ? 'Verify Your Email'
+              : 'Verify Your Phone Number'
+            : 'Create Your Account' }}
+        </h2>
+        <p class="text-sm text-gray-600">
+          {{ showOtpVerification 
+            ? verificationMethod === 'email'
+              ? 'Enter the 6-digit code sent to ' + userEmailForVerification
+              : 'Enter the 6-digit code sent to ' + userPhoneForVerification
+            : 'Join i-STOKVEL and start your savings journey' }}
+        </p>
+      </div>
+
+      <div *ngIf="successMessage" class="mb-4 bg-green-50 border border-green-200 text-green-700 px-3 py-2 rounded-lg text-sm">
+        {{ successMessage }}
+      </div>
+
+      <div *ngIf="errors.submit" class="mb-4 bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-sm">
+        {{ errors.submit }}
+      </div>
+
+      <form *ngIf="showOtpVerification" (ngSubmit)="handleVerifyOtp()" class="space-y-4">
+        <div class="flex justify-center space-x-2">
+          <input
+            *ngFor="let digit of otp; let index = index"
+            type="text"
+            [name]="'otp-' + index"
+            maxlength="6"
+            [value]="digit"
+            (input)="handleOtpChange(index, $event.target.value)"
+            (keydown)="handleOtpKeyDown(index, $event)"
+            (paste)="handleOtpPaste($event)"
+            class="w-12 h-12 text-center text-xl font-semibold border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+            placeholder=""
+            autocomplete="one-time-code"
+          />
+        </div>
+        
+        <p *ngIf="otpError" class="text-sm text-red-600 text-center">{{ otpError }}</p>
+
+        <!-- Success message for resend -->
+        <div *ngIf="resendMessage" class="flex items-center justify-center space-x-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+          <span class="text-green-600">✓</span>
+          <p class="text-sm text-green-700 font-medium">{{ resendMessage }}</p>
+        </div>
+
+        <div class="text-center text-sm text-gray-600">
+          Didn't receive the code? 
+          <button
+            type="button"
+            [class]="resendCountdown > 0
+              ? 'text-gray-400 cursor-not-allowed'
+              : 'text-blue-600 hover:text-blue-700 hover:underline'"
+            (click)="handleResendCode()"
+            [disabled]="isLoading || resendCountdown > 0"
+          >
+            <span *ngIf="resendCountdown > 0" class="flex items-center space-x-1">
+              <span>⏰</span>
+              <span>Resend in {{ resendCountdown }}s</span>
+            </span>
+            <span *ngIf="resendCountdown === 0">Resend</span>
+          </button>
+        </div>
+
+        <button
+          type="submit"
+          [disabled]="isLoading"
+          class="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+        >
+          {{ isLoading ? 'Verifying...' : 'Verify Account' }}
+        </button>
+      </form>
+
+      <form *ngIf="!showOtpVerification" (ngSubmit)="handleSubmit()" class="space-y-4">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label for="fullName" class="block text-sm font-medium text-gray-700 mb-1">
+              Full Name
+            </label>
+            <input
+              id="fullName"
+              name="fullName"
+              type="text"
+              required
+              [value]="formData.fullName"
+              (input)="handleChange('fullName', $event.target.value)"
+              [class]="'w-full px-3 py-2.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ' + (errors.fullName ? 'border-red-300' : 'border-gray-300')"
+              placeholder="Enter your full name"
+            />
+            <p *ngIf="errors.fullName" class="mt-1 text-xs text-red-600">{{ errors.fullName }}</p>
+          </div>
+
+          <div>
+            <label for="email" class="block text-sm font-medium text-gray-700 mb-1">
+              Email
+            </label>
+            <input
+              id="email"
+              name="email"
+              type="email"
+              autocomplete="email"
+              required
+              [value]="formData.email"
+              (input)="handleChange('email', $event.target.value)"
+              [class]="'w-full px-3 py-2.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ' + (errors.email ? 'border-red-300' : 'border-gray-300')"
+              placeholder="Enter your email"
+            />
+            <p *ngIf="errors.email" class="mt-1 text-xs text-red-600">{{ errors.email }}</p>
+          </div>
+        </div>
+
+        <div>
+          <label for="phoneNumber" class="block text-sm font-medium text-gray-700 mb-1">
+            Phone Number
+          </label>
+          <input
+            id="phoneNumber"
+            name="phoneNumber"
+            type="tel"
+            required
+            [value]="formData.phoneNumber"
+            (input)="handleChange('phoneNumber', $event.target.value)"
+            [class]="'w-full px-3 py-2.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ' + (errors.phoneNumber ? 'border-red-300' : 'border-gray-300')"
+            placeholder="+27 71 234 5678"
+          />
+          <p *ngIf="errors.phoneNumber" class="mt-1 text-xs text-red-600">{{ errors.phoneNumber }}</p>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label for="password" class="block text-sm font-medium text-gray-700 mb-1">
+              Password
+            </label>
+            <div class="relative">
+              <input
+                id="password"
+                name="password"
+                [type]="showPassword ? 'text' : 'password'"
+                required
+                [value]="formData.password"
+                (input)="handleChange('password', $event.target.value)"
+                [class]="'w-full px-3 py-2.5 pr-12 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ' + (errors.password ? 'border-red-300' : 'border-gray-300')"
+                placeholder="Create a strong password"
+              />
+              <button
+                type="button"
+                (click)="showPassword = !showPassword"
+                class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors p-1"
+              >
+                {{ showPassword ? '👁️' : '👁️‍️' }}
+              </button>
+            </div>
+            
+            <!-- Modern Password Strength Indicator -->
+            <div *ngIf="showPasswordStrength" class="mt-3 space-y-3">
+              <!-- Strength Bar -->
+              <div class="space-y-2">
+                <div class="flex items-center justify-between">
+                  <span class="text-xs font-medium text-gray-600">Password strength</span>
+                  <div class="flex items-center gap-1.5">
+                    <span>{{ strengthInfo.icon }}</span>
+                    <span [class]="'text-xs font-semibold ' + strengthInfo.color">
+                      {{ strengthInfo.label }}
+                    </span>
+                  </div>
+                </div>
+                <div class="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                  <div 
+                    [class]="'h-full rounded-full transition-all duration-500 ease-out ' + strengthInfo.bgColor"
+                    [style.width]="strengthInfo.progress + '%'"
+                  ></div>
+                </div>
+              </div>
+
+              <!-- Requirements List -->
+              <div class="space-y-2">
+                <div *ngFor="let requirement of passwordRequirements" class="flex items-center space-x-2">
+                  <span *ngIf="requirement.met" class="text-green-500">✓</span>
+                  <div *ngIf="!requirement.met" class="w-4 h-4 border-2 border-gray-300 rounded-full"></div>
+                  <span [class]="'text-xs ' + (requirement.met ? 'text-green-600' : 'text-gray-500')">
+                    {{ requirement.label }}
+                  </span>
+                </div>
+              </div>
+            </div>
+            
+            <p *ngIf="errors.password" class="mt-1 text-xs text-red-600">{{ errors.password }}</p>
+          </div>
+
+          <div>
+            <label for="confirmPassword" class="block text-sm font-medium text-gray-700 mb-1">
+              Confirm Password
+            </label>
+            <div class="relative">
+              <input
+                id="confirmPassword"
+                name="confirmPassword"
+                [type]="showConfirmPassword ? 'text' : 'password'"
+                required
+                [value]="formData.confirmPassword"
+                (input)="handleChange('confirmPassword', $event.target.value)"
+                [class]="'w-full px-3 py-2.5 pr-12 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ' + (errors.confirmPassword ? 'border-red-300' : 'border-gray-300')"
+                placeholder="Confirm your password"
+              />
+              <button
+                type="button"
+                (click)="showConfirmPassword = !showConfirmPassword"
+                class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors p-1"
+              >
+                {{ showConfirmPassword ? '👁️' : '👁️‍️' }}
+              </button>
+            </div>
+            
+            <!-- Password match indicator -->
+            <div *ngIf="formData.confirmPassword" class="mt-1 flex items-center space-x-1">
+              <span *ngIf="formData.password === formData.confirmPassword" class="text-green-500">✓</span>
+              <span *ngIf="formData.password !== formData.confirmPassword" class="text-red-500">✗</span>
+              <span [class]="'text-xs ' + (formData.password === formData.confirmPassword ? 'text-green-600' : 'text-red-600')">
+                {{ formData.password === formData.confirmPassword ? 'Passwords match' : 'Passwords do not match' }}
+              </span>
+            </div>
+            
+            <p *ngIf="errors.confirmPassword" class="mt-1 text-xs text-red-600">{{ errors.confirmPassword }}</p>
+          </div>
+        </div>
+
+        <button
+          type="submit"
+          [disabled]="isLoading || !allRequirementsMet"
+          class="w-full bg-blue-600 text-white py-2.5 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-colors"
+        >
+          {{ isLoading ? 'Creating Account...' : 'Create Account' }}
+        </button>
+
+        <div class="text-center">
+          <p class="text-sm text-gray-600">
+            Already have an account? 
+            <button type="button" (click)="navigateToLogin()" class="text-blue-600 hover:text-blue-700 font-medium">
+              Sign in
+            </button>
+          </p>
+        </div>
+
+        <div class="relative">
+          <div class="absolute inset-0 flex items-center">
+            <div class="w-full border-t border-gray-300"></div>
+          </div>
+          <div class="relative flex justify-center text-sm">
+            <span class="px-2 bg-white text-gray-500">or</span>
+          </div>
+        </div>
+
+        <!-- Google Login Button -->
+        <app-google-login-button text="Continue with Google"></app-google-login-button>
+      </form>
+    </div>
+  </div>
+</div>
