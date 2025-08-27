@@ -1,40 +1,136 @@
-import { Component, signal } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterOutlet, Router } from '@angular/router';
+import { RouterModule, Router } from '@angular/router';
+import { ProfileDropdownComponent } from '../shared/profile-dropdown/profile-dropdown';
+import { AuthService } from '../auth';
 import { ApiService } from '../api';
 
-@Component({
-  standalone: true,
-  selector: 'app-dashboard-layout',
-  imports: [CommonModule, RouterOutlet],
-  templateUrl: './dashboard-layout.html'
-})
-export class DashboardLayoutComponent {
-  sidebarOpen = signal(true);
-  isNotificationsOpen = signal(false);
-  tab = signal<'unread' | 'read'>('unread');
-  notifications: any[] = [];
-  unread() { return this.notifications.filter(n => !n.read); }
-  read() { return this.notifications.filter(n => n.read); }
+interface User {
+  name?: string;
+  email?: string;
+  profilePicture?: string;
+}
 
-  constructor(private api: ApiService, private router: Router) {}
+interface Notification {
+  id: number;
+  title: string;
+  message: string;
+  created_at: string;
+  read: boolean;
+}
+
+@Component({
+  selector: 'app-dashboard-layout',
+  templateUrl: './dashboard-layout.html',
+  styleUrls: ['./dashboard-layout.scss'],
+  standalone: true,
+  imports: [
+    CommonModule,
+    RouterModule,
+    ProfileDropdownComponent
+  ]
+})
+export class DashboardLayoutComponent implements OnInit {
+  currentUser: User | null = null;
+  
+  // Add missing properties
+  sidebarOpen = false;
+  isNotificationsOpen = false;
+  tab = 'unread';
+  
+  // Enhanced notifications data
+  unread: Notification[] = [
+    {
+      id: 1,
+      title: 'Welcome to i-STOKVEL!',
+      message: 'Your account has been successfully created. Start exploring our features.',
+      created_at: new Date().toISOString(),
+      read: false
+    },
+    {
+      id: 2,
+      title: 'KYC Verification Required',
+      message: 'Please complete your KYC verification to unlock all features.',
+      created_at: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
+      read: false
+    }
+  ];
+  
+  read: Notification[] = [
+    {
+      id: 3,
+      title: 'Account Setup Complete',
+      message: 'Your basic account setup has been completed successfully.',
+      created_at: new Date(Date.now() - 86400000).toISOString(), // 1 day ago
+      read: true
+    }
+  ];
+
+  constructor(
+    private authService: AuthService,
+    private router: Router,
+    private api: ApiService
+  ) {}
 
   ngOnInit() {
-    this.fetchNotifications();
-    setInterval(() => this.fetchNotifications(), 30000);
+    this.loadCurrentUser();
+    this.refreshProfile();
   }
 
-  async fetchNotifications() {
+  loadCurrentUser() {
+    // Try to get user from auth service first
+    if (this.authService.getCurrentUser) {
+      this.currentUser = this.authService.getCurrentUser();
+    } else {
+      // Fallback to localStorage
+      const userStr = localStorage.getItem('user');
+      if (userStr) {
+        try {
+          this.currentUser = JSON.parse(userStr);
+        } catch (e) {
+          console.error('Failed to parse user from localStorage:', e);
+        }
+      }
+    }
+  }
+
+  onProfileUpdated() {
+    this.refreshProfile();
+  }
+
+  private async refreshProfile() {
     try {
-      const data = await this.api.getNotifications().toPromise();
-      this.notifications = Array.isArray(data) ? data : [];
+      const data = await this.api.getUserProfile().toPromise();
+      const mapped: User = {
+        name: data?.name || data?.full_name || this.currentUser?.name,
+        email: data?.email || this.currentUser?.email,
+        profilePicture: data?.profile_picture || this.currentUser?.profilePicture,
+      };
+      this.currentUser = mapped;
+      localStorage.setItem('currentUser', JSON.stringify({
+        ...data,
+        name: mapped.name,
+        profilePicture: mapped.profilePicture
+      }));
     } catch {}
   }
-  async markAllAsRead() {
-    const ids = this.unread().map(n => n.id);
-    if (!ids.length) return;
-    await Promise.all(ids.map((id: string) => this.api.markNotificationAsRead(id).toPromise()));
-    this.fetchNotifications();
+
+  // Add missing methods
+  navTo(path: string) {
+    this.router.navigate([path]);
   }
-  navTo(path: string) { this.router.navigateByUrl(path); }
+
+  markAllAsRead() {
+    // Move all unread notifications to read
+    this.read = [...this.read, ...this.unread.map(n => ({ ...n, read: true }))];
+    this.unread = [];
+  }
+
+  // Close notifications when clicking outside
+  onDocumentClick(event: Event) {
+    const target = event.target as HTMLElement;
+    if (!target.closest('.notifications-container')) {
+      this.isNotificationsOpen = false;
+    }
+  }
 }

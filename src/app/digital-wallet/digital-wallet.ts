@@ -2,6 +2,7 @@ import { Component, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../api';
+import { PaystackPaymentComponent } from './paystack-payment';
 
 type Tx = any;
 type Card = any;
@@ -11,7 +12,7 @@ type Card = any;
   standalone: true,
   templateUrl: './digital-wallet.html',
   styleUrls: ['./digital-wallet.scss'],
-  imports: [CommonModule, FormsModule]
+  imports: [CommonModule, FormsModule, PaystackPaymentComponent]
 })
 export class DigitalWallet implements OnInit {
   // State
@@ -50,12 +51,46 @@ export class DigitalWallet implements OnInit {
   errorMsg = '';
 
   // Modal form models
-  deposit = { amount: 0, card_id: '' };
+  deposit = { amount: 0, card_id: '', note: '' as string };
   transfer = { amount: 0, recipient_account_number: '', note: '' };
   withdraw = { amount: 0, bank_account_number: '', note: '' };
 
   // Add/Edit card form
   cardForm = { cardholder: '', cardNumber: '', expiry: '', cvv: '', primary: false };
+
+  // Modals loading
+  depositLoading = false;
+  transferLoading = false;
+  withdrawLoading = false;
+
+  // Deposit modal fields
+  depositMethod: string = ''; // 'bank' or card id
+
+  // Computed helpers
+  get depositAmountNum() { return Number(this.deposit.amount || 0); }
+  get depositFee() { return this.depositAmountNum > 0 ? Math.max(2, this.depositAmountNum * 0.015) : 0; }
+  get depositTotal() { return this.depositAmountNum + this.depositFee; }
+
+  // Card helpers (format + validation)
+  formatCardNumber(value: string) {
+    const v = (value || '').replace(/\D/g, '').slice(0, 16);
+    return v.replace(/(.{4})/g, '$1 ').trim();
+  }
+  formatExpiry(value: string) {
+    let v = (value || '').replace(/\D/g, '').slice(0, 4);
+    if (v.length >= 3) v = `${v.slice(0, 2)}/${v.slice(2)}`;
+    return v;
+  }
+  get isCardNumberValid() { return /^\d{4} \d{4} \d{4} \d{4}$/.test(this.cardForm.cardNumber || ''); }
+  get isExpiryValid() { return /^(0[1-9]|1[0-2])\/\d{2}$/.test(this.cardForm.expiry || ''); }
+  get isCvvValid() { return /^\d{3}$/.test(this.cardForm.cvv || ''); }
+  get isCardholderValid() { return (this.cardForm.cardholder || '').trim().length > 2; }
+  get isCardFormValid() { return this.isCardNumberValid && this.isExpiryValid && this.isCvvValid && this.isCardholderValid; }
+
+  // Add new properties for Paystack
+  showPaystackPayment = false;
+  paystackAmount = 0;
+  userEmail = '';
 
   constructor(private api: ApiService) {}
 
@@ -164,67 +199,17 @@ export class DigitalWallet implements OnInit {
   async nextPage() { if (this.page < this.pages) { this.page++; await this.loadTransactions(); } }
 
   // Deposit
-  async confirmDeposit() {
-    this.clearMessages();
-    try {
-      await this.api.makeDeposit({ amount: Number(this.deposit.amount || 0), card_id: Number(this.deposit.card_id) }).toPromise();
-      this.infoMsg = 'Deposit successful!';
-      this.showDeposit = false;
-      await this.loadBalance();
-      this.page = 1; await this.loadTransactions();
-    } catch (e: any) {
-      this.errorMsg = e?.message || 'Deposit failed';
-    }
-  }
-
-  // Transfer
-  async confirmTransfer() {
-    this.clearMessages();
-    try {
-      await this.api.makeTransfer({
-        amount: Number(this.transfer.amount || 0),
-        recipient_account_number: this.transfer.recipient_account_number,
-        description: this.transfer.note
-      }).toPromise();
-      this.infoMsg = 'Transfer successful!';
-      this.showTransfer = false;
-      await this.loadBalance();
-      this.page = 1; await this.loadTransactions();
-    } catch (e: any) {
-      this.errorMsg = e?.message || 'Transfer failed';
-    }
-  }
-
-  // Withdraw
-  async confirmWithdraw() {
-    this.clearMessages();
-    try {
-      await this.api.withdraw({
-        amount: Number(this.withdraw.amount || 0),
-        bank_account_number: this.withdraw.bank_account_number,
-        note: this.withdraw.note
-      }).toPromise();
-      this.infoMsg = 'Withdrawal successful!';
-      this.showWithdraw = false;
-      await this.loadBalance();
-      this.page = 1; await this.loadTransactions();
-    } catch (e: any) {
-      this.errorMsg = e?.message || 'Withdrawal failed';
-    }
-  }
-
-  // Cards
   openAddCard() {
     this.cardForm = { cardholder: '', cardNumber: '', expiry: '', cvv: '', primary: false };
     this.editingCard = null;
     this.showAddCard = true;
   }
 
-  openEditCard(card: Card) {
+  openEditCard(card: any) {
     this.editingCard = card;
     this.cardForm = {
       cardholder: card.card_holder || '',
-      cardNumber: card.card_number || '',
+      cardNumber: this.formatCardNumber(card.card_number || ''),
       expiry: card.expiry_date || '',
       cvv: '',
       primary: !!card.is_default
@@ -234,6 +219,7 @@ export class DigitalWallet implements OnInit {
 
   async saveCard() {
     this.clearMessages();
+    if (!this.isCardFormValid) return;
     try {
       if (this.editingCard) {
         await this.api.updateWalletCard({
@@ -277,5 +263,163 @@ export class DigitalWallet implements OnInit {
     } finally {
       this.deleting = false;
     }
+  }
+
+  async confirmDeposit() {
+    this.clearMessages();
+    if (this.depositAmountNum <= 0) { 
+      this.errorMsg = 'Enter a valid amount'; 
+      return; 
+    }
+    
+    if (this.depositMethod === 'bank') {
+      this.infoMsg = 'Use bank transfer with your wallet account number as reference.';
+      this.showDeposit = false;
+      return;
+    }
+    
+    if (this.depositMethod === 'paystack') {
+      // Show Paystack payment modal
+      this.paystackAmount = this.depositAmountNum;
+      this.userEmail = JSON.parse(localStorage.getItem('currentUser') || '{}').email || '';
+      this.showPaystackPayment = true;
+      this.showDeposit = false;
+      return;
+    }
+    
+    if (!this.deposit.card_id) { 
+      this.errorMsg = 'Select a card'; 
+      return; 
+    }
+    
+    this.depositLoading = true;
+    try {
+      await this.api.makeDeposit({ 
+        amount: this.depositAmountNum, 
+        card_id: Number(this.deposit.card_id) 
+      }).toPromise();
+      this.infoMsg = 'Deposit successful!';
+      this.showDeposit = false;
+      await this.loadBalance();
+      this.page = 1; 
+      await this.loadTransactions();
+    } catch (e: any) {
+      this.errorMsg = e?.message || 'Deposit failed';
+    } finally {
+      this.depositLoading = false;
+    }
+  }
+
+  // Handle Paystack payment success
+  onPaystackSuccess(response: any) {
+    console.log('Payment successful, closing modal and updating balance...');
+    this.showPaystackPayment = false;
+    this.infoMsg = 'Payment successful! Your wallet will be updated shortly.';
+    
+    // Auto-refresh balance and transactions after successful payment
+    setTimeout(async () => {
+      try {
+        await this.loadBalance();
+        this.page = 1;
+        await this.loadTransactions();
+        this.infoMsg = 'Payment processed! Your wallet has been updated.';
+      } catch (error) {
+        console.error('Error refreshing balance:', error);
+        this.errorMsg = 'Payment successful but failed to refresh balance. Please refresh the page.';
+      }
+    }, 2000); // Wait 2 seconds for webhook to process
+  }
+
+  // Handle Paystack payment error
+  onPaystackError(error: string) {
+    console.log('Payment error:', error);
+    this.showPaystackPayment = false;
+    this.errorMsg = error;
+  }
+
+  // Handle Paystack payment cancellation
+  onPaystackCancel() {
+    console.log('Payment cancelled');
+    this.showPaystackPayment = false;
+  }
+
+  // Transfer
+  async confirmTransfer() {
+    this.clearMessages();
+    if (this.transfer.amount <= 0) { 
+      this.errorMsg = 'Enter a valid amount'; 
+      return; 
+    }
+    if (this.transfer.amount > this.walletBalance) { 
+      this.errorMsg = 'Insufficient balance'; 
+      return; 
+    }
+    if (!this.transfer.recipient_account_number) { 
+      this.errorMsg = 'Enter recipient account number'; 
+      return; 
+    }
+    
+    this.transferLoading = true;
+    try {
+      await this.api.makeTransfer({
+        amount: this.transfer.amount,
+        recipient_account_number: this.transfer.recipient_account_number,
+        description: this.transfer.note  // Changed from 'note' to 'description'
+      }).toPromise();
+      this.infoMsg = 'Transfer successful!';
+      this.showTransfer = false;
+      await this.loadBalance();
+      this.page = 1;
+      await this.loadTransactions();
+    } catch (e: any) {
+      this.errorMsg = e?.message || 'Transfer failed';
+    } finally {
+      this.transferLoading = false;
+    }
+  }
+
+  // Withdraw
+  async confirmWithdraw() {
+    this.clearMessages();
+    if (this.withdraw.amount <= 0) { 
+      this.errorMsg = 'Enter a valid amount'; 
+      return; 
+    }
+    if (this.withdraw.amount > this.walletBalance) { 
+      this.errorMsg = 'Insufficient balance'; 
+      return; 
+    }
+    if (!this.withdraw.bank_account_number) { 
+      this.errorMsg = 'Enter bank account number'; 
+      return; 
+    }
+    
+    this.withdrawLoading = true;
+    try {
+      await this.api.withdraw({  // Changed from 'makeWithdrawal' to 'withdraw'
+        amount: this.withdraw.amount,
+        bank_account_number: this.withdraw.bank_account_number,
+        note: this.withdraw.note
+      }).toPromise();
+      this.infoMsg = 'Withdrawal request submitted!';
+      this.showWithdraw = false;
+      await this.loadBalance();
+      this.page = 1;
+      await this.loadTransactions();
+    } catch (e: any) {
+      this.errorMsg = e?.message || 'Withdrawal failed';
+    } finally {
+      this.withdrawLoading = false;
+    }
+  }
+
+  // Refresh after payment (for Paystack)
+  async refreshAfterPayment() {
+    this.clearMessages();
+    this.infoMsg = 'Refreshing balance...';
+    await this.loadBalance();
+    this.page = 1;
+    await this.loadTransactions();
+    this.infoMsg = 'Balance updated!';
   }
 }

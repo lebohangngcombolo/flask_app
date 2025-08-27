@@ -88,11 +88,10 @@ export class UserProfile implements OnInit {
   }
 
   // Data loaders
-  async fetchProfile() {
-    this.clearMessages();
+  async fetchProfile(preserveMessages = false) {
+    if (!preserveMessages) this.clearMessages();
     try {
       const prof = await this.api.getUserProfile().toPromise();
-      // Defensive mapping
       this.userEmail = prof?.email || '';
       this.userDetails = {
         name: prof?.full_name || prof?.name || '',
@@ -142,8 +141,9 @@ export class UserProfile implements OnInit {
         gender: this.userDetails.gender || null,
         employment_status: this.userDetails.employmentStatus || null,
       }).toPromise();
+      await new Promise(res => setTimeout(res, 1000));
       this.infoMsg = 'Profile updated successfully!';
-      await this.fetchProfile();
+      await this.fetchProfile(true);
     } catch (e: any) {
       this.errorMsg = e?.message || 'Failed to update profile.';
     }
@@ -162,6 +162,7 @@ export class UserProfile implements OnInit {
         current_password: currentPassword,
         new_password: newPassword
       }).toPromise();
+      await new Promise(res => setTimeout(res, 1000));
       this.infoMsg = 'Password changed successfully!';
       this.securitySettings.currentPassword = '';
       this.securitySettings.newPassword = '';
@@ -215,6 +216,7 @@ export class UserProfile implements OnInit {
     this.otpSentMessage = '';
     try {
       await this.api.start2FA?.({ method }).toPromise();
+      await new Promise(res => setTimeout(res, 1000));
       this.otpSentMessage = `OTP has been sent to your ${method === 'email' ? 'email' : 'phone'}`;
     } catch (e: any) {
       this.otpSentMessage = 'Failed to send OTP. Please try again.';
@@ -229,6 +231,7 @@ export class UserProfile implements OnInit {
     this.clearMessages();
     try {
       await this.api.verify2FA?.({ otp_code: this.otp }).toPromise();
+      await new Promise(res => setTimeout(res, 1000));
       this.securitySettings.twoFactorEnabled = true;
       this.show2FAModal = false;
       this.otp = '';
@@ -245,6 +248,7 @@ export class UserProfile implements OnInit {
     this.clearMessages();
     try {
       await this.api.disable2FA?.({ password: this.disable2FAPassword }).toPromise();
+      await new Promise(res => setTimeout(res, 1000));
       this.securitySettings.twoFactorEnabled = false;
       this.showDisable2FAModal = false;
       this.disable2FAPassword = '';
@@ -261,6 +265,7 @@ export class UserProfile implements OnInit {
     this.clearMessages();
     try {
       await this.api.logoutAllSessions?.().toPromise();
+      await new Promise(res => setTimeout(res, 1000));
       this.infoMsg = 'Logged out from all other sessions!';
       this.fetchSessions();
     } catch (e: any) {
@@ -275,6 +280,7 @@ export class UserProfile implements OnInit {
     this.clearMessages();
     try {
       await this.api.deleteAccount?.({ password: this.deletePassword }).toPromise();
+      await new Promise(res => setTimeout(res, 1000));
       this.infoMsg = 'Account deleted successfully!';
       localStorage.removeItem('access_token');
       window.location.href = '/';

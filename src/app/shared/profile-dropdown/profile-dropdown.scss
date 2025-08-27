@@ -1,0 +1,64 @@
+// Filter effects
+.filter-vintage {
+  filter: sepia(0.5) hue-rotate(30deg) saturate(1.2);
+}
+
+.filter-grayscale {
+  filter: grayscale(1);
+}
+
+.filter-warm {
+  filter: sepia(0.3) saturate(1.2) brightness(1.1);
+}
+
+.filter-cool {
+  filter: sepia(0.2) saturate(0.8) brightness(0.9) hue-rotate(180deg);
+}
+
+.filter-dramatic {
+  filter: contrast(1.3) saturate(1.2) brightness(0.9);
+}
+
+// Responsive adjustments
+@media (max-width: 640px) {
+  .w-72 {
+    width: 18rem;
+    max-width: calc(100vw - 2rem);
+  }
+  
+  .w-\[480px\] {
+    width: 95vw;
+    max-width: 480px;
+  }
+}
+
+// Dark mode support
+.dark {
+  .bg-white {
+    background-color: #1f2937;
+  }
+  
+  .text-gray-900 {
+    color: #f9fafb;
+  }
+  
+  .text-gray-700 {
+    color: #d1d5db;
+  }
+  
+  .text-gray-500 {
+    color: #9ca3af;
+  }
+  
+  .border-gray-300 {
+    border-color: #4b5563;
+  }
+  
+  .bg-gray-100 {
+    background-color: #374151;
+  }
+  
+  .hover\:bg-gray-200:hover {
+    background-color: #4b5563;
+  }
+}

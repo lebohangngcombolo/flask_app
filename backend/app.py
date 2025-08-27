@@ -97,8 +97,66 @@ import re
 import secrets
 import pyotp
 
+# Paystack configuration
+PAYSTACK_SECRET_KEY = os.getenv("PAYSTACK_SECRET_KEY")
+PAYSTACK_PUBLIC_KEY = os.getenv("PAYSTACK_PUBLIC_KEY")
 
-# Add this right after line 50 (after the imports and before the models)
+# Paystack utility functions
+def verify_webhook_signature(payload, signature):
+    """Verify Paystack webhook signature"""
+    if not PAYSTACK_SECRET_KEY:
+        return False
+    
+    import hmac
+    import hashlib
+    
+    # Create HMAC SHA512 hash
+    computed_signature = hmac.new(
+        PAYSTACK_SECRET_KEY.encode('utf-8'),
+        payload.encode('utf-8'),
+        hashlib.sha512
+    ).hexdigest()
+    
+    return hmac.compare_digest(computed_signature, signature)
+
+def initialize_paystack_payment(email, amount, metadata=None):
+    """Initialize a Paystack payment"""
+    url = "https://api.paystack.co/transaction/initialize"
+    headers = {
+        "Authorization": f"Bearer {PAYSTACK_SECRET_KEY}",
+        "Content-Type": "application/json",
+    }
+    data = {
+        "email": email,
+        "amount": int(amount * 100),  # Paystack expects amount in kobo (smallest currency unit)
+        "currency": "ZAR",
+        "callback_url": "http://localhost:4200/dashboard/wallet",  # Frontend callback URL
+    }
+    if metadata:
+        data["metadata"] = metadata
+
+    try:
+        response = requests.post(url, json=data, headers=headers)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Paystack initialization failed: {str(e)}")
+        raise Exception("Paystack initialization failed")
+
+def verify_paystack_transaction(reference):
+    """Verify a Paystack transaction"""
+    url = f"https://api.paystack.co/transaction/verify/{reference}"
+    headers = {
+        "Authorization": f"Bearer {PAYSTACK_SECRET_KEY}",
+    }
+    
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Paystack verification failed: {str(e)}")
+        raise Exception("Paystack verification failed")
 
 # -------------------- SECURITY DECORATORS --------------------
 def super_admin_required(f):
@@ -3081,6 +3139,183 @@ def make_deposit(current_user):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/wallet/deposit/paystack', methods=['POST'])
+@token_required
+def paystack_deposit(current_user):
+    """Initialize a Paystack deposit"""
+    try:
+        print("🔔 PAYSTACK DEPOSIT INITIALIZATION STARTED")
+        print(f"🔔 Current user: {current_user.id}, Email: {current_user.email}")
+        
+        data = request.get_json()
+        print(f"🔔 Request data: {data}")
+        
+        amount = data.get('amount')
+        print(f"🔔 Amount: {amount}, Type: {type(amount)}")
+        
+        if not amount or amount <= 0:
+            print("❌ Invalid amount")
+            return jsonify({'error': 'Invalid amount'}), 400
+        
+        # Validate amount limits
+        if amount < 1.00:
+            print("❌ Amount too low")
+            return jsonify({'error': 'Minimum deposit amount is R1.00'}), 400
+        if amount > 50000.00:
+            print("❌ Amount too high")
+            return jsonify({'error': 'Maximum deposit amount is R50,000.00'}), 400
+        
+        print("🔔 Amount validation passed")
+        
+        # Check if secret key is set
+        if not PAYSTACK_SECRET_KEY:
+            print("❌ PAYSTACK_SECRET_KEY not set!")
+            return jsonify({'error': 'Paystack configuration error'}), 500
+        
+        print(f" Secret key exists: {PAYSTACK_SECRET_KEY[:10]}...")
+        
+        # Initialize Paystack payment
+        metadata = {
+            "user_id": current_user.id,
+            "purpose": "wallet_deposit",
+            "email": current_user.email
+        }
+        
+        print(f"🔔 Metadata: {metadata}")
+        print(f"🔔 Calling Paystack API...")
+        
+        result = initialize_paystack_payment(
+            email=current_user.email,
+            amount=amount,
+            metadata=metadata
+        )
+        
+        print(f"🔔 Paystack API response: {result}")
+        
+        if not result.get('status'):
+            print(f"❌ Paystack initialization failed: {result.get('message')}")
+            return jsonify({'error': result.get('message', 'Paystack initialization failed')}), 400
+        
+        print("✅ Paystack initialization successful")
+        
+        return jsonify({
+            'authorization_url': result['data']['authorization_url'],
+            'reference': result['data']['reference'],
+            'amount': amount,
+            'currency': 'ZAR'
+        }), 200
+        
+    except Exception as e:
+        print(f"❌ Paystack deposit error: {str(e)}")
+        logger.error(f"Paystack deposit error: {str(e)}")
+        return jsonify({'error': 'Failed to initialize Paystack payment'}), 500
+
+@app.route('/api/webhooks/paystack', methods=['POST'])
+def paystack_webhook():
+    """Handle Paystack webhook notifications"""
+    try:
+        print("🔔 PAYSTACK WEBHOOK RECEIVED!")
+        print(f"🔔 Headers: {dict(request.headers)}")
+        
+        data = request.get_json()
+        print(f"🔔 Webhook data: {data}")
+        
+        if not data:
+            print("❌ No data received")
+            return jsonify({'error': 'No data received'}), 400
+        
+        # Verify webhook signature (optional but recommended)
+        signature = request.headers.get('X-Paystack-Signature')
+        print(f"🔔 Signature: {signature}")
+        
+        if signature and not verify_webhook_signature(request.get_data(as_text=True), signature):
+            print("❌ Invalid signature")
+            logger.warning(f"Invalid webhook signature: {signature}")
+            return jsonify({'error': 'Invalid signature'}), 401
+        
+        event = data.get('event')
+        print(f"🔔 Event: {event}")
+        
+        if event != 'charge.success':
+            print(f"❌ Ignoring event: {event}")
+            return jsonify({'status': 'ignored', 'message': f'Event {event} not handled'}), 200
+        
+        event_data = data.get('data', {})
+        reference = event_data.get('reference')
+        amount = event_data.get('amount', 0) / 100  # Convert from kobo to ZAR
+        metadata = event_data.get('metadata', {})
+        
+        print(f"🔔 Reference: {reference}")
+        print(f"🔔 Amount: {amount}")
+        print(f"🔔 Metadata: {metadata}")
+        
+        if not reference:
+            print("❌ No reference found")
+            return jsonify({'error': 'No reference found'}), 400
+        
+        # Check if transaction already processed
+        existing_transaction = Transaction.query.filter_by(reference=reference).first()
+        if existing_transaction:
+            print("✅ Transaction already processed")
+            return jsonify({'status': 'success', 'message': 'Transaction already processed'}), 200
+        
+        user_id = metadata.get('user_id')
+        purpose = metadata.get('purpose')
+        
+        print(f"🔔 User ID: {user_id}")
+        print(f"🔔 Purpose: {purpose}")
+        
+        if not user_id or purpose != 'wallet_deposit':
+            print("❌ Invalid metadata")
+            return jsonify({'error': 'Invalid metadata'}), 400
+        
+        # Get user and wallet
+        user = User.query.get(user_id)
+        if not user:
+            print(f"❌ User not found: {user_id}")
+            return jsonify({'error': 'User not found'}), 404
+        
+        wallet = get_or_create_wallet(user_id)
+        print(f"🔔 Wallet balance before: {wallet.balance}")
+        
+        # Credit the wallet
+        wallet.balance += amount
+        print(f"🔔 Wallet balance after: {wallet.balance}")
+        
+        # Create transaction record
+        transaction = Transaction(
+            user_id=user_id,
+            transaction_type='deposit',
+            amount=amount,
+            fee=0.00,
+            net_amount=amount,
+            status='completed',
+            reference=reference,
+            description=f'Paystack deposit - {reference}',
+            completed_at=datetime.utcnow(),
+            payment_method='paystack'
+        )
+        
+        db.session.add(transaction)
+        db.session.commit()
+        
+        print("✅ Webhook processed successfully!")
+        logger.info(f"Paystack webhook processed: User {user_id}, Amount {amount}, Reference {reference}")
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Payment processed successfully',
+            'user_id': user_id,
+            'amount': amount,
+            'reference': reference
+        }), 200
+        
+    except Exception as e:
+        print(f"❌ Webhook error: {str(e)}")
+        logger.error(f"Paystack webhook error: {str(e)}")
+        db.session.rollback()
+        return jsonify({'error': 'Webhook processing failed'}), 500
+
 @app.route('/api/wallet/transfer', methods=['POST'])
 @token_required
 def make_transfer(current_user):
@@ -5221,7 +5456,7 @@ def audit_log(action, resource_type=None, resource_id=None):
         return decorated_function
     return decorator
 
-# Add these endpoints after the existing ones
+# Add these endpoints after line 4119 (after the get_all_contributions function)
 
 @app.route('/api/admin/roles/<int:role_id>', methods=['PUT'])
 @role_required(['admin', 'super_admin'])

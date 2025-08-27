@@ -119,6 +119,16 @@ export class ApiService {
       .pipe(catchError(this.handleError));
   }
 
+  requestPasswordReset(data: { email: string }): Observable<any> {
+    return this.http.post(`${this.baseUrl}/auth/forgot-password`, data)
+      .pipe(catchError(this.handleError));
+  }
+
+  resetPassword(email: string): Observable<any> {
+    return this.http.post(`${this.baseUrl}/auth/reset-password`, { email })
+      .pipe(catchError(this.handleError));
+  }
+
   // User endpoints
   getUserProfile(): Observable<any> {
     return this.http.get(`${this.baseUrl}/user/profile`, { headers: this.getAuthHeaders() })
@@ -135,22 +145,28 @@ export class ApiService {
   }
 
   changePassword(data: { current_password: string; new_password: string }): Observable<any> {
-    return this.http.put(`${this.baseUrl}/user/change-password`, data, { headers: this.getAuthHeaders() })
+    return this.http.put(`${this.baseUrl}/user/security/password`, data, { headers: this.getAuthHeaders() })
       .pipe(catchError(this.handleError));
   }
 
   start2FA(data: { method: 'email' | 'sms' }): Observable<any> {
-    return this.http.post(`${this.baseUrl}/user/2fa/start`, data, { headers: this.getAuthHeaders() })
+    return this.http.post(`${this.baseUrl}/user/security/2fa/start`, data, { headers: this.getAuthHeaders() })
       .pipe(catchError(this.handleError));
   }
 
   verify2FA(data: { otp_code: string }): Observable<any> {
-    return this.http.post(`${this.baseUrl}/user/2fa/verify`, data, { headers: this.getAuthHeaders() })
+    return this.http.post(`${this.baseUrl}/user/security/2fa/verify`, data, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+
+  // 2FA login verification
+  verify2FALogin(data: { user_id: string; otp_code: string }): Observable<any> {
+    return this.http.post(`${this.baseUrl}/auth/verify-2fa-login`, data)
       .pipe(catchError(this.handleError));
   }
 
   disable2FA(data: { password: string }): Observable<any> {
-    return this.http.post(`${this.baseUrl}/user/2fa/disable`, data, { headers: this.getAuthHeaders() })
+    return this.http.post(`${this.baseUrl}/user/security/2fa/disable`, data, { headers: this.getAuthHeaders() })
       .pipe(catchError(this.handleError));
   }
 
@@ -161,18 +177,18 @@ export class ApiService {
   }
 
   logoutAllSessions(): Observable<any> {
-    return this.http.post(`${this.baseUrl}/user/sessions/logout-all`, {}, { headers: this.getAuthHeaders() })
+    return this.http.post(`${this.baseUrl}/user/sessions/logout_all`, {}, { headers: this.getAuthHeaders() })
       .pipe(catchError(this.handleError));
   }
 
   // Communication settings
   getCommunicationSettings(): Observable<any> {
-    return this.http.get(`${this.baseUrl}/user/communication-settings`, { headers: this.getAuthHeaders() })
+    return this.http.get(`${this.baseUrl}/user/communication`, { headers: this.getAuthHeaders() })
       .pipe(catchError(this.handleError));
   }
 
   updateCommunicationSettings(data: any): Observable<any> {
-    return this.http.put(`${this.baseUrl}/user/communication-settings`, data, { headers: this.getAuthHeaders() })
+    return this.http.put(`${this.baseUrl}/user/communication`, data, { headers: this.getAuthHeaders() })
       .pipe(catchError(this.handleError));
   }
 
@@ -241,6 +257,14 @@ export class ApiService {
   makeDeposit(data: { amount: number; card_id: number }): Observable<any> {
     return this.http.post<any>(`${this.baseUrl}/wallet/deposit`, data, { headers: this.getAuthHeaders() })
       .pipe(catchError(this.handleError));
+  }
+
+  paystackInitializeDeposit(amount: number): Observable<{ authorization_url: string; reference: string; amount: number; currency: string }> {
+    return this.http.post<{ authorization_url: string; reference: string; amount: number; currency: string }>(
+      `${this.baseUrl}/wallet/deposit/paystack`,
+      { amount },
+      { headers: this.getAuthHeaders() }
+    ).pipe(catchError(this.handleError));
   }
   makeTransfer(data: { amount: number; recipient_account_number: string; description?: string }): Observable<any> {
     return this.http.post<any>(`${this.baseUrl}/wallet/transfer`, data, { headers: this.getAuthHeaders() })
@@ -342,4 +366,98 @@ export class ApiService {
     return this.http.post(`${this.baseUrl}/user/points/redeem`, { reward_key: reward.key }, { headers: this.getAuthHeaders() })
       .pipe(catchError(this.handleError));
   }
+
+  // --- i-Deals (My Offers)
+  getMyOffers(): Observable<any[]> {
+    return this.http.get<any[]>(`${this.baseUrl}/market/my-offers`, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+  saveMyOffer(data: { offer_id: number }): Observable<any> {
+    return this.http.post(`${this.baseUrl}/market/my-offers`, data, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+  removeMyOffer(id: number): Observable<any> {
+    return this.http.delete(`${this.baseUrl}/market/my-offers/${id}`, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+
+  // --- Partner Portal (manage listings)
+  listPartnerOffers(): Observable<any[]> {
+    return this.http.get<any[]>(`${this.baseUrl}/partner/offers`, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+  createPartnerOffer(data: {
+    title: string; description: string; provider?: string; tags?: string[];
+    verified?: boolean; buttonText?: string; buttonLink?: string;
+  }): Observable<any> {
+    return this.http.post(`${this.baseUrl}/partner/offers`, data, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+  updatePartnerOffer(id: number, data: {
+    title: string; description: string; provider?: string; tags?: string[];
+    verified?: boolean; buttonText?: string; buttonLink?: string;
+  }): Observable<any> {
+    return this.http.put(`${this.baseUrl}/partner/offers/${id}`, data, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+  deletePartnerOffer(id: number): Observable<any> {
+    return this.http.delete(`${this.baseUrl}/partner/offers/${id}`, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+
+  // Marketplace
+  getMarketplaceOffers(): Observable<any[]> {
+    return this.http.get<any[]>(`${this.baseUrl}/market/offers`, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+
+  getMarketTransactions(): Observable<any[]> {
+    return this.http.get<any[]>(`${this.baseUrl}/market/transactions`, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+
+  marketPurchase(data: {
+    item_type: 'airtime'|'data'|'electricity'|'voucher';
+    provider: string;
+    amount: number;
+    payment_method: 'wallet'|'card';
+    card_id?: string;
+    phone_number?: string;
+    meter_number?: string;
+  }): Observable<any> {
+    return this.http.post(`${this.baseUrl}/market/purchase`, data, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+
+  // Add these methods to your ApiService class
+  getGroup(groupId: string): Observable<any> {
+    return this.http.get<any>(`${this.baseUrl}/api/admin/groups/${groupId}`, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+
+  getGroupMembers(groupId: string): Observable<any[]> {
+    return this.http.get<any[]>(`${this.baseUrl}/api/admin/groups/${groupId}/members`, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+
+  contributeToGroup(groupId: number, payload: any): Observable<any> {
+    return this.http.post(`${this.baseUrl}/api/groups/${groupId}/contribute`, payload, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+
+  // Add this method to your ApiService class
+  getCards(): Observable<any[]> {
+    return this.http.get<any[]>(`${this.baseUrl}/user/cards`, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+
+  // Profile picture upload
+  uploadProfilePicture(file: File): Observable<any> {
+    const formData = new FormData();
+    formData.append('file', file);
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${localStorage.getItem('access_token')}` });
+    return this.http.post(`${this.baseUrl}/user/profile-picture`, formData, { headers })
+      .pipe(catchError(this.handleError));
+  }
 }
+

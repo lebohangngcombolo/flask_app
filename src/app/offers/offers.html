@@ -1,0 +1,97 @@
+<div class="flex-1 p-4">
+	<div class="flex justify-center mb-6">
+		<h1 class="text-2xl md:text-3xl font-bold text-gray-900">iStokvel Deals</h1>
+	</div>
+
+	<div class="border-b border-gray-200 mb-6">
+		<nav class="flex justify-center space-x-8" aria-label="Tabs">
+			<button
+				(click)="setTab('marketplace')"
+				role="tab"
+				[attr.aria-selected]="activeTab==='marketplace'"
+				class="whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm transition-colors"
+				[class.border-blue-600]="activeTab==='marketplace'"
+				[class.text-blue-600]="activeTab==='marketplace'"
+				[class.border-transparent]="activeTab!=='marketplace'"
+				[class.text-gray-500]="activeTab!=='marketplace'"
+			>
+				<span class="inline-block w-4 h-4 mr-2 align-middle">📦</span>
+				Marketplace
+			</button>
+			<button
+				(click)="setTab('my-offers')"
+				role="tab"
+				[attr.aria-selected]="activeTab==='my-offers'"
+				class="whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm transition-colors"
+				[class.border-blue-600]="activeTab==='my-offers'"
+				[class.text-blue-600]="activeTab==='my-offers'"
+				[class.border-transparent]="activeTab!=='my-offers'"
+				[class.text-gray-500]="activeTab!=='my-offers'"
+			>
+				<span class="inline-block w-4 h-4 mr-2 align-middle">❤️</span>
+				i-Deals
+			</button>
+			<button
+				(click)="setTab('partner-portal')"
+				class="whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm transition-colors"
+				[class.border-blue-600]="activeTab==='partner-portal'"
+				[class.text-blue-600]="activeTab==='partner-portal'"
+				[class.border-transparent]="activeTab!=='partner-portal'"
+				[class.text-gray-500]="activeTab!=='partner-portal'"
+			>
+				<span class="inline-block w-4 h-4 mr-2 align-middle">👥</span>
+				Partner Portal
+			</button>
+		</nav>
+	</div>
+
+	<div class="w-full flex justify-center mb-6">
+		<div class="w-full max-w-3xl flex items-center space-x-4">
+			<button
+				class="flex-1 flex items-center justify-center space-x-2 px-4 py-3 bg-white border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors duration-200"
+			>
+				<span>Search Offers</span>
+			</button>
+			<button
+				class="flex items-center justify-center space-x-2 px-4 py-3 bg-white border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors duration-200"
+			>
+				<span class="h-5 w-5">⚙️</span>
+				<span>Filter</span>
+			</button>
+		</div>
+	</div>
+
+	<div *ngIf="loading" class="p-6 text-center text-gray-500">Loading Marketplace...</div>
+
+	<div *ngIf="!loading" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+		<div *ngFor="let offer of offers" class="bg-white p-4 rounded-lg shadow-md border border-gray-200 flex flex-col justify-between">
+			<div>
+				<h3 class="text-lg font-semibold text-gray-900 mb-2">{{ offer.title }}</h3>
+				<p *ngIf="offer.provider" class="text-sm text-gray-600 mb-1">{{ offer.provider }}</p>
+				<span *ngIf="offer.verified" class="inline-flex items-center rounded-md bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-600/20 mb-2">
+					<span class="-ml-0.5 mr-1.5">✔</span>
+					Verified
+				</span>
+				<p class="text-gray-700 text-sm whitespace-pre-line">{{ offer.description }}</p>
+			</div>
+			<div class="mt-4">
+				<div *ngIf="offer.tags?.length" class="flex space-x-2 mb-3">
+					<span *ngFor="let tag of offer.tags" class="inline-block bg-gray-100 rounded-full px-3 py-1 text-xs font-semibold text-gray-700">
+						{{ tag }}
+					</span>
+				</div>
+				<!-- Always show Apply button -->
+				<button
+					(click)="apply(offer)"
+					class="w-full px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors duration-200"
+				>
+					{{ offer.buttonText || 'Apply' }}
+				</button>
+			</div>
+		</div>
+	</div>
+
+	<app-marketplace-purchase *ngIf="activeTab==='marketplace'"></app-marketplace-purchase>
+	<app-i-deals *ngIf="activeTab==='my-offers'"></app-i-deals>
+	<app-partner-portal *ngIf="activeTab==='partner-portal'"></app-partner-portal>
+</div>

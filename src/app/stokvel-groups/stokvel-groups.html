@@ -58,7 +58,8 @@
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
         <div
           *ngFor="let tier of categoryTiers[selectedCategory]"
-          class="flex flex-col items-center bg-white rounded-2xl shadow-lg border border-gray-100 p-4 sm:p-7 min-h-[320px] sm:min-h-[360px] w-full hover:shadow-2xl transition-all"
+          class="flex flex-col items-center bg-white rounded-2xl shadow-lg border border-gray-100 p-4 sm:p-7 min-h-[320px] sm:min-h-[360px] w-full hover:shadow-2xl transition-all cursor-pointer"
+          (click)="viewGroupDetails(getGroupId(selectedCategory, tier.name))"
         >
           <div
             class="w-12 h-12 sm:w-16 sm:h-16 rounded-full flex items-center justify-center text-2xl sm:text-3xl font-bold mb-3 sm:mb-4 shadow"
@@ -97,7 +98,7 @@
           <div class="mt-4 sm:mt-5 flex flex-col items-center w-full">
             <button
               class="bg-blue-600 text-white px-3 sm:px-4 py-2 rounded-lg shadow hover:bg-blue-700 transition text-xs sm:text-sm w-full font-semibold"
-              (click)="openTierModal(tier)"
+              (click)="$event.stopPropagation(); openTierModal(tier)"
             >
               Join Group
             </button>
@@ -182,6 +183,8 @@
             <tr
               *ngFor="let req of joinRequests; let i = index"
               [ngClass]="i % 2 === 0 ? 'bg-gray-50' : ''"
+              class="cursor-pointer hover:bg-blue-50 transition-colors"
+              (click)="viewGroupDetails(req.groupId)"
             >
               <td class="px-3 sm:px-6 py-3 sm:py-4 font-semibold text-xs sm:text-sm">{{ req.groupName }}</td>
               <td class="px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm">{{ req.tier }}</td>

@@ -1,0 +1,41 @@
+<div class="max-w-6xl mx-auto px-6 py-10">
+  <h1 class="text-2xl font-bold mb-6">Partner Retailers</h1>
+  
+  <div class="flex space-x-4 mb-8">
+    <button
+      *ngFor="let cat of categories"
+      (click)="selectCategory(cat)"
+      class="px-4 py-2 rounded-full border"
+      [class.bg-blue-600]="selectedCategory === cat"
+      [class.text-white]="selectedCategory === cat"
+      [class.bg-gray-100]="selectedCategory !== cat"
+      [class.text-gray-700]="selectedCategory !== cat"
+    >
+      {{ cat }}
+    </button>
+  </div>
+  
+  <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-8">
+    <div 
+      *ngFor="let partner of filteredPartners" 
+      class="bg-white rounded-xl shadow p-6 flex flex-col items-center"
+    >
+      <img
+        [src]="partner.logo"
+        [alt]="partner.name"
+        class="w-20 h-20 object-contain mb-4"
+        (error)="onImageError($event)"
+      />
+      <h2 class="text-lg font-bold mb-2">{{ partner.name }}</h2>
+      <p class="text-gray-600 mb-4 text-center">{{ partner.reward }}</p>
+      <a
+        [href]="partner.link"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="mt-auto px-6 py-2 bg-blue-600 text-white rounded-lg font-semibold"
+      >
+        Shop Now
+      </a>
+    </div>
+  </div>
+</div>

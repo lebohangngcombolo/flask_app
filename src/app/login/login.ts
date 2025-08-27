@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
 import { GoogleLoginButtonComponent } from '../google-login-button/google-login-button';
 import { AuthService } from '../auth';
-import { environment } from '../../environments/environment';
+import { ApiService } from '../api';
 
 @Component({
   selector: 'app-login',
@@ -33,7 +33,8 @@ export class LoginComponent implements OnInit {
 
   constructor(
     private router: Router,
-    private authService: AuthService
+    private authService: AuthService,
+    private api: ApiService
   ) {}
 
   ngOnInit() {
@@ -78,18 +79,7 @@ export class LoginComponent implements OnInit {
   }
 
   async login(email: string, password: string) {
-    // Replace this with your actual login API call
-    const response = await fetch(`${environment.apiUrl}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-    
-    if (!response.ok) {
-      throw new Error('Login failed');
-    }
-    
-    return await response.json();
+    return await this.authService.login(email, password);
   }
 
   handleBackToHome() {
@@ -99,16 +89,10 @@ export class LoginComponent implements OnInit {
   async handleVerify2FALogin() {
     this.isVerifying = true;
     try {
-      const response = await fetch(`${environment.apiUrl}/auth/verify-2fa-login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_id: this.twoFAUserId,
-          otp_code: this.otp,
-        }),
-      });
-      
-      const data = await response.json();
+      const data = await this.api.verify2FALogin({
+        user_id: String(this.twoFAUserId || ''),
+        otp_code: this.otp,
+      }).toPromise();
       localStorage.setItem('access_token', data.access_token);
       this.show2FALogin = false;
       this.router.navigate(['/dashboard']);

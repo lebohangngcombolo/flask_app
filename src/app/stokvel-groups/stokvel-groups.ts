@@ -46,6 +46,7 @@ export class StokvelGroupsComponent implements OnInit {
   openTier: { name: string; category: string } | null = null;
   selectedAmount: number | null = null;
   confirming = false;
+  availableGroups: any[] = [];
 
   tierDetails: Record<string, Record<string, TierDetails>> = {
     Savings: {
@@ -198,8 +199,8 @@ export class StokvelGroupsComponent implements OnInit {
   };
 
   constructor(
-    private api: ApiService,
-    private router: Router
+    private router: Router,
+    private apiService: ApiService
   ) {}
 
   async ngOnInit() {
@@ -217,11 +218,14 @@ export class StokvelGroupsComponent implements OnInit {
 
   private async fetchGroups() {
     try {
-      const groups = await firstValueFrom(this.api.getAvailableGroups());
+      const groups = await firstValueFrom(this.apiService.getAvailableGroups());
       const uniqueCategories = [...new Set(groups.map((group: any) => group.category))];
       if (uniqueCategories.length > 0 && !this.activeCategory) {
         this.activeCategory = String(uniqueCategories[0]);
       }
+      
+      // Store the actual groups for navigation
+      this.availableGroups = groups;
     } catch (error) {
       console.error('Failed to load groups:', error);
     }
@@ -229,7 +233,7 @@ export class StokvelGroupsComponent implements OnInit {
 
   private async fetchRequests() {
     try {
-      const data = await firstValueFrom(this.api.getUserJoinRequests());
+      const data = await firstValueFrom(this.apiService.getUserJoinRequests());
       this.joinRequests = data.map((req: any) => ({
         groupId: req.group_id,
         groupName: req.group_name,
@@ -273,7 +277,7 @@ export class StokvelGroupsComponent implements OnInit {
     if (!this.openTier || !this.selectedAmount) return;
     this.confirming = true;
     try {
-      await firstValueFrom(this.api.joinGroup({
+      await firstValueFrom(this.apiService.joinGroup({
         category: this.openTier.category,
         tier: this.openTier.name,
         amount: this.selectedAmount,
@@ -300,7 +304,12 @@ export class StokvelGroupsComponent implements OnInit {
   }
 
   goToMyGroups() {
-    this.router.navigate(['/dashboard/groups']);
+    this.router.navigate(['/dashboard/my-groups']);
+  }
+
+  // Add this method to navigate to group details
+  viewGroupDetails(groupId: number) {
+    this.router.navigate(['/dashboard/groups', groupId]);
   }
 
   getTierIcon(tierName: string): string {
@@ -329,5 +338,13 @@ export class StokvelGroupsComponent implements OnInit {
       case 'rejected': return '✗';
       default: return '•';
     }
+  }
+
+  getGroupId(category: string, tier: string): number {
+    // Find the actual group that matches category and tier
+    const group = this.availableGroups.find(g => 
+      g.category === category && g.tier === tier
+    );
+    return group ? group.id : 1; // Return actual group ID or fallback
   }
 }
