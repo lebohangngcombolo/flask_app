@@ -1,0 +1,38 @@
+<aside class="bg-[#23295A] min-h-screen flex flex-col py-6 px-2 transition-all duration-300 ease-in-out h-full"
+       [ngClass]="isCollapsed ? 'w-16' : 'w-64'">
+  <nav class="flex-1 space-y-2">
+    <div *ngFor="let item of navItems" class="nav-item">
+      <button
+        class="flex items-center w-full gap-3 px-4 py-2 rounded-lg transition"
+        [ngClass]="{
+          'bg-[#3B4CCA] text-white font-semibold shadow': isActive(item.path) || isSubItemActive(item),
+          'text-white': !isActive(item.path) && !isSubItemActive(item)
+        }"
+        (click)="item.subItems ? toggleMenu(item.name) : null"
+        [title]="item.tooltip"
+        [routerLink]="item.subItems ? null : item.path"
+        routerLinkActive="active"
+      >
+        <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" [attr.d]="item.icon"></path>
+        </svg>
+        <span *ngIf="!isCollapsed">{{ item.name }}</span>
+        <svg *ngIf="item.subItems && !isCollapsed" class="w-4 h-4 ml-auto flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path *ngIf="openMenus[item.name]" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+          <path *ngIf="!openMenus[item.name]" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+        </svg>
+      </button>
+      
+      <div *ngIf="item.subItems && openMenus[item.name] && !isCollapsed" class="ml-8 mt-1 space-y-1">
+        <a
+          *ngFor="let sub of item.subItems"
+          [routerLink]="sub.path"
+          routerLinkActive="active"
+          class="block px-4 py-2 rounded-lg transition text-white hover:bg-[#3B4CCA] hover:bg-opacity-50"
+        >
+          {{ sub.label }}
+        </a>
+      </div>
+    </div>
+  </nav>
+</aside>

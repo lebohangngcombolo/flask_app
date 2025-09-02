@@ -1911,6 +1911,7 @@ def chat():
 
     try:
         api_key = os.getenv('OPENROUTER_API_KEY')
+        print(f"DEBUG: API Key exists: {bool(api_key)}")
         if not api_key:
             return jsonify({'error': 'OpenRouter API key not set'}), 500
 
@@ -5758,6 +5759,135 @@ def get_user_referrals(current_user):
             "points": 20 if r.status == 'completed' and current_user.valid_referrals == 1 else (30 if r.status == 'completed' else 0)
         })
     return jsonify(result)
+
+  
+
+# Add these missing admin endpoints before the if __name__ == '__main__': line
+
+@app.route('/api/admin/todo', methods=['GET'])
+@token_required
+def get_admin_todo(current_user):
+    """Get admin todo items"""
+    try:
+        # Count pending KYC submissions
+        pending_kyc = KYCVerification.query.filter_by(status='pending').count()
+        
+        # Count overdue payouts (withdrawals pending for more than 24 hours)
+        overdue_payouts = WithdrawalRequest.query.filter(
+            WithdrawalRequest.status == 'pending',
+            WithdrawalRequest.created_at < datetime.utcnow() - timedelta(hours=24)
+        ).count()
+        
+        # Count flagged groups (groups with issues)
+        flagged_groups = StokvelGroup.query.filter_by(status='flagged').count()
+        
+        return jsonify({
+            'pendingKYC': pending_kyc,
+            'overduePayouts': overdue_payouts,
+            'flaggedGroups': flagged_groups
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/activity', methods=['GET'])
+@token_required
+def get_admin_activity(current_user):
+    """Get recent admin activity"""
+    try:
+        # Get recent user registrations
+        recent_users = User.query.order_by(User.created_at.desc()).limit(5).all()
+        
+        # Get recent transactions
+        recent_transactions = Transaction.query.order_by(Transaction.created_at.desc()).limit(5).all()
+        
+        # Get recent group activities
+        recent_groups = StokvelGroup.query.order_by(StokvelGroup.created_at.desc()).limit(5).all()
+        
+        activity_items = []
+        
+        # Add user registrations
+        for user in recent_users:
+            activity_items.append({
+                'id': f'user_{user.id}',
+                'type': 'user_registration',
+                'title': f'New user registered: {user.full_name}',
+                'description': f'User {user.email} joined the platform',
+                'timestamp': user.created_at.isoformat(),
+                'icon': '👤',
+                'status': 'completed'
+            })
+        
+        # Add transactions
+        for transaction in recent_transactions:
+            activity_items.append({
+                'id': f'transaction_{transaction.id}',
+                'type': 'transaction',
+                'title': f'Transaction: {transaction.transaction_type}',
+                'description': f'Amount: R{transaction.amount:.2f}',
+                'timestamp': transaction.created_at.isoformat(),
+                'icon': '💰',
+                'status': transaction.status
+            })
+        
+        # Add group activities
+        for group in recent_groups:
+            activity_items.append({
+                'id': f'group_{group.id}',
+                'type': 'group_created',
+                'title': f'New group created: {group.name}',
+                'description': f'Category: {group.category}, Tier: {group.tier}',
+                'timestamp': group.created_at.isoformat(),
+                'icon': '👥',
+                'status': group.status
+            })
+        
+        # Sort by timestamp (most recent first)
+        activity_items.sort(key=lambda x: x['timestamp'], reverse=True)
+        
+        return jsonify(activity_items[:10]), 200  # Return top 10 activities
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/announcements', methods=['GET'])
+@token_required
+def get_admin_announcements(current_user):
+    """Get admin announcements"""
+    try:
+        # For now, return some sample announcements
+        # In a real app, you'd have an Announcements model
+        announcements = [
+            {
+                'id': 1,
+                'title': 'System Maintenance',
+                'content': 'Scheduled maintenance on Sunday, 2:00 AM - 4:00 AM',
+                'type': 'maintenance',
+                'priority': 'medium',
+                'created_at': (datetime.utcnow() - timedelta(hours=2)).isoformat(),
+                'expires_at': (datetime.utcnow() + timedelta(days=1)).isoformat()
+            },
+            {
+                'id': 2,
+                'title': 'New Feature: Enhanced KYC',
+                'content': 'We\'ve improved our KYC verification process for better security',
+                'type': 'feature',
+                'priority': 'low',
+                'created_at': (datetime.utcnow() - timedelta(days=1)).isoformat(),
+                'expires_at': (datetime.utcnow() + timedelta(days=7)).isoformat()
+            },
+            {
+                'id': 3,
+                'title': 'Security Update',
+                'content': 'Important security updates have been applied to protect user data',
+                'type': 'security',
+                'priority': 'high',
+                'created_at': (datetime.utcnow() - timedelta(days=2)).isoformat(),
+                'expires_at': (datetime.utcnow() + timedelta(days=30)).isoformat()
+            }
+        ]
+        
+        return jsonify(announcements), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
      # -------------------- MAIN --------------------
 if __name__ == '__main__':

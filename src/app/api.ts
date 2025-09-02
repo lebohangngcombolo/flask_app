@@ -10,6 +10,10 @@ export interface User {
   email: string;
   phone_number: string;
   name?: string;
+  role?: string; // Add role property
+  profile_picture?: string;
+  is_verified?: boolean;
+  two_factor_enabled?: boolean;
 }
 
 export interface UserStats {
@@ -219,9 +223,9 @@ export class ApiService {
       .pipe(catchError(this.handleError));
   }
 
-  // Chat
+  // Chat - Remove authentication headers since the endpoint doesn't require auth
   sendChatMessage(message: string): Observable<any> {
-    return this.http.post(`${this.baseUrl}/chat`, { message }, { headers: this.getAuthHeaders() })
+    return this.http.post(`${this.baseUrl}/chat`, { message })
       .pipe(catchError(this.handleError));
   }
 
@@ -457,6 +461,27 @@ export class ApiService {
     formData.append('file', file);
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${localStorage.getItem('access_token')}` });
     return this.http.post(`${this.baseUrl}/user/profile-picture`, formData, { headers })
+      .pipe(catchError(this.handleError));
+  }
+
+  // Admin API methods
+  getAdminStats(): Observable<any> {
+    return this.http.get(`${this.baseUrl}/admin/stats`, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+
+  getAdminTodo(): Observable<any> {
+    return this.http.get(`${this.baseUrl}/admin/todo`, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+
+  getAdminActivity(): Observable<any[]> {
+    return this.http.get<any[]>(`${this.baseUrl}/admin/activity`, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+
+  getAdminAnnouncements(): Observable<any[]> {
+    return this.http.get<any[]>(`${this.baseUrl}/admin/announcements`, { headers: this.getAuthHeaders() })
       .pipe(catchError(this.handleError));
   }
 }

@@ -20,7 +20,7 @@
   </button>
 
   <!-- Chat Window -->
-  <div *ngIf="isOpen" class="absolute bottom-16 right-0 w-80 sm:w-96 bg-white rounded-lg shadow-xl flex flex-col">
+  <div *ngIf="isOpen" class="absolute bottom-16 right-0 w-80 sm:w-96 bg-white rounded-lg shadow-xl flex flex-col max-h-[80vh]">
     <!-- Chat Header -->
     <div class="bg-blue-600 text-white p-4 rounded-t-lg flex items-center justify-between gap-3">
       <div class="flex items-center gap-3">
@@ -42,7 +42,11 @@
     </div>
 
     <!-- Chat Messages -->
-    <div class="flex-1 max-h-[60vh] overflow-y-auto p-4 space-y-4">
+    <div 
+      #messagesContainer
+      class="flex-1 overflow-y-auto p-4 space-y-4"
+      style="max-height: calc(80vh - 140px);"
+    >
       <div
         *ngFor="let message of messages; let i = index"
         class="flex"
@@ -57,7 +61,7 @@
             class="w-6 h-6 rounded-full mr-2 bg-white border"
           />
           <div
-            class="max-w-[80%] rounded-lg p-3"
+            class="max-w-[80%] rounded-lg p-3 break-words"
             [class.bg-blue-600]="message.isUser"
             [class.text-white]="message.isUser"
             [class.bg-gray-100]="!message.isUser"
@@ -66,6 +70,24 @@
             {{ message.text }}
           </div>
           <div *ngIf="message.isUser" class="w-6 h-6 ml-2"></div>
+        </div>
+      </div>
+      
+      <!-- Loading Indicator -->
+      <div *ngIf="isLoading" class="flex justify-start">
+        <div class="flex items-end">
+          <img
+            [src]="botIconUrl"
+            alt="Bot"
+            class="w-6 h-6 rounded-full mr-2 bg-white border"
+          />
+          <div class="bg-gray-100 text-gray-800 rounded-lg p-3">
+            <div class="flex space-x-1">
+              <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+              <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.1s"></div>
+              <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -79,10 +101,12 @@
           (keypress)="onKeyPress($event)"
           placeholder="Type your message..."
           class="flex-1 border rounded-lg px-4 py-2 focus:outline-none focus:border-blue-500"
+          [disabled]="isLoading"
         />
         <button
           (click)="handleSendMessage()"
-          class="bg-blue-600 text-white rounded-lg px-4 py-2 hover:bg-blue-700 transition-colors duration-200"
+          class="bg-blue-600 text-white rounded-lg px-4 py-2 hover:bg-blue-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+          [disabled]="!inputMessage.trim() || isLoading"
         >
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />

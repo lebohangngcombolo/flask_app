@@ -6,13 +6,14 @@ import { AuthService } from '../auth';
 import { Router } from '@angular/router';
 import { BaseChartDirective } from 'ng2-charts';
 import { ChartConfiguration } from 'chart.js';
+import { ChatbotComponent } from '../chatbot/chatbot';
 
 @Component({
   selector: 'app-dashboard',
   templateUrl: './dashboard.html',
   styleUrls: ['./dashboard.scss'],
   standalone: true,
-  imports: [CommonModule, FormsModule, BaseChartDirective]
+  imports: [CommonModule, FormsModule, BaseChartDirective, ChatbotComponent]
 })
 export class DashboardComponent implements OnInit {
   currentUser: User | null = null;

@@ -63,9 +63,21 @@ export class LoginComponent implements OnInit {
       console.log('Login result:', result);
       
       if (result.success) {
-        console.log('Login successful, redirecting to dashboard');
+        console.log('Login successful, checking user role...');
         this.loading = false;
-        this.router.navigate(['/dashboard']);
+        
+        // Get the current user from localStorage
+        const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
+        console.log('Current user:', currentUser);
+        
+        // Check user role and redirect accordingly
+        if (currentUser.role === 'admin') {
+          console.log('Admin user detected, redirecting to admin dashboard');
+          this.router.navigate(['/admin']);
+        } else {
+          console.log('Regular user detected, redirecting to user dashboard');
+          this.router.navigate(['/dashboard']);
+        }
       } else {
         console.error('Login failed:', result.message);
         this.error = result.message || 'Login failed';
@@ -95,7 +107,14 @@ export class LoginComponent implements OnInit {
       }).toPromise();
       localStorage.setItem('access_token', data.access_token);
       this.show2FALogin = false;
-      this.router.navigate(['/dashboard']);
+      
+      // Check user role for 2FA login as well
+      const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
+      if (currentUser.role === 'admin') {
+        this.router.navigate(['/admin']);
+      } else {
+        this.router.navigate(['/dashboard']);
+      }
     } catch (err: any) {
       this.error = 'Invalid or expired code';
     } finally {

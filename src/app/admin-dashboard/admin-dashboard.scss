@@ -1,0 +1,40 @@
+// Admin Dashboard specific styles
+.admin-dashboard {
+  .metric-card {
+    transition: transform 0.2s ease-in-out;
+    
+    &:hover {
+      transform: translateY(-2px);
+    }
+  }
+  
+  .quick-action-btn {
+    transition: all 0.2s ease-in-out;
+    
+    &:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+  }
+  
+  .activity-item {
+    transition: background-color 0.2s ease-in-out;
+    
+    &:hover {
+      background-color: #f8fafc;
+    }
+  }
+}
+
+// Responsive adjustments
+@media (max-width: 768px) {
+  .admin-dashboard {
+    .quick-create {
+      flex-direction: column;
+      
+      button {
+        width: 100%;
+      }
+    }
+  }
+}

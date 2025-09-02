@@ -4,6 +4,7 @@ import { RouterModule, Router } from '@angular/router';
 import { ProfileDropdownComponent } from '../shared/profile-dropdown/profile-dropdown';
 import { AuthService } from '../auth';
 import { ApiService } from '../api';
+import { ChatbotComponent } from '../chatbot/chatbot';
 
 interface User {
   name?: string;
@@ -27,7 +28,8 @@ interface Notification {
   imports: [
     CommonModule,
     RouterModule,
-    ProfileDropdownComponent
+    ProfileDropdownComponent,
+    ChatbotComponent
   ]
 })
 export class DashboardLayoutComponent implements OnInit {

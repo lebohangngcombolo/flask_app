@@ -20,7 +20,7 @@ export class AuthService {
     }
   }
 
-  async login(email: string, password: string): Promise<{ success: boolean; message?: string }> {
+  async login(email: string, password: string): Promise<{ success: boolean; message?: string; user?: User }> {
     try {
       const response = await this.apiService.login({ email, password }).toPromise();
       
@@ -28,7 +28,7 @@ export class AuthService {
         localStorage.setItem('access_token', response.access_token);
         localStorage.setItem('currentUser', JSON.stringify(response.user));
         this.currentUserSubject.next(response.user);
-        return { success: true };
+        return { success: true, user: response.user };
       } else {
         return { success: false, message: response.message || 'Login failed' };
       }

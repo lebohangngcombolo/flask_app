@@ -19,6 +19,9 @@ import { LearningComponent } from './learning/learning';
 import { OffersComponent } from './offers/offers';
 import { ForgotPasswordComponent } from './forgot-password/forgot-password';
 import { GroupDetailsComponent } from './stokvel-groups/group-details/group-details';
+import { AdminDashboardComponent } from './admin-dashboard/admin-dashboard';
+import { AdminGuard } from './admin-guard';
+import { AdminSidebarComponent } from './admin-sidebar/admin-sidebar';
 
 export const routes: Routes = [
   { path: '', component: LandingPageComponent },
@@ -50,4 +53,23 @@ export const routes: Routes = [
     ]
   },
   { path: 'referral', component: ReferralComponent },
+
+  // Admin routes with children
+  {
+    path: 'admin',
+    component: AdminDashboardComponent,
+    canActivate: [AdminGuard],
+    children: [
+      { path: '', component: AdminDashboardComponent },
+      { path: 'users', component: AdminDashboardComponent }, // You'll need to create these components
+      { path: 'groups', component: AdminDashboardComponent },
+      { path: 'analytics', component: AdminDashboardComponent },
+      { path: 'kyc-management', component: AdminDashboardComponent },
+      { path: 'beneficiary-approvals', component: AdminDashboardComponent },
+      { path: 'faqs', component: AdminDashboardComponent },
+      { path: 'support/concerns', component: AdminDashboardComponent },
+      { path: 'team', component: AdminDashboardComponent },
+      { path: 'payouts', component: AdminDashboardComponent },
+    ]
+  },
 ];
