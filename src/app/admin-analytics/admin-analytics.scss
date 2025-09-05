@@ -1,0 +1,138 @@
+// Admin Analytics Component Styles
+
+.analytics-container {
+  .filter-section {
+    .form-group {
+      transition: all 0.2s ease-in-out;
+      
+      &:focus-within {
+        transform: translateY(-1px);
+      }
+    }
+  }
+
+  .summary-card {
+    transition: all 0.2s ease-in-out;
+    
+    &:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    }
+  }
+
+  .chart-container {
+    min-height: 250px;
+    
+    .chart-placeholder {
+      transition: all 0.2s ease-in-out;
+      
+      &:hover {
+        color: #6366f1;
+      }
+    }
+  }
+
+  .data-table {
+    .table-row {
+      transition: background-color 0.2s ease-in-out;
+      
+      &:hover {
+        background-color: #f9fafb;
+      }
+    }
+  }
+
+  // Loading animation
+  .loading-spinner {
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  // Responsive adjustments
+  @media (max-width: 768px) {
+    .filter-form {
+      .form-group {
+        min-width: 100%;
+      }
+    }
+    
+    .summary-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  @media (max-width: 640px) {
+    .summary-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+}
+
+// Additional responsive improvements for mobile
+@media (max-width: 640px) {
+  .p-6 {
+    padding: 1rem;
+  }
+  
+  .text-3xl {
+    font-size: 1.875rem;
+  }
+  
+  .grid-cols-1 {
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+  }
+  
+  .min-w-48 {
+    min-width: 100%;
+  }
+  
+  .flex-wrap {
+    flex-direction: column;
+  }
+  
+  .gap-4 {
+    gap: 1rem;
+  }
+  
+  .gap-6 {
+    gap: 1.5rem;
+  }
+  
+  .gap-8 {
+    gap: 2rem;
+  }
+}
+
+// Tablet responsive adjustments
+@media (min-width: 641px) and (max-width: 1024px) {
+  .grid-cols-1.md\\:grid-cols-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  
+  .lg\\:grid-cols-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  
+  .lg\\:grid-cols-2 {
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+  }
+}
+
+// Desktop responsive adjustments
+@media (min-width: 1025px) {
+  .lg\\:grid-cols-4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  
+  .lg\\:grid-cols-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

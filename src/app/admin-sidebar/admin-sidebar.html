@@ -2,36 +2,65 @@
        [ngClass]="isCollapsed ? 'w-16' : 'w-64'">
   <nav class="flex-1 space-y-2">
     <div *ngFor="let item of navItems" class="nav-item">
-      <button
-        class="flex items-center w-full gap-3 px-4 py-2 rounded-lg transition"
-        [ngClass]="{
-          'bg-[#3B4CCA] text-white font-semibold shadow': isActive(item.path) || isSubItemActive(item),
-          'text-white': !isActive(item.path) && !isSubItemActive(item)
-        }"
-        (click)="item.subItems ? toggleMenu(item.name) : null"
-        [title]="item.tooltip"
-        [routerLink]="item.subItems ? null : item.path"
+      
+      <!-- Direct link items (no submenus) -->
+      <a
+        *ngIf="!item.subItems"
+        [routerLink]="item.path" 
         routerLinkActive="active"
+        class="flex items-center w-full gap-3 px-4 py-2 rounded-lg transition hover:bg-[#3B4CCA] hover:bg-opacity-50"
+        [ngClass]="{
+          'bg-[#3B4CCA] text-white font-semibold shadow': isActive(item.path!),
+          'text-white': !isActive(item.path!)
+        }"
+        [title]="item.tooltip"
+        style="color: white !important;"
       >
         <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" [attr.d]="item.icon"></path>
         </svg>
-        <span *ngIf="!isCollapsed">{{ item.name }}</span>
-        <svg *ngIf="item.subItems && !isCollapsed" class="w-4 h-4 ml-auto flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path *ngIf="openMenus[item.name]" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-          <path *ngIf="!openMenus[item.name]" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
-        </svg>
-      </button>
-      
-      <div *ngIf="item.subItems && openMenus[item.name] && !isCollapsed" class="ml-8 mt-1 space-y-1">
-        <a
-          *ngFor="let sub of item.subItems"
-          [routerLink]="sub.path"
-          routerLinkActive="active"
-          class="block px-4 py-2 rounded-lg transition text-white hover:bg-[#3B4CCA] hover:bg-opacity-50"
+        <span *ngIf="!isCollapsed" style="color: white !important;">{{ item.name }}</span>
+      </a>
+
+      <!-- Collapsible menu items -->
+      <div *ngIf="item.subItems">
+        <button
+          class="flex items-center w-full gap-3 px-4 py-2 rounded-lg transition"
+          [ngClass]="{
+            'bg-[#3B4CCA] text-white font-semibold shadow': isSubItemActive(item),
+            'text-white': !isSubItemActive(item)
+          }"
+          (click)="toggleMenu(item.name)"
+          [title]="item.tooltip"
+          style="color: white !important;"
         >
-          {{ sub.label }}
-        </a>
+          <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" [attr.d]="item.icon"></path>
+          </svg>
+          <span *ngIf="!isCollapsed" style="color: white !important;">{{ item.name }}</span>
+          <svg *ngIf="!isCollapsed" class="w-4 h-4 ml-auto flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path *ngIf="openMenus[item.name]" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+            <path *ngIf="!openMenus[item.name]" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+          </svg>
+        </button>
+        
+        <!-- Submenu items -->
+        <div *ngIf="item.subItems && openMenus[item.name] && !isCollapsed" class="ml-8 mt-1 space-y-1">
+          <a
+            *ngFor="let sub of item.subItems"
+            [routerLink]="sub.path" 
+            routerLinkActive="active"
+            (click)="onSubItemClick(sub)"
+            class="block w-full text-left px-4 py-2 rounded-lg transition hover:bg-[#3B4CCA] hover:bg-opacity-50"
+            [ngClass]="{
+              'bg-[#3B4CCA] bg-opacity-50 text-white font-medium': isActive(sub.path),
+              'text-white': !isActive(sub.path)
+            }"
+            style="color: white !important;"
+          >
+            {{ sub.label }}
+          </a>
+        </div>
       </div>
     </div>
   </nav>

@@ -1,0 +1,193 @@
+// KYC Management Component Styles
+
+.kyc-management {
+  .header-section {
+    .stats-badge {
+      transition: all 0.2s ease-in-out;
+      
+      &:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(59, 76, 202, 0.15);
+      }
+    }
+  }
+
+  .search-section {
+    .form-control {
+      transition: all 0.2s ease-in-out;
+      
+      &:focus {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(59, 76, 202, 0.15);
+      }
+    }
+  }
+
+  .submissions-table {
+    .table-row {
+      transition: all 0.2s ease-in-out;
+      
+      &:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      }
+    }
+
+    .status-badge {
+      transition: all 0.2s ease-in-out;
+      
+      &:hover {
+        transform: scale(1.05);
+      }
+    }
+  }
+
+  .drawer-modal {
+    .document-preview {
+      transition: all 0.2s ease-in-out;
+      
+      &:hover {
+        transform: scale(1.05);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      }
+    }
+
+    .action-button {
+      transition: all 0.2s ease-in-out;
+      
+      &:hover:not(:disabled) {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      }
+      
+      &:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+    }
+  }
+
+  .preview-modal {
+    .preview-content {
+      transition: all 0.3s ease-in-out;
+    }
+  }
+
+  // Loading animation
+  .loading-spinner {
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  // Responsive adjustments
+  @media (max-width: 640px) {
+    .mobile-stack {
+      flex-direction: column;
+    }
+    
+    .mobile-full-width {
+      width: 100%;
+    }
+    
+    .mobile-text-sm {
+      font-size: 0.875rem;
+    }
+    
+    .mobile-p-4 {
+      padding: 1rem;
+    }
+    
+    .mobile-gap-2 {
+      gap: 0.5rem;
+    }
+  }
+
+  @media (min-width: 641px) and (max-width: 1024px) {
+    .tablet-flex-row {
+      flex-direction: row;
+    }
+    
+    .tablet-grid-2 {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  // Custom scrollbar for drawer
+  .drawer-content {
+    &::-webkit-scrollbar {
+      width: 6px;
+    }
+    
+    &::-webkit-scrollbar-track {
+      background: #f1f1f1;
+    }
+    
+    &::-webkit-scrollbar-thumb {
+      background: #c1c1c1;
+      border-radius: 3px;
+    }
+    
+    &::-webkit-scrollbar-thumb:hover {
+      background: #a8a8a8;
+    }
+  }
+
+  // Document grid responsive adjustments
+  .document-grid {
+    @media (max-width: 640px) {
+      grid-template-columns: repeat(2, 1fr);
+      gap: 0.75rem;
+    }
+    
+    @media (min-width: 641px) {
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1rem;
+    }
+  }
+
+  // Action buttons responsive layout
+  .action-buttons {
+    @media (max-width: 640px) {
+      flex-direction: column;
+      
+      button {
+        width: 100%;
+      }
+    }
+    
+    @media (min-width: 641px) {
+      flex-direction: row;
+      
+      button {
+        flex: 1;
+      }
+    }
+  }
+
+  // Table responsive adjustments
+  .responsive-table {
+    @media (max-width: 768px) {
+      font-size: 0.75rem;
+      
+      th, td {
+        padding: 0.5rem 0.25rem;
+      }
+    }
+    
+    @media (min-width: 769px) {
+      font-size: 0.875rem;
+      
+      th, td {
+        padding: 0.75rem 1rem;
+      }
+    }
+  }
+}

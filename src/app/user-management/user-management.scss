@@ -1,0 +1,65 @@
+// Custom styles for user management component
+
+// Responsive table adjustments
+@media (max-width: 768px) {
+  .table-responsive {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+// Hover effects
+.hover\:bg-gray-50:hover {
+  background-color: #f9fafb;
+}
+
+// Transition animations
+.transition-colors {
+  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 200ms;
+}
+
+// Custom checkbox styling
+input[type="checkbox"]:checked {
+  background-color: #2563eb;
+  border-color: #2563eb;
+}
+
+// Status badge styles
+.status-active {
+  @apply bg-green-100 text-green-800;
+}
+
+.status-inactive {
+  @apply bg-gray-100 text-gray-800;
+}
+
+.status-suspended {
+  @apply bg-red-100 text-red-800;
+}
+
+// Engagement level colors
+.engagement-high {
+  @apply text-green-600;
+}
+
+.engagement-medium {
+  @apply text-blue-600;
+}
+
+.engagement-low {
+  @apply text-gray-600;
+}
+
+// Mobile optimizations
+@media (max-width: 640px) {
+  .mobile-stack {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .mobile-full-width {
+    width: 100%;
+  }
+}

@@ -1,10 +1,11 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Router, RouterModule } from '@angular/router';
+import { Router, RouterModule, RouterOutlet } from '@angular/router';
 import { ApiService, User } from '../api';
 import { AuthService } from '../auth';
 import { ChatbotComponent } from '../chatbot/chatbot';
 import { AdminSidebarComponent } from '../admin-sidebar/admin-sidebar';
+import { UserManagementComponent } from '../user-management/user-management'; // Fixed path
 
 interface AdminStats {
   totalFunds: number;
@@ -47,7 +48,7 @@ interface Announcement {
   templateUrl: './admin-dashboard.html',
   styleUrls: ['./admin-dashboard.scss'],
   standalone: true,
-  imports: [CommonModule, ChatbotComponent, AdminSidebarComponent]
+  imports: [CommonModule, ChatbotComponent, AdminSidebarComponent, RouterOutlet]
 })
 export class AdminDashboardComponent implements OnInit {
   admin: User | null = null;
@@ -214,5 +215,10 @@ export class AdminDashboardComponent implements OnInit {
 
   formatNumber(num: number): string {
     return num.toLocaleString();
+  }
+
+  // Add method to check if we're on the main admin dashboard
+  isMainDashboard(): boolean {
+    return this.router.url === '/admin' || this.router.url === '/admin/';
   }
 }

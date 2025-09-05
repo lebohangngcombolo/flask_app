@@ -22,6 +22,10 @@ import { GroupDetailsComponent } from './stokvel-groups/group-details/group-deta
 import { AdminDashboardComponent } from './admin-dashboard/admin-dashboard';
 import { AdminGuard } from './admin-guard';
 import { AdminSidebarComponent } from './admin-sidebar/admin-sidebar';
+import { UserManagementComponent } from './user-management/user-management';
+import { StokvelManagementComponent } from './stokvel-management/stokvel-management';
+import { AdminAnalyticsComponent } from './admin-analytics/admin-analytics';
+import { KYCManagementComponent } from './kyc-management/kyc-management';
 
 export const routes: Routes = [
   { path: '', component: LandingPageComponent },
@@ -39,9 +43,9 @@ export const routes: Routes = [
     component: DashboardLayoutComponent,
     children: [
       { path: '', component: DashboardComponent },
-      { path: 'my-groups', component: StokvelGroupsComponent }, // This would show your groups
-      { path: 'groups', component: StokvelGroupsComponent }, // This shows available groups to join
-      { path: 'groups/:groupId', component: GroupDetailsComponent }, // This shows specific group details
+      { path: 'my-groups', component: StokvelGroupsComponent },
+      { path: 'groups', component: StokvelGroupsComponent },
+      { path: 'groups/:groupId', component: GroupDetailsComponent },
       { path: 'profile', component: UserProfile },
       { path: 'wallet', component: DigitalWallet },
       { path: 'kyc', component: Kyc },
@@ -61,14 +65,16 @@ export const routes: Routes = [
     canActivate: [AdminGuard],
     children: [
       { path: '', component: AdminDashboardComponent },
-      { path: 'users', component: AdminDashboardComponent }, // You'll need to create these components
-      { path: 'groups', component: AdminDashboardComponent },
-      { path: 'analytics', component: AdminDashboardComponent },
-      { path: 'kyc-management', component: AdminDashboardComponent },
+      { path: 'users', component: UserManagementComponent },
+      { path: 'groups', component: StokvelManagementComponent },
+      { path: 'analytics', component: AdminAnalyticsComponent },
+      { path: 'analytics/reports', component: AdminAnalyticsComponent },
+      { path: 'kyc-management', component: KYCManagementComponent },
       { path: 'beneficiary-approvals', component: AdminDashboardComponent },
       { path: 'faqs', component: AdminDashboardComponent },
       { path: 'support/concerns', component: AdminDashboardComponent },
       { path: 'team', component: AdminDashboardComponent },
+      { path: 'team/roles', component: AdminDashboardComponent },
       { path: 'payouts', component: AdminDashboardComponent },
     ]
   },

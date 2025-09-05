@@ -1,0 +1,95 @@
+// Custom styles for stokvel management component
+.stokvel-management {
+  .tab-button {
+    @apply px-6 py-3 font-medium border-b-2 transition;
+    
+    &.active {
+      @apply border-indigo-600 text-indigo-700;
+    }
+    
+    &:not(.active) {
+      @apply border-transparent text-gray-500 hover:text-gray-700;
+    }
+  }
+
+  .status-badge {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border;
+    
+    &.pending {
+      @apply bg-amber-50 text-amber-700 border-amber-200;
+    }
+    
+    &.approved {
+      @apply bg-emerald-50 text-emerald-700 border-emerald-200;
+    }
+    
+    &.rejected {
+      @apply bg-rose-50 text-rose-700 border-rose-200;
+    }
+    
+    &.active {
+      @apply bg-emerald-50 text-emerald-700;
+    }
+    
+    &.inactive {
+      @apply bg-gray-100 text-gray-500;
+    }
+  }
+
+  .category-icon {
+    @apply w-10 h-10 rounded-lg flex items-center justify-center;
+    
+    &.indigo {
+      @apply text-indigo-600 bg-indigo-50;
+    }
+    
+    &.rose {
+      @apply text-rose-600 bg-rose-50;
+    }
+    
+    &.emerald {
+      @apply text-emerald-600 bg-emerald-50;
+    }
+    
+    &.violet {
+      @apply text-violet-600 bg-violet-50;
+    }
+  }
+
+  .action-button {
+    @apply flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition;
+    
+    &.approve {
+      @apply bg-emerald-50 text-emerald-700 hover:bg-emerald-100;
+    }
+    
+    &.reject {
+      @apply bg-rose-50 text-rose-700 hover:bg-rose-100;
+    }
+    
+    &.view {
+      @apply bg-indigo-50 text-indigo-700 hover:bg-indigo-100;
+    }
+  }
+}
+
+// Mobile responsive adjustments
+@media (max-width: 768px) {
+  .stokvel-management {
+    .filter-row {
+      @apply flex-col gap-2;
+    }
+    
+    .search-input {
+      @apply w-full;
+    }
+    
+    .filter-select {
+      @apply w-full;
+    }
+    
+    .table-container {
+      @apply overflow-x-auto;
+    }
+  }
+}

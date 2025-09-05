@@ -115,20 +115,10 @@
       </div>
     </header>
     
-    <!-- Dashboard Content -->
-    <div class="flex-1">
-      <div *ngIf="loading" class="flex justify-center items-center min-h-screen">
-        <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-      </div>
-
-      <div *ngIf="!loading && error" class="max-w-4xl mx-auto p-4 mt-8">
-        <div class="bg-red-100 border-red-400 text-red-700 px-4 py-3 rounded relative">
-          <strong class="font-bold">Error: </strong>
-          <span class="block sm:inline">{{ error }}</span>
-        </div>
-      </div>
-
-      <div *ngIf="!loading && !error" class="p-8">
+    <!-- Main Content Area -->
+    <main class="flex-1 overflow-auto">
+      <!-- Show main dashboard content only when on main admin route -->
+      <div *ngIf="isMainDashboard()" class="p-6">
         <!-- Welcome Section -->
         <div class="mb-8">
           <h1 class="text-3xl font-bold text-gray-900 mb-2">
@@ -283,7 +273,10 @@
           </button>
         </div>
       </div>
-    </div>
+      
+      <!-- Router outlet for sub-routes - only show when NOT on main dashboard -->
+      <router-outlet *ngIf="!isMainDashboard()"></router-outlet>
+    </main>
   </div>
 </div>
 

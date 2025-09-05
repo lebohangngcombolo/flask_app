@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { HttpClient, HttpHeaders, HttpErrorResponse } from '@angular/common/http';
+import { HttpClient, HttpHeaders, HttpErrorResponse, HttpParams } from '@angular/common/http';
 import { Observable, throwError } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { environment } from '../environments/environment';
@@ -482,6 +482,87 @@ export class ApiService {
 
   getAdminAnnouncements(): Observable<any[]> {
     return this.http.get<any[]>(`${this.baseUrl}/admin/announcements`, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+
+  // Admin user management methods
+  getAdminUsers(): Observable<any[]> {
+    return this.http.get<any[]>(`${this.baseUrl}/admin/users`, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+
+  updateUserStatus(userId: number, status: string): Observable<any> {
+    return this.http.put<any>(`${this.baseUrl}/admin/users/${userId}/status`, { status }, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+
+  deleteUser(userId: number): Observable<any> {
+    return this.http.delete<any>(`${this.baseUrl}/admin/users/${userId}`, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+
+  // Admin transaction management methods
+  getAdminContributions(): Observable<any[]> {
+    return this.http.get<any[]>(`${this.baseUrl}/admin/contributions`, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+
+  getAdminGroupNames(): Observable<string[]> {
+    return this.http.get<string[]>(`${this.baseUrl}/admin/group-names`, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+
+  // Admin stokvel management methods
+  getAdminGroups(): Observable<any[]> {
+    return this.http.get<any[]>(`${this.baseUrl}/admin/groups`, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+
+  getAdminJoinRequests(): Observable<any[]> {
+    return this.http.get<any[]>(`${this.baseUrl}/admin/join-requests`, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+
+  approveJoinRequest(requestId: number): Observable<any> {
+    return this.http.post<any>(`${this.baseUrl}/admin/join-requests/${requestId}/approve`, {}, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+
+  rejectJoinRequest(requestId: number, data: { reason: string }): Observable<any> {
+    return this.http.post<any>(`${this.baseUrl}/admin/join-requests/${requestId}/reject`, data, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+
+  createGroup(groupData: any): Observable<any> {
+    return this.http.post<any>(`${this.baseUrl}/admin/groups`, groupData, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+
+  // Admin analytics methods
+  getAnalyticsOverview(filters: any = {}): Observable<any> {
+    const params = new HttpParams().appendAll(filters);
+    return this.http.get<any>(`${this.baseUrl}/admin/analytics/overview`, { 
+      headers: this.getAuthHeaders(),
+      params: params
+    })
+      .pipe(catchError(this.handleError));
+  }
+
+  // Admin KYC management methods
+  getKYCSubmissions(): Observable<any[]> {
+    return this.http.get<any[]>(`${this.baseUrl}/admin/kyc/submissions`, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+
+  approveKYCSubmission(submissionId: number): Observable<any> {
+    return this.http.post<any>(`${this.baseUrl}/admin/kyc/${submissionId}/approve`, {}, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+
+  rejectKYCSubmission(submissionId: number, reason: string): Observable<any> {
+    return this.http.post<any>(`${this.baseUrl}/admin/kyc/${submissionId}/reject`, 
+      { rejection_reason: reason }, 
+      { headers: this.getAuthHeaders() })
       .pipe(catchError(this.handleError));
   }
 }

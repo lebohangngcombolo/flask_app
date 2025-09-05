@@ -5794,20 +5794,15 @@ def get_admin_todo(current_user):
 def get_admin_activity(current_user):
     """Get recent admin activity"""
     try:
-        # Get recent user registrations
+        # Get recent user registrations, contributions, etc.
         recent_users = User.query.order_by(User.created_at.desc()).limit(5).all()
-        
-        # Get recent transactions
-        recent_transactions = Transaction.query.order_by(Transaction.created_at.desc()).limit(5).all()
-        
-        # Get recent group activities
         recent_groups = StokvelGroup.query.order_by(StokvelGroup.created_at.desc()).limit(5).all()
         
-        activity_items = []
+        activities = []
         
-        # Add user registrations
+        # Add user activities
         for user in recent_users:
-            activity_items.append({
+            activities.append({
                 'id': f'user_{user.id}',
                 'type': 'user_registration',
                 'title': f'New user registered: {user.full_name}',
@@ -5817,34 +5812,22 @@ def get_admin_activity(current_user):
                 'status': 'completed'
             })
         
-        # Add transactions
-        for transaction in recent_transactions:
-            activity_items.append({
-                'id': f'transaction_{transaction.id}',
-                'type': 'transaction',
-                'title': f'Transaction: {transaction.transaction_type}',
-                'description': f'Amount: R{transaction.amount:.2f}',
-                'timestamp': transaction.created_at.isoformat(),
-                'icon': '💰',
-                'status': transaction.status
-            })
-        
         # Add group activities
         for group in recent_groups:
-            activity_items.append({
+            activities.append({
                 'id': f'group_{group.id}',
                 'type': 'group_created',
                 'title': f'New group created: {group.name}',
-                'description': f'Category: {group.category}, Tier: {group.tier}',
+                'description': f'Group {group.name} was created in {group.category} category',
                 'timestamp': group.created_at.isoformat(),
                 'icon': '👥',
-                'status': group.status
+                'status': 'completed'
             })
         
-        # Sort by timestamp (most recent first)
-        activity_items.sort(key=lambda x: x['timestamp'], reverse=True)
+        # Sort by timestamp
+        activities.sort(key=lambda x: x['timestamp'], reverse=True)
         
-        return jsonify(activity_items[:10]), 200  # Return top 10 activities
+        return jsonify(activities[:10])  # Return top 10 activities
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -5853,39 +5836,29 @@ def get_admin_activity(current_user):
 def get_admin_announcements(current_user):
     """Get admin announcements"""
     try:
-        # For now, return some sample announcements
-        # In a real app, you'd have an Announcements model
+        # Return sample announcements for now
         announcements = [
             {
                 'id': 1,
-                'title': 'System Maintenance',
-                'content': 'Scheduled maintenance on Sunday, 2:00 AM - 4:00 AM',
+                'title': 'Platform Maintenance',
+                'content': 'Scheduled maintenance on Sunday at 2 AM',
                 'type': 'maintenance',
                 'priority': 'medium',
-                'created_at': (datetime.utcnow() - timedelta(hours=2)).isoformat(),
-                'expires_at': (datetime.utcnow() + timedelta(days=1)).isoformat()
-            },
-            {
-                'id': 2,
-                'title': 'New Feature: Enhanced KYC',
-                'content': 'We\'ve improved our KYC verification process for better security',
-                'type': 'feature',
-                'priority': 'low',
-                'created_at': (datetime.utcnow() - timedelta(days=1)).isoformat(),
+                'created_at': datetime.utcnow().isoformat(),
                 'expires_at': (datetime.utcnow() + timedelta(days=7)).isoformat()
             },
             {
-                'id': 3,
-                'title': 'Security Update',
-                'content': 'Important security updates have been applied to protect user data',
-                'type': 'security',
-                'priority': 'high',
-                'created_at': (datetime.utcnow() - timedelta(days=2)).isoformat(),
+                'id': 2,
+                'title': 'New Features Available',
+                'content': 'Enhanced user management and analytics features are now live',
+                'type': 'feature',
+                'priority': 'low',
+                'created_at': (datetime.utcnow() - timedelta(days=1)).isoformat(),
                 'expires_at': (datetime.utcnow() + timedelta(days=30)).isoformat()
             }
         ]
         
-        return jsonify(announcements), 200
+        return jsonify(announcements)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -5903,3 +5876,83 @@ def checkout(dbapi_connection, connection_record, connection_proxy):
     if connection_record.info['pid'] != pid:
         connection_record.info['pid'] = pid
         connection_record.info['checked_out'] = time.time()
+
+# Add these new admin endpoints after the existing /api/admin/users route
+
+@app.route('/api/admin/users/<int:user_id>/status', methods=['PUT'])
+@role_required(['admin'])
+def update_user_status(user_id):
+    """Update user status (active, inactive, suspended)"""
+    try:
+        data = request.get_json()
+        new_status = data.get('status')
+        
+        if new_status not in ['active', 'inactive', 'suspended']:
+            return jsonify({'error': 'Invalid status'}), 400
+        
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        # Update user status (you might want to add a status field to User model)
+        # For now, we'll use is_verified as a proxy
+        if new_status == 'inactive':
+            user.is_verified = False
+        elif new_status == 'active':
+            user.is_verified = True
+        
+        db.session.commit()
+        
+        return jsonify({'message': 'User status updated successfully'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/users/<int:user_id>', methods=['DELETE'])
+@role_required(['admin'])
+def delete_user(user_id):
+    """Delete a user (admin only)"""
+    try:
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        # Check if user is admin
+        if user.role == 'admin':
+            return jsonify({'error': 'Cannot delete admin users'}), 403
+        
+        # Delete user (this will cascade to related records)
+        db.session.delete(user)
+        db.session.commit()
+        
+        return jsonify({'message': 'User deleted successfully'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/users/stats', methods=['GET'])
+@role_required(['admin'])
+def get_user_stats():
+    """Get user statistics for admin dashboard"""
+    try:
+        total_users = User.query.count()
+        verified_users = User.query.filter_by(is_verified=True).count()
+        admin_users = User.query.filter_by(role='admin').count()
+        member_users = User.query.filter_by(role='member').count()
+        
+        # Get users by engagement level
+        high_engagement = User.query.filter(User.points >= 100).count()
+        medium_engagement = User.query.filter(User.points >= 50, User.points < 100).count()
+        low_engagement = User.query.filter(User.points < 50).count()
+        
+        return jsonify({
+            'total_users': total_users,
+            'verified_users': verified_users,
+            'admin_users': admin_users,
+            'member_users': member_users,
+            'engagement': {
+                'high': high_engagement,
+                'medium': medium_engagement,
+                'low': low_engagement
+            }
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
