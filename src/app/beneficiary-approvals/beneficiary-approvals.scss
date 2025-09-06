@@ -1,0 +1,57 @@
+// Custom styles for beneficiary approvals component
+.beneficiary-approvals {
+  .status-badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+    
+    &.approved {
+      @apply bg-green-100 text-green-800;
+    }
+    
+    &.rejected {
+      @apply bg-red-100 text-red-800;
+    }
+    
+    &.pending {
+      @apply bg-yellow-100 text-yellow-800;
+    }
+    
+    &.no-documents {
+      @apply bg-gray-100 text-gray-800;
+    }
+  }
+  
+  .document-item {
+    @apply transition-all duration-200 hover:shadow-md;
+  }
+  
+  .modal-overlay {
+    backdrop-filter: blur(4px);
+  }
+}
+
+// Responsive table improvements
+@media (max-width: 768px) {
+  .beneficiary-table {
+    .table-header {
+      @apply text-xs;
+    }
+    
+    .table-cell {
+      @apply px-2 py-3;
+    }
+  }
+}
+
+// Loading animation
+.loading-spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}

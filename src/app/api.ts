@@ -50,6 +50,8 @@ export interface Beneficiary {
   id_doc_url?: string;
   address_doc_url?: string;
   relationship_doc_url?: string;
+  status?: string; // Add status field for admin
+  user_id?: string; // Add user_id field for admin
 }
 
 export interface BeneficiaryForm {
@@ -59,6 +61,132 @@ export interface BeneficiaryForm {
   date_of_birth: string;
   phone: string;
   email: string;
+}
+
+export interface FAQ {
+  id: number;
+  question: string;
+  answer: string;
+  category: string;
+  is_published: boolean;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface FAQForm {
+  question: string;
+  answer: string;
+  category: string;
+  is_published: boolean;
+}
+
+export interface AdminNotification {
+  id: number;
+  title: string;
+  message: string;
+  created_at: string;
+}
+
+export interface CustomerConcern {
+  id: number;
+  user_id?: number;
+  name: string;
+  email: string;
+  subject: string;
+  message: string;
+  status: 'open' | 'in-progress' | 'closed';
+  created_at: string;
+}
+
+export interface ConcernsResponse {
+  total: number;
+  page: number;
+  limit: number;
+  concerns: CustomerConcern[];
+}
+
+export interface Admin {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
+  mfa_enabled: boolean;
+  is_locked: boolean;
+  created_at: string;
+  last_activity: string;
+}
+
+export interface AdminRole {
+  id: number;
+  name: string;
+  description: string;
+  permissions: any;
+  is_system_role: boolean;
+  created_at: string;
+}
+
+export interface AuditLog {
+  id: number;
+  admin_name: string;
+  action: string;
+  resource_type: string;
+  resource_id: string;
+  details: any;
+  ip_address: string;
+  created_at: string;
+}
+
+export interface MfaSetupData {
+  secret: string;
+  qr_url: string;
+  backup_codes: string[];
+}
+
+export interface AdminForm {
+  name: string;
+  email: string;
+  password: string;
+  phone: string;
+  role_id: string;
+}
+
+export interface EditAdminForm {
+  name: string;
+  email: string;
+  phone: string;
+  role_id: string;
+}
+
+export interface RoleForm {
+  name: string;
+  description: string;
+  permissions: {
+    users: { read: boolean; write: boolean; delete: boolean };
+    groups: { read: boolean; write: boolean; delete: boolean };
+    analytics: { read: boolean; export: boolean };
+    approvals: { read: boolean; approve: boolean; reject: boolean };
+    support: { read: boolean; respond: boolean };
+    team: { read: boolean; write: boolean; delete: boolean };
+    payouts: { read: boolean; approve: boolean; reject: boolean };
+    audit: { read: boolean };
+    settings: { read: boolean; write: boolean };
+    financial: { read: boolean; write: boolean; approve: boolean };
+    content: { read: boolean; write: boolean; delete: boolean };
+    security: { read: boolean; write: boolean; configure: boolean };
+  };
+}
+
+export interface PayoutRequest {
+  id: number;
+  amount: number;
+  reason?: string;
+  created_at: string;
+  status: 'pending' | 'approved' | 'rejected';
+  user_name: string;
+  user_email: string;
+  group_name: string;
+  approvals_needed: number;
+  approvals_received: number;
 }
 
 @Injectable({
@@ -563,6 +691,176 @@ export class ApiService {
     return this.http.post<any>(`${this.baseUrl}/admin/kyc/${submissionId}/reject`, 
       { rejection_reason: reason }, 
       { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+
+  // Admin beneficiary management methods
+  getAdminBeneficiaries(): Observable<Beneficiary[]> {
+    return this.http.get<Beneficiary[]>(`${this.baseUrl}/admin/beneficiaries`, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+
+  approveBeneficiary(beneficiaryId: string): Observable<any> {
+    return this.http.post<any>(`${this.baseUrl}/admin/beneficiaries/${beneficiaryId}/approve`, {}, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+
+  rejectBeneficiary(beneficiaryId: string): Observable<any> {
+    return this.http.post<any>(`${this.baseUrl}/admin/beneficiaries/${beneficiaryId}/reject`, {}, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+
+  // Admin FAQ management methods
+  getAdminFAQs(search?: string, category?: string): Observable<FAQ[]> {
+    let params = new HttpParams();
+    if (search) params = params.set('search', search);
+    if (category) params = params.set('category', category);
+    
+    return this.http.get<FAQ[]>(`${this.baseUrl}/admin/faqs`, { 
+      headers: this.getAuthHeaders(),
+      params: params
+    }).pipe(catchError(this.handleError));
+  }
+
+  createFAQ(faq: FAQForm): Observable<any> {
+    return this.http.post<any>(`${this.baseUrl}/admin/faqs`, faq, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+
+  updateFAQ(id: number, faq: FAQForm): Observable<any> {
+    return this.http.put<any>(`${this.baseUrl}/admin/faqs/${id}`, faq, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+
+  deleteFAQ(id: number): Observable<any> {
+    return this.http.delete<any>(`${this.baseUrl}/admin/faqs/${id}`, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+
+  // Admin notifications methods
+  getAdminNotifications(): Observable<AdminNotification[]> {
+    return this.http.get<AdminNotification[]>(`${this.baseUrl}/admin/notifications`, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+
+  markAllNotificationsAsRead(): Observable<any> {
+    return this.http.post<any>(`${this.baseUrl}/admin/notifications/mark-all-read`, {}, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+
+  // Admin concerns management methods
+  getAdminConcerns(page: number = 1, limit: number = 20, status?: string, search?: string): Observable<ConcernsResponse> {
+    let params = new HttpParams()
+      .set('page', page.toString())
+      .set('limit', limit.toString());
+    
+    if (status) params = params.set('status', status);
+    if (search) params = params.set('search', search);
+    
+    return this.http.get<ConcernsResponse>(`${this.baseUrl}/admin/concerns`, { 
+      headers: this.getAuthHeaders(),
+      params: params
+    }).pipe(catchError(this.handleError));
+  }
+
+  updateConcernStatus(id: number, status: string): Observable<any> {
+    return this.http.put<any>(`${this.baseUrl}/admin/concerns/${id}/status`, 
+      { status }, 
+      { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+
+  deleteConcern(id: number): Observable<any> {
+    return this.http.delete<any>(`${this.baseUrl}/admin/concerns/${id}`, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+
+  // Admin team management methods
+  getAdminTeam(page: number = 1, limit: number = 20, search?: string, role?: string): Observable<{total: number; page: number; limit: number; admins: Admin[]}> {
+    let params = new HttpParams()
+      .set('page', page.toString())
+      .set('limit', limit.toString());
+    if (search) params = params.set('search', search);
+    if (role) params = params.set('role', role);
+    
+    return this.http.get<{total: number; page: number; limit: number; admins: Admin[]}>(`${this.baseUrl}/admin/team`, { 
+      headers: this.getAuthHeaders(),
+      params
+    }).pipe(catchError(this.handleError));
+  }
+
+  createAdmin(adminData: AdminForm): Observable<any> {
+    return this.http.post(`${this.baseUrl}/admin/team`, adminData, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+
+  updateAdminRoleAssignment(adminId: number, adminData: EditAdminForm): Observable<any> {
+    return this.http.put(`${this.baseUrl}/admin/team/${adminId}/role`, adminData, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+
+  getAdminRoles(): Observable<AdminRole[]> {
+    return this.http.get<AdminRole[]>(`${this.baseUrl}/admin/roles`, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+
+  createAdminRole(roleData: RoleForm): Observable<any> {
+    return this.http.post(`${this.baseUrl}/admin/roles`, roleData, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+
+  updateRole(roleId: number, roleData: RoleForm): Observable<any> {
+    return this.http.put(`${this.baseUrl}/admin/roles/${roleId}`, roleData, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+
+  deleteAdminRole(roleId: number): Observable<any> {
+    return this.http.delete(`${this.baseUrl}/admin/roles/${roleId}`, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+
+  getAuditLogs(page: number = 1, limit: number = 50, adminId?: number): Observable<{total: number; page: number; limit: number; logs: AuditLog[]}> {
+    let params = new HttpParams()
+      .set('page', page.toString())
+      .set('limit', limit.toString());
+    if (adminId) params = params.set('admin_id', adminId.toString());
+    
+    return this.http.get<{total: number; page: number; limit: number; logs: AuditLog[]}>(`${this.baseUrl}/admin/audit-logs`, { 
+      headers: this.getAuthHeaders(),
+      params
+    }).pipe(catchError(this.handleError));
+  }
+
+  setupMfa(): Observable<{data: MfaSetupData}> {
+    return this.http.post<{data: MfaSetupData}>(`${this.baseUrl}/admin/mfa/setup`, {}, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+
+  verifyMfa(tokenData: {token: string}): Observable<any> {
+    return this.http.post(`${this.baseUrl}/admin/mfa/verify`, tokenData, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+
+  // Admin payout management methods
+  getPayoutRequests(): Observable<PayoutRequest[]> {
+    return this.http.get<PayoutRequest[]>(`${this.baseUrl}/admin/withdrawals`, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+
+  approvePayoutRequest(id: number): Observable<any> {
+    return this.http.post<any>(`${this.baseUrl}/admin/withdrawals/${id}/approve`, {}, { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+
+  rejectPayoutRequest(id: number, reason: string): Observable<any> {
+    return this.http.post<any>(`${this.baseUrl}/admin/withdrawals/${id}/reject`, 
+      { reason }, 
+      { headers: this.getAuthHeaders() })
+      .pipe(catchError(this.handleError));
+  }
+
+  initializeDefaultRoles(): Observable<any> {
+    return this.http.post(`${this.baseUrl}/admin/initialize-roles`, {}, { headers: this.getAuthHeaders() })
       .pipe(catchError(this.handleError));
   }
 }

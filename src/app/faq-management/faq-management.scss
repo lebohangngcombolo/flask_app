@@ -1,0 +1,67 @@
+// Custom styles for FAQ management component
+.faq-management {
+  .status-badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+    
+    &.published {
+      @apply bg-green-100 text-green-800;
+    }
+    
+    &.unpublished {
+      @apply bg-gray-200 text-gray-600;
+    }
+  }
+  
+  .notification-item {
+    @apply transition-all duration-200 hover:shadow-md;
+  }
+  
+  .modal-overlay {
+    backdrop-filter: blur(4px);
+  }
+}
+
+// Responsive table improvements
+@media (max-width: 768px) {
+  .faq-table {
+    .table-header {
+      @apply text-xs;
+    }
+    
+    .table-cell {
+      @apply px-2 py-3;
+    }
+  }
+  
+  .faq-question {
+    @apply max-w-48;
+  }
+}
+
+// Loading animation
+.loading-spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+// Form improvements
+.form-input {
+  @apply transition-all duration-200;
+  
+  &:focus {
+    @apply ring-2 ring-blue-500 border-blue-500;
+  }
+}
+
+// Notification styling
+.notification-card {
+  @apply transition-all duration-200 hover:bg-gray-100;
+}

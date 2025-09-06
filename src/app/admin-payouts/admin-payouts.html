@@ -1,0 +1,193 @@
+<main class="p-4 md:p-8 max-w-7xl mx-auto">
+  <h1 class="text-2xl md:text-3xl font-bold mb-6 text-blue-900">Payout Requests</h1>
+  
+  <!-- Search and Filter Controls -->
+  <div class="flex flex-col sm:flex-row gap-4 mb-6 items-start sm:items-center">
+    <input
+      class="border rounded px-3 py-2 w-full sm:w-64"
+      placeholder="Search by user, email, group..."
+      [(ngModel)]="search"
+    />
+    <select
+      class="border rounded px-3 py-2 w-full sm:w-auto"
+      [(ngModel)]="statusFilter"
+    >
+      <option value="all">All Statuses</option>
+      <option value="pending">Pending</option>
+      <option value="approved">Approved</option>
+      <option value="rejected">Rejected</option>
+    </select>
+  </div>
+
+  <!-- Requests Table -->
+  <div class="bg-white rounded-xl shadow overflow-hidden">
+    <!-- Loading State -->
+    <div *ngIf="loading" class="flex justify-center items-center h-40">
+      <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+    </div>
+
+    <!-- Empty State -->
+    <div *ngIf="!loading && filteredRequests.length === 0" class="p-8 text-gray-500 text-center">
+      No payout requests found.
+    </div>
+
+    <!-- Desktop Table -->
+    <div *ngIf="!loading && filteredRequests.length > 0" class="hidden md:block overflow-x-auto">
+      <table class="min-w-full text-sm">
+        <thead>
+          <tr class="bg-gray-50 text-gray-700">
+            <th class="p-3 text-left">User</th>
+            <th class="p-3 text-left">Email</th>
+            <th class="p-3 text-left">Group</th>
+            <th class="p-3 text-left">Amount</th>
+            <th class="p-3 text-left">Reason</th>
+            <th class="p-3 text-left">Status</th>
+            <th class="p-3 text-left">Date</th>
+            <th class="p-3 text-left">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let request of filteredRequests" class="border-t hover:bg-blue-50 transition">
+            <td class="p-3 font-semibold">{{ request.user_name }}</td>
+            <td class="p-3">{{ request.user_email }}</td>
+            <td class="p-3">{{ request.group_name }}</td>
+            <td class="p-3">{{ formatCurrency(request.amount) }}</td>
+            <td class="p-3 max-w-xs truncate" [title]="request.reason">{{ request.reason || '-' }}</td>
+            <td class="p-3">
+              <span class="px-2 py-1 rounded text-xs font-semibold" 
+                    [ngClass]="statusColors[request.status] || 'bg-gray-100 text-gray-800'">
+                {{ capitalizeStatus(request.status) }}
+              </span>
+            </td>
+            <td class="p-3">{{ formatDate(request.created_at) }}</td>
+            <td class="p-3">
+              <button
+                class="text-blue-600 hover:underline flex items-center gap-1"
+                (click)="selected = request"
+                title="View Details"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                </svg>
+                View
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Mobile Cards -->
+    <div *ngIf="!loading && filteredRequests.length > 0" class="md:hidden">
+      <div *ngFor="let request of filteredRequests" class="border-b p-4">
+        <div class="flex justify-between items-start mb-2">
+          <h3 class="font-semibold text-lg">{{ request.user_name }}</h3>
+          <span class="px-2 py-1 rounded text-xs font-semibold" 
+                [ngClass]="statusColors[request.status] || 'bg-gray-100 text-gray-800'">
+            {{ capitalizeStatus(request.status) }}
+          </span>
+        </div>
+        <div class="space-y-1 text-sm text-gray-600">
+          <div><strong>Email:</strong> {{ request.user_email }}</div>
+          <div><strong>Group:</strong> {{ request.group_name }}</div>
+          <div><strong>Amount:</strong> {{ formatCurrency(request.amount) }}</div>
+          <div><strong>Date:</strong> {{ formatDate(request.created_at) }}</div>
+          <div *ngIf="request.reason"><strong>Reason:</strong> {{ request.reason }}</div>
+        </div>
+        <button
+          class="mt-3 text-blue-600 hover:underline flex items-center gap-1"
+          (click)="selected = request"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+          </svg>
+          View Details
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Details Modal -->
+  <div *ngIf="selected" class="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-xl shadow-lg p-6 w-full max-w-lg relative max-h-[90vh] overflow-y-auto">
+      <!-- Close Button -->
+      <button
+        class="absolute top-4 right-4 text-gray-400 hover:text-gray-700"
+        (click)="selected = null"
+        title="Close"
+      >
+        <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+        </svg>
+      </button>
+
+      <h2 class="text-2xl font-bold mb-4 text-blue-800">Payout Request Details</h2>
+      
+      <div class="space-y-3">
+        <div><strong>User:</strong> {{ selected.user_name }}</div>
+        <div><strong>Email:</strong> {{ selected.user_email }}</div>
+        <div><strong>Group:</strong> {{ selected.group_name }}</div>
+        <div><strong>Amount:</strong> {{ formatCurrency(selected.amount) }}</div>
+        <div><strong>Reason:</strong> {{ selected.reason || '-' }}</div>
+        <div><strong>Status:</strong> 
+          <span class="px-2 py-1 rounded text-xs font-semibold ml-2" 
+                [ngClass]="statusColors[selected.status]">
+            {{ capitalizeStatus(selected.status) }}
+          </span>
+        </div>
+        <div><strong>Date:</strong> {{ formatDate(selected.created_at) }}</div>
+        <div><strong>Approvals:</strong> {{ selected.approvals_received }} / {{ selected.approvals_needed }}</div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div *ngIf="selected.status === 'pending'" class="flex flex-col sm:flex-row gap-3 mt-6">
+        <button
+          class="flex-1 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition font-semibold disabled:opacity-50"
+          [disabled]="actionLoading"
+          (click)="handleApprove(selected.id)"
+        >
+          <span *ngIf="actionLoading" class="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></span>
+          {{ actionLoading ? 'Processing...' : 'Approve' }}
+        </button>
+        <button
+          class="flex-1 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition font-semibold disabled:opacity-50"
+          (click)="openRejectModal()"
+          [disabled]="actionLoading"
+        >
+          Reject
+        </button>
+      </div>
+    </div>
+
+    <!-- Reject Modal -->
+    <div *ngIf="showRejectModal" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-60 p-4">
+      <div class="bg-white p-6 rounded shadow-lg w-full max-w-md relative">
+        <h2 class="text-xl font-bold mb-2 text-red-600">Reject Payout Request?</h2>
+        <p class="mb-4">Please provide a reason for rejection:</p>
+        <textarea
+          class="w-full border rounded p-2 mb-4"
+          rows="3"
+          [(ngModel)]="rejectReason"
+          placeholder="Reason for rejection"
+        ></textarea>
+        <div class="flex flex-col sm:flex-row gap-2 justify-end">
+          <button 
+            class="bg-gray-200 px-4 py-2 rounded hover:bg-gray-300 transition" 
+            (click)="closeRejectModal()"
+          >
+            Cancel
+          </button>
+          <button
+            class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition disabled:opacity-50"
+            (click)="handleReject(selected.id, rejectReason)"
+            [disabled]="canReject()"
+          >
+            Reject
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>

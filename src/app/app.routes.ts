@@ -26,6 +26,11 @@ import { UserManagementComponent } from './user-management/user-management';
 import { StokvelManagementComponent } from './stokvel-management/stokvel-management';
 import { AdminAnalyticsComponent } from './admin-analytics/admin-analytics';
 import { KYCManagementComponent } from './kyc-management/kyc-management';
+import { BeneficiaryApprovals } from './beneficiary-approvals/beneficiary-approvals';
+import { FAQManagement } from './faq-management/faq-management';
+import { ConcernsManagement } from './concerns-management/concerns-management';
+import { AdminTeamComponent } from './admin-team/admin-team';
+import { AdminPayoutsComponent } from './admin-payouts/admin-payouts';
 
 export const routes: Routes = [
   { path: '', component: LandingPageComponent },
@@ -70,12 +75,11 @@ export const routes: Routes = [
       { path: 'analytics', component: AdminAnalyticsComponent },
       { path: 'analytics/reports', component: AdminAnalyticsComponent },
       { path: 'kyc-management', component: KYCManagementComponent },
-      { path: 'beneficiary-approvals', component: AdminDashboardComponent },
-      { path: 'faqs', component: AdminDashboardComponent },
-      { path: 'support/concerns', component: AdminDashboardComponent },
-      { path: 'team', component: AdminDashboardComponent },
-      { path: 'team/roles', component: AdminDashboardComponent },
-      { path: 'payouts', component: AdminDashboardComponent },
+      { path: 'beneficiary-approvals', component: BeneficiaryApprovals },
+      { path: 'faqs', component: FAQManagement },
+      { path: 'support/concerns', component: ConcernsManagement },
+      { path: 'team', component: AdminTeamComponent },
+      { path: 'payouts', component: AdminPayoutsComponent },
     ]
   },
 ];
